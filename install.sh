@@ -37,7 +37,7 @@ EOF
 
 echo "== USB-Rechte für den Kit"
 cp "$SRC/system/99-sintratec-kit.rules" /etc/udev/rules.d/
-udevadm control --reload
+udevadm control --reload 2>/dev/null || true
 
 echo "== WLAN aus der Oberfläche einrichten erlauben"
 mkdir -p /etc/polkit-1/rules.d
@@ -61,7 +61,7 @@ echo "== Dienste"
 systemctl disable --now kit-kiosk.service 2>/dev/null || true
 rm -f /etc/systemd/system/kit-kiosk.service
 cp "$SRC/system/kitd.service" "$SRC/system/kit-app.service" "$SRC/system/kit-update.service" /etc/systemd/system/
-systemctl daemon-reload
+systemctl daemon-reload 2>/dev/null || true
 systemctl enable kitd.service kit-app.service
 systemctl set-default multi-user.target
 systemctl disable getty@tty1.service || true
@@ -97,7 +97,7 @@ LINE="${LINE//console=tty1/console=tty3}"
 echo "$LINE" > "$CMD"
 
 echo "== initramfs (für den Startbildschirm)"
-update-initramfs -u
+update-initramfs -u || echo "Hinweis: initramfs nicht aktualisiert"
 
 echo
 echo "Fertig. Logo: weißes PNG mit transparentem Hintergrund nach /etc/kit/logo.png kopieren"

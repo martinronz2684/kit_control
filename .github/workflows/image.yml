@@ -1,0 +1,64 @@
+name: SD-Karten-Image bauen
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Platz schaffen
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - name: arm64-Emulation einrichten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qemu-user-static binfmt-support
+          docker run --privileged --rm tonistiigi/binfmt --install arm64
+
+      - name: pi-gen holen und Kit Control einsetzen
+        run: |
+          git clone --depth 1 --branch arm64 https://github.com/RPi-Distro/pi-gen.git pi-gen
+          cp image/config pi-gen/config
+          cp -a image/stage-kit pi-gen/stage-kit
+          touch pi-gen/stage2/SKIP_IMAGES
+          mkdir -p pi-gen/stage-kit/00-kit/files/src
+          rsync -a --exclude .git --exclude .github --exclude image ./ pi-gen/stage-kit/00-kit/files/src/
+          echo "${GITHUB_SHA::7}" > pi-gen/stage-kit/00-kit/files/src/VERSION
+
+      - name: Image bauen (dauert rund eine Stunde)
+        working-directory: pi-gen
+        run: sudo ./build-docker.sh
+
+      - name: Ergebnis
+        id: out
+        run: |
+          ls -la pi-gen/deploy
+          f=$(ls pi-gen/deploy/*.img.xz | head -n1)
+          echo "file=$f" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kit-control-image
+          path: ${{ steps.out.outputs.file }}
+          compression-level: 0
+
+      - name: Als Release veröffentlichen
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('image-{0}', github.run_number) }}
+          name: Kit Control ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('Image {0}', github.run_number) }}
+          files: ${{ steps.out.outputs.file }}
+          body: |
+            SD-Karten-Image für Raspberry Pi 5 + Touch Display 2 (5").
+            Mit dem Raspberry Pi Imager über „Eigenes Image verwenden“ auf die Karte schreiben – keine Einstellungen nötig.
