@@ -526,20 +526,22 @@ Window {
         }
 
         // ---------- Kein Kit ----------
+        // Deckt nur die Seiten ab, die den Kit brauchen. Navigation, System und WLAN bleiben bedienbar.
         Rectangle {
-            anchors.fill: parent; visible: !win.st.connected; color: "#d108090c"
-            MouseArea { anchors.fill: parent; enabled: parent.visible; onClicked: {} }
-            Panel {
-                anchors.centerIn: parent; width: 460; height: 150
-                Column {
-                    anchors.centerIn: parent; width: parent.width - 40; spacing: 8
-                    Val { anchors.horizontalCenter: parent.horizontalCenter; font.pixelSize: 20; text: win.kitdUp ? "Kein Kit verbunden" : "Kit Control startet …" }
-                    Lbl { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 13
-                        text: (win.st.message || "USB-Kabel und Strom am Kit prüfen.") + " Central am PC muss getrennt sein." }
-                    Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 8
-                        KButton { width: 150; height: 40; text: "WLAN"; onClicked: wifiOvl.open() }
-                        KButton { width: 150; height: 40; text: "System"; onClicked: { win.page = "sys"; win.st = Object.assign({}, win.st, { connected: true }) } } }
-                }
+            x: main.x; y: main.y + 42; width: main.width; height: main.height - 42
+            radius: 16; color: "#e60c0e11"
+            visible: !win.st.connected && win.page !== "sys"
+            MouseArea { anchors.fill: parent }
+            Column {
+                anchors.centerIn: parent; width: 440; spacing: 10
+                Val { anchors.horizontalCenter: parent.horizontalCenter; font.pixelSize: 20; text: win.kitdUp ? "Kein Kit verbunden" : "Kit Control startet …" }
+                Lbl { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 13
+                    text: "Kit per USB an den Pi anschließen und einschalten. Central am PC muss dabei getrennt sein." }
+                Lbl { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 11; color: "#6f7888"
+                    visible: !!win.st.message; text: win.st.message || "" }
+                Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 8; topPadding: 4
+                    KButton { width: 150; height: 44; text: "WLAN"; onClicked: wifiOvl.open() }
+                    KButton { width: 150; height: 44; text: "System"; onClicked: win.page = "sys" } }
             }
         }
 
