@@ -90,12 +90,22 @@ Window {
     // ---------- Bausteine ----------
     component Panel: Rectangle {
         radius: 16
-        border.color: win.cLine
+        border.color: "#17ffffff"
         border.width: 1
         gradient: Gradient {
-            GradientStop { position: 0; color: "#16191e" }
-            GradientStop { position: 1; color: "#111317" }
+            GradientStop { position: 0; color: "#1c2028" }
+            GradientStop { position: 1; color: "#121419" }
         }
+        // weicher Schatten unter der Karte
+        BorderImage {
+            z: -1; source: "assets/shadow.png"
+            anchors.fill: parent
+            anchors.leftMargin: -40; anchors.rightMargin: -40; anchors.topMargin: -40; anchors.bottomMargin: -60
+            border.left: 56; border.right: 56; border.top: 56; border.bottom: 76
+            opacity: 0.55
+        }
+        // feine Lichtkante oben
+        Rectangle { x: parent.radius; width: parent.width - 2 * parent.radius; height: 1; y: 1; color: "#1fffffff" }
     }
     component Lbl: Text {
         color: win.cMut; font.family: win.fontName; font.pixelSize: 12; font.weight: Font.Medium
@@ -114,6 +124,8 @@ Window {
         signal clicked()
         height: 52; radius: 14
         opacity: ok ? 1 : 0.35
+        scale: ma.pressed ? 0.96 : 1
+        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
         border.width: kind === "normal" ? 1 : 0
         border.color: "#1affffff"
         gradient: Gradient {
@@ -124,6 +136,12 @@ Window {
             anchors.centerIn: parent; width: parent.width - 12
             horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
             text: kb.text; color: "white"; font.family: win.fontName; font.pixelSize: kb.size; font.weight: Font.DemiBold
+        }
+        Rectangle { x: kb.radius * 0.6; width: kb.width - kb.radius * 1.2; height: 1; y: 1; color: kb.kind === "normal" ? "#1affffff" : "#4dffffff" }
+        Image {
+            z: -1; visible: kb.kind !== "normal"; opacity: 0.35
+            source: kb.kind === "hot" ? "assets/glow-heat.png" : kb.kind === "red" ? "assets/glow-heat.png" : "assets/glow-blue.png"
+            width: kb.width + 60; height: kb.height + 50; anchors.centerIn: parent; anchors.verticalCenterOffset: 6
         }
         MouseArea { id: ma; anchors.fill: parent; enabled: kb.ok; onClicked: kb.clicked() }
     }
@@ -154,10 +172,20 @@ Window {
         property bool hot: false
         readonly property bool active: win.page === key
         width: 52; height: 56; radius: 14
-        color: active ? (hot ? "#e9531f" : win.cBlue2) : "transparent"
+        gradient: Gradient {
+            GradientStop { position: 0; color: nb.active ? (nb.hot ? "#ff8a5c" : "#7b93ff") : "transparent" }
+            GradientStop { position: 1; color: nb.active ? (nb.hot ? "#e2481a" : "#3550e0") : "transparent" }
+        }
+        Image {
+            z: -1; source: nb.hot ? "assets/glow-heat.png" : "assets/glow-blue.png"
+            width: 110; height: 110; anchors.centerIn: parent
+            opacity: nb.active ? 0.45 : 0
+            Behavior on opacity { NumberAnimation { duration: 200 } }
+        }
+        Rectangle { visible: nb.active; x: 10; width: parent.width - 20; height: 1; y: 1; color: "#59ffffff" }
         Column {
-            anchors.centerIn: parent; spacing: 3
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: nb.icon; color: nb.active ? "white" : win.cMut; font.pixelSize: 19; font.family: win.fontName }
+            anchors.centerIn: parent; spacing: 4
+            Image { anchors.horizontalCenter: parent.horizontalCenter; source: "assets/i-" + nb.icon + ".png"; width: 22; height: 22; smooth: true; mipmap: true; opacity: nb.active ? 1 : 0.55 }
             Text { anchors.horizontalCenter: parent.horizontalCenter; text: nb.label; color: nb.active ? "white" : win.cMut; font.family: win.fontName; font.pixelSize: 9; font.weight: Font.DemiBold }
         }
         MouseArea { anchors.fill: parent; onClicked: win.page = nb.key }
@@ -195,6 +223,9 @@ Window {
             }
         }
 
+        Image { source: "assets/glow-blue.png"; x: -260; y: -420; width: 900; height: 900; opacity: 0.10 }
+        Image { source: "assets/glow-heat.png"; x: 520; y: 260; width: 600; height: 600; opacity: 0.05 }
+
         // Navigation
         Panel {
             id: nav
@@ -203,12 +234,12 @@ Window {
                 anchors.top: parent.top; anchors.topMargin: 8; anchors.horizontalCenter: parent.horizontalCenter; spacing: 6
                 Image { source: "../branding/mark.png"; width: 38; height: 38; smooth: true; mipmap: true; anchors.horizontalCenter: parent.horizontalCenter }
                 Item { width: 1; height: 2 }
-                NavBtn { key: "print"; label: "Druck"; icon: "≡" }
-                NavBtn { key: "move"; label: "Bewegung"; icon: "⇅" }
-                NavBtn { key: "heat"; label: "Heizung"; icon: "♨"; hot: true }
-                NavBtn { key: "jobs"; label: "Jobs"; icon: "▤" }
+                NavBtn { key: "print"; label: "Druck"; icon: "print" }
+                NavBtn { key: "move"; label: "Bewegung"; icon: "move" }
+                NavBtn { key: "heat"; label: "Heizung"; icon: "heat"; hot: true }
+                NavBtn { key: "jobs"; label: "Jobs"; icon: "jobs" }
             }
-            NavBtn { key: "sys"; label: "System"; icon: "⚙"; anchors.bottom: parent.bottom; anchors.bottomMargin: 8; anchors.horizontalCenter: parent.horizontalCenter }
+            NavBtn { key: "sys"; label: "System"; icon: "system"; anchors.bottom: parent.bottom; anchors.bottomMargin: 8; anchors.horizontalCenter: parent.horizontalCenter }
         }
 
         Item {
@@ -244,7 +275,8 @@ Window {
 
             // ======= Druck =======
             Item {
-                visible: win.page === "print"
+                opacity: win.page === "print" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
 
                 Panel {
@@ -269,7 +301,17 @@ Window {
                     }
                     Rectangle {
                         x: 14; width: parent.width - 28; height: 5; radius: 3; anchors.bottom: parent.bottom; anchors.bottomMargin: 10; color: "#14ffffff"
-                        Rectangle { height: parent.height; radius: 3; width: parent.width * (win.st.printing ? win.st.percent / 100 : 0); gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "#8ea2ff" } GradientStop { position: 1; color: "#4a67f5" } } }
+                        Rectangle {
+                            id: bar
+                            height: parent.height; radius: 3; clip: true
+                            width: parent.width * (win.st.printing ? win.st.percent / 100 : 0)
+                            Behavior on width { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
+                            gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "#8ea2ff" } GradientStop { position: 1; color: "#4a67f5" } }
+                            Image {
+                                source: "assets/glow-white.png"; width: 80; height: 30; y: -12; opacity: 0.5
+                                NumberAnimation on x { from: -80; to: bar.width; duration: 2200; loops: Animation.Infinite; running: win.st.printing === true }
+                            }
+                        }
                     }
                 }
 
@@ -317,7 +359,8 @@ Window {
 
             // ======= Bewegung =======
             Item {
-                visible: win.page === "move"
+                opacity: win.page === "move" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
                 Panel {
                     id: movePanel
@@ -371,7 +414,8 @@ Window {
 
             // ======= Heizung =======
             Item {
-                visible: win.page === "heat"
+                opacity: win.page === "heat" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
                 Panel {
                     id: heatPanel
@@ -392,7 +436,10 @@ Window {
                                     c.lineWidth = 14; c.lineCap = "round"
                                     c.strokeStyle = "#1affffff"; c.beginPath(); c.arc(120, 120, 110, 0, 2 * Math.PI); c.stroke()
                                     var g = c.createLinearGradient(0, 0, 240, 240); g.addColorStop(0, "#ffb08f"); g.addColorStop(1, "#ff6a3d")
-                                    c.strokeStyle = g; c.beginPath(); c.arc(120, 120, 110, -Math.PI / 2, -Math.PI / 2 + 2 * Math.PI * frac); c.stroke()
+                                    var end = -Math.PI / 2 + 2 * Math.PI * frac
+                                    c.lineWidth = 20; c.strokeStyle = "rgba(255,106,61,0.16)"; c.beginPath(); c.arc(120, 120, 110, -Math.PI / 2, end); c.stroke()
+                                    c.lineWidth = 14; c.strokeStyle = g; c.beginPath(); c.arc(120, 120, 110, -Math.PI / 2, end); c.stroke()
+                                    if (frac > 0.01) { c.fillStyle = "#ffffff"; c.beginPath(); c.arc(120 + 110 * Math.cos(end), 120 + 110 * Math.sin(end), 4, 0, 2 * Math.PI); c.fill() }
                                 }
                             }
                             Column {
@@ -454,7 +501,8 @@ Window {
 
             // ======= Jobs =======
             Panel {
-                visible: win.page === "jobs"
+                opacity: win.page === "jobs" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
                 Column {
                     anchors.centerIn: parent; width: 440; spacing: 8
@@ -470,7 +518,8 @@ Window {
 
             // ======= System =======
             Item {
-                visible: win.page === "sys"
+                opacity: win.page === "sys" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
                 Panel {
                     id: msgPanel
