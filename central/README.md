@@ -7,7 +7,10 @@ Display und Central können gleichzeitig arbeiten.
 **Installieren (Windows):** beide Dateien aus diesem Ordner in einen Ordner legen,
 Central schließen, `Install-CentralWLAN.ps1` mit Rechtsklick → *Mit PowerShell ausführen*.
 
-- Der Pi wird im WLAN automatisch gefunden (UDP 8767). Klappt das nicht: `-IP <IP des Pi>`.
+- **WLAN** (Standard am Pi): Der Pi wird im WLAN automatisch gefunden (UDP 8767). Klappt das nicht: `-IP <IP des Pi>`.
+- **USB**: Am Display *System → PC-Verbindung → USB* wählen und den PC per USB-C-Kabel an den Pi anschließen.
+  Der Pi erscheint am PC als Netzwerkadapter und hat dort immer `10.55.0.1` – die Bibliothek findet ihn von selbst.
+  Den Pi dann über die GPIO-Pins oder ein Netzteil mit Datendurchleitung versorgen; ein PC-Anschluss liefert zu wenig Strom.
 - Rückgängig: `-Uninstall` stellt die Original-Bibliothek wieder her.
 - Firmware- und Bootloader-Befehle werden vom Pi immer abgelehnt.
 - Es kann immer nur ein Central gleichzeitig verbunden sein.

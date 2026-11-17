@@ -37,12 +37,29 @@ _session_lock = threading.Lock()
 STATE = {"central": False, "peer": "", "since": 0.0, "transfers": 0}
 
 
+USB_NET = ipaddress.ip_network("10.55.0.0/24")
+
+
+def pc_link() -> str:
+    path = "/tmp/kit-pc-link" if os.environ.get("KIT_DEMO") == "1" else "/etc/kit/pc-link"
+    try:
+        m = open(path).read().strip()
+    except OSError:
+        m = "wlan"
+    return m if m in ("wlan", "usb") else "wlan"
+
+
 def _allowed(addr: str) -> bool:
+    """WLAN-Modus: Geräte im eigenen Netz. USB-Modus: nur der PC am USB-Kabel."""
     try:
         ip = ipaddress.ip_address(addr)
     except ValueError:
         return False
-    return ip.is_private or ip.is_loopback or ip.is_link_local
+    if ip.is_loopback:
+        return True
+    if pc_link() == "usb":
+        return ip in USB_NET
+    return (ip.is_private or ip.is_link_local) and ip not in USB_NET
 
 
 def _recv(sock: socket.socket, n: int) -> bytes:

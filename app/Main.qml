@@ -519,7 +519,20 @@ Window {
                     x: infoPanel.x + infoPanel.width + 8; width: 150; height: parent.height; spacing: 8
                     KButton { width: parent.width; height: 60; kind: "pri"; text: "WLAN"; onClicked: wifiOvl.open() }
                     KButton { width: parent.width; height: 60; kind: win.upd.available ? "hot" : "normal"; text: win.upd.running ? "Update läuft …" : (win.upd.available ? "Update verfügbar" : "Software"); onClicked: updOvl.open() }
-                    Item { width: 1; height: parent.height - 60 - 60 - 52 - 52 - 32 }
+                    Lbl { text: "PC-Verbindung für Central" }
+                    Seg {
+                        width: parent.width; height: 42
+                        items: [["WLAN", "wlan"], ["USB", "usb"]]
+                        value: win.st.pc_link || "wlan"
+                        onPicked: function (v) {
+                            if (v === (win.st.pc_link || "wlan")) return
+                            win.ask(v === "usb" ? "PC über USB verbinden?" : "PC über WLAN verbinden?",
+                                    v === "usb" ? "Der USB-C-Anschluss des Pi wird zum Netzwerkanschluss für den PC. Den Pi dann über die GPIO-Pins oder ein Netzteil mit Datendurchleitung versorgen – ein PC-Anschluss liefert nicht genug Strom."
+                                                : "Central verbindet sich wieder über das WLAN mit dem Pi.",
+                                    function () { win.send({ cmd: "pc_link", mode: v }) })
+                        }
+                    }
+                    Item { width: 1; height: parent.height - 60 - 60 - 16 - 42 - 52 - 52 - 48 }
                     KButton { width: parent.width; text: "Neustart"; onClicked: win.ask("Neu starten?", "Der Kit Controller startet neu. Ein laufender Druck läuft auf dem Kit weiter.", function () { win.send({ cmd: "reboot" }) }) }
                     KButton { width: parent.width; kind: "red"; text: "Ausschalten"; onClicked: win.ask("Ausschalten?", "Danach den Strom erst trennen, wenn das Display schwarz ist.", function () { win.send({ cmd: "poweroff" }) }) }
                 }

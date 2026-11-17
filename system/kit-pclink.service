@@ -1,0 +1,12 @@
+[Unit]
+Description=Kit Control PC-Verbindung (WLAN oder USB)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/kit-controller/system/kit-pclink.sh apply
+
+[Install]
+WantedBy=multi-user.target

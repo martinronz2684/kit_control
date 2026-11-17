@@ -17,6 +17,16 @@ import java.util.Properties;
 final class NetLink {
     static final int DEFAULT_PORT = 8766;
     static final int DISCOVERY_PORT = 8767;
+    static final String USB_HOST = "10.55.0.1";
+
+    private static boolean reachable(String host, int port, int timeoutMs) {
+        try (Socket s = new Socket()) {
+            s.connect(new InetSocketAddress(host, port), timeoutMs);
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
 
     private final Socket socket;
     private final DataInputStream in;
@@ -73,6 +83,10 @@ final class NetLink {
                 try { port = Integer.parseInt(h.substring(c + 1)); h = h.substring(0, c); } catch (NumberFormatException ignored) { }
             }
             return new String[] { h, String.valueOf(port) };
+        }
+        // Pi am USB-Kabel ("PC-Verbindung: USB") hat immer diese Adresse
+        if (reachable(USB_HOST, DEFAULT_PORT, 300)) {
+            return new String[] { USB_HOST, String.valueOf(DEFAULT_PORT) };
         }
         if (cachedHost != null && System.currentTimeMillis() - cachedAt < 60000) {
             return new String[] { cachedHost, String.valueOf(cachedPort) };

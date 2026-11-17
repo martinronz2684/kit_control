@@ -14,7 +14,7 @@ ROTATION="${KIT_ROTATION:-90}"   # 90 oder 270, je nachdem wie das Display einge
 echo "== Pakete"
 apt-get update
 apt-get install -y --no-install-recommends \
-  python3 python3-usb network-manager \
+  python3 python3-usb network-manager dnsmasq-base \
   plymouth plymouth-themes fonts-inter fonts-dejavu-core \
   qml-qt6 qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript
 # Qt-Plattform für die direkte Ausgabe aufs Display (Paketname je nach Qt-Version)
@@ -28,7 +28,9 @@ echo "== Programm nach $DST"
 rm -rf "$DST"
 mkdir -p "$DST"
 cp -r "$SRC/kitctl" "$SRC/kitd" "$SRC/ui" "$SRC/app" "$SRC/branding" "$SRC/system" "$DST/"
-chmod +x "$DST/system/kit-app.sh"
+chmod +x "$DST/system/kit-app.sh" "$DST/system/kit-pclink.sh"
+mkdir -p /etc/kit
+[ -f /etc/kit/pc-link ] || echo wlan > /etc/kit/pc-link
 mkdir -p /etc/kit
 [ -f /etc/kit/kitd.env ] || cat > /etc/kit/kitd.env <<EOF
 # KIT_DEMO=1 simuliert einen Kit (Oberfläche ohne Hardware testen)
@@ -54,16 +56,16 @@ rfkill unblock wifi 2>/dev/null || true
 
 echo "== Neustart/Ausschalten aus der Oberfläche erlauben"
 cat > /etc/sudoers.d/kit-controller <<'EOF'
-kit ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl start --no-block kit-update.service, /usr/local/sbin/kit-update --check
+kit ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl start --no-block kit-update.service, /usr/local/sbin/kit-update --check, /opt/kit-controller/system/kit-pclink.sh wlan, /opt/kit-controller/system/kit-pclink.sh usb
 EOF
 chmod 440 /etc/sudoers.d/kit-controller
 
 echo "== Dienste"
 systemctl disable --now kit-kiosk.service 2>/dev/null || true
 rm -f /etc/systemd/system/kit-kiosk.service
-cp "$SRC/system/kitd.service" "$SRC/system/kit-app.service" "$SRC/system/kit-update.service" /etc/systemd/system/
+cp "$SRC/system/kitd.service" "$SRC/system/kit-app.service" "$SRC/system/kit-update.service" "$SRC/system/kit-pclink.service" /etc/systemd/system/
 systemctl daemon-reload 2>/dev/null || true
-systemctl enable kitd.service kit-app.service
+systemctl enable kitd.service kit-app.service kit-pclink.service
 systemctl set-default multi-user.target
 systemctl disable getty@tty1.service || true
 systemctl disable NetworkManager-wait-online.service 2>/dev/null || true
@@ -85,6 +87,9 @@ grep -q '^# kit-controller' "$CFG" || cat >> "$CFG" <<'EOF'
 disable_splash=1
 dtoverlay=vc4-kms-dsi-ili9881-5inch
 EOF
+
+# USB-C als Gerät (für "PC-Verbindung: USB"), auch bei bestehenden Installationen nachtragen
+grep -q '^dtoverlay=dwc2' "$CFG" || printf '\n[all]\ndtoverlay=dwc2,dr_mode=peripheral\n' >> "$CFG"
 
 echo "== cmdline.txt (stiller Boot)"
 CMD="$BOOT/cmdline.txt"

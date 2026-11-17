@@ -213,6 +213,8 @@ class Handler(BaseHTTPRequestHandler):
             try:
                 from kitd.bridge import STATE as BR
                 st["central"] = BR["central"]; st["central_peer"] = BR["peer"]
+                from kitd.bridge import pc_link
+                st["pc_link"] = pc_link()
             except Exception:
                 pass
             return self._json(st)
@@ -251,6 +253,18 @@ class Handler(BaseHTTPRequestHandler):
             cmd = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
         except (ValueError, json.JSONDecodeError):
             return self._json({"ok": False, "error": "ungültige Anfrage"}, HTTPStatus.BAD_REQUEST)
+        if cmd.get("cmd") == "pc_link":
+            mode = cmd.get("mode")
+            if mode not in ("wlan", "usb"):
+                return self._json({"ok": False, "error": "wlan oder usb"})
+            if DEMO:
+                open("/tmp/kit-pc-link", "w").write(mode)
+                return self._json({"ok": True})
+            import subprocess
+            r = subprocess.run(["sudo", "-n", "/opt/kit-controller/system/kit-pclink.sh", mode], capture_output=True, text=True, timeout=60)
+            if r.returncode != 0:
+                return self._json({"ok": False, "error": (r.stdout + r.stderr).strip().splitlines()[-1] if (r.stdout + r.stderr).strip() else "Umschalten fehlgeschlagen"})
+            return self._json({"ok": True})
         if cmd.get("cmd") in ("update_check", "update_start"):
             from kitd import update
             if cmd["cmd"] == "update_check":
