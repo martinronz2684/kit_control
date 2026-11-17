@@ -197,6 +197,9 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path == "/api/update":
+            from kitd import update
+            return self._json(update.status())
         if self.path.startswith("/api/wifi"):
             from kitd import wifi
             return self._json(wifi.status(rescan="rescan=1" in self.path))
@@ -237,6 +240,17 @@ class Handler(BaseHTTPRequestHandler):
             cmd = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
         except (ValueError, json.JSONDecodeError):
             return self._json({"ok": False, "error": "ungültige Anfrage"}, HTTPStatus.BAD_REQUEST)
+        if cmd.get("cmd") in ("update_check", "update_start"):
+            from kitd import update
+            if cmd["cmd"] == "update_check":
+                return self._json({"ok": True, "update": update.check()})
+            if WORKER.snapshot().get("printing"):
+                return self._json({"ok": False, "error": "Während des Drucks kein Update"})
+            try:
+                update.start()
+                return self._json({"ok": True})
+            except ValueError as e:
+                return self._json({"ok": False, "error": str(e)})
         if cmd.get("cmd") in ("wifi_connect", "wifi_disconnect"):
             from kitd import wifi
             try:

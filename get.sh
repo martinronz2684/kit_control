@@ -25,6 +25,13 @@ if [ -s "$TOKEN_FILE" ]; then
   AUTH=(-H "Authorization: Bearer $(cat "$TOKEN_FILE")")
 fi
 
+# Nur nachsehen, welche Version im Repo liegt (für die Oberfläche)
+if [ "${1:-}" = "--check" ]; then
+  curl -fsSL "${AUTH[@]}" -H "Accept: application/vnd.github.sha" \
+    "https://api.github.com/repos/$REPO/commits/$BRANCH" | cut -c1-7
+  exit 0
+fi
+
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -33,15 +40,19 @@ if ! curl -fsSL "${AUTH[@]}" -o "$WORK/src.tgz" "https://api.github.com/repos/$R
   echo "Download fehlgeschlagen. Token prüfen (Leserecht für Contents auf $REPO)."
   exit 1
 fi
+TOP="$(tar -tzf "$WORK/src.tgz" | head -n1)"
+VERSION="${TOP%/}"; VERSION="${VERSION##*-}"
 mkdir "$WORK/src"
 tar -xzf "$WORK/src.tgz" -C "$WORK/src" --strip-components=1
 
 bash "$WORK/src/install.sh"
 
-# Update-Befehl einrichten
+# Update-Befehl einrichten, Version merken
 install -m 755 "$WORK/src/get.sh" /usr/local/sbin/kit-update
+printf '%s\n' "${VERSION:0:7}" > /etc/kit/version
+echo "Version ${VERSION:0:7} installiert."
 
-if systemctl is-active --quiet kit-app.service; then
+if systemctl is-active --quiet kit-app.service || [ -n "${INVOCATION_ID:-}" ]; then
   systemctl restart kitd.service kit-app.service
   echo "Dienste neu gestartet."
 fi

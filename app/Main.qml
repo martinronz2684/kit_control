@@ -37,6 +37,8 @@ Window {
     property var moved: ({ print: 0, reservoir: 0 })
     property int lastLayer: -1
     property bool kitdUp: false
+    property var upd: ({ current: "", latest: null, available: false, running: false, log: [] })
+    property bool updWasRunning: false
 
     readonly property int rot: {
         var a = Qt.application.arguments
@@ -70,6 +72,20 @@ Window {
         })
     }
     Timer { interval: 15000; running: true; repeat: true; triggeredOnStart: true; onTriggered: win.loadWifi(false) }
+
+    // Software-Update: Stand abfragen (schnell, solange ein Update läuft), alle 6 h im Repo nachsehen
+    function loadUpd() {
+        Api.get("/api/update", function (j) {
+            if (!j) return
+            if (win.updWasRunning && !j.running) toast.show(j.log && j.log.length ? j.log[j.log.length - 1] : "Update beendet")
+            win.updWasRunning = j.running
+            win.upd = j
+        })
+    }
+    function checkUpd() { Api.cmd({ cmd: "update_check" }, function (j) { if (j && j.update) win.upd = j.update }) }
+    Timer { interval: (win.upd.running || updOvl.visible) ? 2000 : 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: win.loadUpd() }
+    Timer { interval: 20000; running: true; onTriggered: win.checkUpd() }
+    Timer { interval: 6 * 3600 * 1000; running: true; repeat: true; onTriggered: win.checkUpd() }
 
     // ---------- Bausteine ----------
     component Panel: Rectangle {
@@ -500,8 +516,9 @@ Window {
                 }
                 Column {
                     x: infoPanel.x + infoPanel.width + 8; width: 150; height: parent.height; spacing: 8
-                    KButton { width: parent.width; height: 70; kind: "pri"; text: "WLAN"; onClicked: wifiOvl.open() }
-                    Item { width: 1; height: parent.height - 70 - 52 - 52 - 24 }
+                    KButton { width: parent.width; height: 60; kind: "pri"; text: "WLAN"; onClicked: wifiOvl.open() }
+                    KButton { width: parent.width; height: 60; kind: win.upd.available ? "hot" : "normal"; text: win.upd.running ? "Update läuft …" : (win.upd.available ? "Update verfügbar" : "Software"); onClicked: updOvl.open() }
+                    Item { width: 1; height: parent.height - 60 - 60 - 52 - 52 - 32 }
                     KButton { width: parent.width; text: "Neustart"; onClicked: win.ask("Neu starten?", "Der Kit Controller startet neu. Ein laufender Druck läuft auf dem Kit weiter.", function () { win.send({ cmd: "reboot" }) }) }
                     KButton { width: parent.width; kind: "red"; text: "Ausschalten"; onClicked: win.ask("Ausschalten?", "Danach den Strom erst trennen, wenn das Display schwarz ist.", function () { win.send({ cmd: "poweroff" }) }) }
                 }
@@ -615,6 +632,48 @@ Window {
                     KButton { width: 110; height: 46; text: wifiOvl.sym ? "abc" : "#+="; onClicked: wifiOvl.sym = !wifiOvl.sym }
                     KButton { width: 450; height: 46; text: "Leerzeichen"; onClicked: if (wifiOvl.pw.length < 63) wifiOvl.pw += " " }
                     KButton { width: 110; height: 46; text: "Zurück"; onClicked: wifiOvl.askPw = false }
+                }
+            }
+        }
+
+        // ---------- Software-Update ----------
+        Rectangle {
+            id: updOvl
+            anchors.fill: parent; visible: false; color: "#d108090c"
+            function open() { visible = true; win.checkUpd() }
+            MouseArea { anchors.fill: parent }
+            Panel {
+                anchors.centerIn: parent; width: 520; height: 330
+                Column {
+                    x: 18; y: 16; width: parent.width - 36; spacing: 10
+                    Val { font.pixelSize: 20; text: "Software" }
+                    Row {
+                        spacing: 10; width: parent.width
+                        Rectangle { width: (parent.width - 10) / 2; height: 62; radius: 12; color: "#0bffffff"
+                            Column { x: 12; y: 10; Lbl { text: "Installiert" } Val { font.pixelSize: 20; text: win.upd.current || "—" } } }
+                        Rectangle { width: (parent.width - 10) / 2; height: 62; radius: 12; color: win.upd.available ? "#24ff6a3d" : "#0bffffff"
+                            Column { x: 12; y: 10; Lbl { text: "Im Repository" } Val { font.pixelSize: 20; color: win.upd.available ? win.cHeat : win.cInk; text: win.upd.latest || "—" } } }
+                    }
+                    Rectangle {
+                        width: parent.width; height: 96; radius: 12; color: "#59000000"; clip: true
+                        Column {
+                            x: 12; y: 8; width: parent.width - 24; spacing: 2
+                            Repeater {
+                                model: win.upd.running || (win.upd.log && win.upd.log.length) ? win.upd.log : [win.upd.error ? win.upd.error : (win.upd.available ? "Eine neue Version liegt bereit." : (win.upd.latest ? "Kit Control ist aktuell." : "Prüfe auf Updates …"))]
+                                Text { width: parent.width; elide: Text.ElideRight; text: modelData; color: "#c9cfd8"; font.family: "monospace"; font.pixelSize: 12 }
+                            }
+                        }
+                    }
+                    Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 12
+                        text: win.upd.running ? "Das Update dauert einige Minuten. Die Oberfläche startet dabei kurz neu." : "Während eines Drucks ist kein Update möglich. Ein laufender Druck auf dem Kit wäre davon aber nicht betroffen." }
+                    Row {
+                        spacing: 8
+                        KButton { width: 150; height: 46; text: "Schließen"; onClicked: updOvl.visible = false }
+                        KButton { width: 150; height: 46; text: "Neu prüfen"; ok: !win.upd.running; onClicked: win.checkUpd() }
+                        KButton { width: 184; height: 46; kind: "hot"; ok: !win.upd.running && !win.st.printing
+                            text: win.upd.running ? "Läuft …" : "Jetzt aktualisieren"
+                            onClicked: win.send({ cmd: "update_start" }, function (ok) { if (ok) { win.updWasRunning = true; win.loadUpd() } }) }
+                    }
                 }
             }
         }

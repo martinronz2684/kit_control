@@ -18,7 +18,10 @@ Das Protokoll stammt aus dem Bytecode von Sintratec Central 1.2.0.
      https://api.github.com/repos/martinronz2684/kit_control/contents/get.sh | sudo KIT_TOKEN=DEIN_TOKEN bash
    sudo reboot
    ```
-4. **Aktualisieren** später: `sudo kit-update`
+   Ist das Repository öffentlich, entfällt der Token:
+   `curl -fsSL https://raw.githubusercontent.com/martinronz2684/kit_control/main/get.sh | sudo bash`
+4. **Aktualisieren:** auf dem Display unter *System → Software → Jetzt aktualisieren*,
+   oder per SSH mit `sudo kit-update`. Der Pi prüft alle 6 Stunden, ob es eine neue Version gibt.
 
 Danach startet der Pi still mit Logo und Ladebalken direkt in die Oberfläche. Die Oberfläche ist eine native Qt-App (`app/`), die ohne Desktop und ohne Browser direkt auf das Display zeichnet.
 Ist das Display falsch herum eingebaut: in `/etc/kit/kitd.env` `KIT_ROTATION=270` setzen und `sudo systemctl restart kit-app`.

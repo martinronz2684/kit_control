@@ -21,7 +21,7 @@ for p in qt6-qpa-plugins libqt6opengl6 qml6-module-qtqml-models; do apt-get inst
 
 echo "== Benutzer kit"
 id kit >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin kit
-usermod -aG plugdev,video,render,input kit
+usermod -aG plugdev,video,render,input,systemd-journal kit
 
 echo "== Programm nach $DST"
 rm -rf "$DST"
@@ -53,14 +53,14 @@ rfkill unblock wifi 2>/dev/null || true
 
 echo "== Neustart/Ausschalten aus der Oberfläche erlauben"
 cat > /etc/sudoers.d/kit-controller <<'EOF'
-kit ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
+kit ALL=(root) NOPASSWD: /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl start --no-block kit-update.service, /usr/local/sbin/kit-update --check
 EOF
 chmod 440 /etc/sudoers.d/kit-controller
 
 echo "== Dienste"
 systemctl disable --now kit-kiosk.service 2>/dev/null || true
 rm -f /etc/systemd/system/kit-kiosk.service
-cp "$SRC/system/kitd.service" "$SRC/system/kit-app.service" /etc/systemd/system/
+cp "$SRC/system/kitd.service" "$SRC/system/kit-app.service" "$SRC/system/kit-update.service" /etc/systemd/system/
 systemctl daemon-reload
 systemctl enable kitd.service kit-app.service
 systemctl set-default multi-user.target
