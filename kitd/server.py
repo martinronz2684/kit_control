@@ -37,6 +37,8 @@ class KitWorker(threading.Thread):
         self.cmds: "queue.Queue[tuple[dict, queue.Queue]]" = queue.Queue()
         self.state = {"connected": False, "message": "Suche Kit …"}
         self.kit: Kit | None = None
+        # Alle USB-Zugriffe laufen unter dieser Sperre (eigene Abfragen und Central über WLAN).
+        self.usb = threading.RLock()
 
     # -- state -----------------------------------------------------------------
     def snapshot(self) -> dict:
@@ -58,7 +60,8 @@ class KitWorker(threading.Thread):
                     time.sleep(3)
                     continue
             try:
-                self._poll()
+                with self.usb:
+                    self._poll()
                 self._run_cmds(deadline=time.time() + 1.0)
             except Exception as e:  # USB unplugged, timeout …
                 self._set(connected=False, message=f"Verbindung verloren: {e}")
@@ -143,7 +146,9 @@ class KitWorker(threading.Thread):
             except queue.Empty:
                 return
             try:
-                self.kit.command(self._encode(cmd))
+                payload = self._encode(cmd)
+                with self.usb:
+                    self.kit.command(payload)
                 reply.put({"ok": True})
             except (P.ProtocolError, ValueError, KeyError) as e:
                 reply.put({"ok": False, "error": str(e)})
@@ -204,7 +209,13 @@ class Handler(BaseHTTPRequestHandler):
             from kitd import wifi
             return self._json(wifi.status(rescan="rescan=1" in self.path))
         if self.path == "/api/state":
-            return self._json(WORKER.snapshot())
+            st = WORKER.snapshot()
+            try:
+                from kitd.bridge import STATE as BR
+                st["central"] = BR["central"]; st["central_peer"] = BR["peer"]
+            except Exception:
+                pass
+            return self._json(st)
         if self.path == "/api/events":
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/event-stream")
@@ -270,6 +281,9 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     WORKER.start()
+    if os.environ.get("KIT_BRIDGE", "1") == "1":
+        from kitd.bridge import start_bridge
+        start_bridge(WORKER)
     host = os.environ.get("KIT_HOST", "127.0.0.1")
     ThreadingHTTPServer((host, PORT), Handler).serve_forever()
 
