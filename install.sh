@@ -8,6 +8,7 @@ set -euo pipefail
 SRC="$(cd "$(dirname "$0")" && pwd)"
 DST=/opt/kit-controller
 BOOT=/boot/firmware
+[ -f /etc/kit/kitd.env ] && . /etc/kit/kitd.env
 ROTATION="${KIT_ROTATION:-90}"   # 90 oder 270, je nachdem wie das Display eingebaut ist
 
 echo "== Pakete"
@@ -89,8 +90,18 @@ echo "== cmdline.txt (stiller Boot)"
 CMD="$BOOT/cmdline.txt"
 cp -n "$CMD" "$CMD.vor-kit" || true
 LINE="$(head -n1 "$CMD")"
+# Displaydrehung für Startbildschirm und Konsole: der Kernel meldet sie als panel_orientation,
+# Plymouth richtet sich danach. (rotate= wirkt nur auf die Textkonsole und wird hier entfernt.)
+case "$ROTATION" in
+  90)  ORIENT=right_side_up ;;
+  270) ORIENT=left_side_up ;;
+  180) ORIENT=upside_down ;;
+  *)   ORIENT=normal ;;
+esac
+LINE="$(printf '%s\n' $LINE | grep -v '^video=DSI-' | tr '\n' ' ')"
+LINE="${LINE% }"
 for opt in quiet splash loglevel=0 logo.nologo vt.global_cursor_default=0 plymouth.ignore-serial-consoles \
-           "video=DSI-1:720x1280@60,rotate=$ROTATION" "video=DSI-2:720x1280@60,rotate=$ROTATION"; do
+           "video=DSI-1:panel_orientation=$ORIENT" "video=DSI-2:panel_orientation=$ORIENT"; do
   case " $LINE " in *" $opt "*) ;; *) LINE="$LINE $opt" ;; esac
 done
 LINE="${LINE//console=tty1/console=tty3}"
