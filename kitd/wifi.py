@@ -65,6 +65,18 @@ def status(rescan: bool = False) -> dict:
     return {"available": True, "current": current, "ip": ip, "networks": nets}
 
 
+def _security_of(ssid: str) -> str:
+    """SECURITY-Feld aus dem letzten Scan, z. B. 'WPA2', 'WPA2 WPA3', 'WPA3' oder ''."""
+    try:
+        for line in _nmcli("-t", "-f", "SSID,SECURITY", "dev", "wifi", "list", "--rescan", "no").splitlines():
+            f = _split(line)
+            if len(f) >= 2 and f[0] == ssid:
+                return f[1]
+    except Exception:
+        pass
+    return ""
+
+
 def connect(ssid: str, password: str = "") -> None:
     if not ssid or len(ssid) > 32 or (password and not 8 <= len(password) <= 63):
         raise ValueError("WLAN-Passwort muss 8–63 Zeichen haben")
@@ -73,13 +85,31 @@ def connect(ssid: str, password: str = "") -> None:
             raise ValueError("Verbindung fehlgeschlagen: Passwort falsch?")
         _demo["current"] = ssid
         return
-    args = ["dev", "wifi", "connect", ssid]
-    if password:
-        args += ["password", password]
+    # Profil immer selbst anlegen: "nmcli dev wifi connect" scheitert auf dem Pi oft mit
+    # "802-11-wireless-security.key-mgmt: Eigenschaft fehlt".
+    name = f"kit-{ssid}"
     try:
-        _nmcli(*args, timeout=45)
-    except RuntimeError as e:
-        raise ValueError(f"Verbindung fehlgeschlagen: {e}") from e
+        _nmcli("connection", "delete", "id", name, timeout=15)
+    except Exception:
+        pass
+    args = ["connection", "add", "type", "wifi", "ifname", "wlan0", "con-name", name,
+            "ssid", ssid, "connection.autoconnect", "yes"]
+    if password:
+        sec = _security_of(ssid).upper()
+        key_mgmt = "sae" if ("WPA3" in sec and "WPA2" not in sec and "WPA1" not in sec) else "wpa-psk"
+        args += ["wifi-sec.key-mgmt", key_mgmt, "wifi-sec.psk", password]
+    try:
+        _nmcli(*args, timeout=20)
+        _nmcli("connection", "up", "id", name, timeout=45)
+    except (RuntimeError, subprocess.TimeoutExpired) as e:
+        try:
+            _nmcli("connection", "delete", "id", name, timeout=15)
+        except Exception:
+            pass
+        msg = str(e)
+        if "Secrets were required" in msg or "secrets" in msg.lower() or "802-11-wireless-security.psk" in msg:
+            msg = "Passwort falsch?"
+        raise ValueError(f"Verbindung fehlgeschlagen: {msg}") from e
 
 
 def disconnect() -> None:
