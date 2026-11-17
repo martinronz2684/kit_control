@@ -1,4 +1,4 @@
-<#
+﻿<#
   Sintratec Central über WLAN mit dem Kit Control verbinden.
 
   Installieren:   Rechtsklick > "Mit PowerShell ausführen"
