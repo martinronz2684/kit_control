@@ -1,0 +1,23 @@
+// Schwarz, Logo mittig, darunter ein schmaler Ladebalken.
+// Das Logo ist /usr/share/plymouth/themes/kit/logo.png (weiß, transparenter Hintergrund).
+Window.SetBackgroundTopColor(0, 0, 0);
+Window.SetBackgroundBottomColor(0, 0, 0);
+W = Window.GetWidth(); H = Window.GetHeight();
+// Hochkant-Panel? Dann ist das Bild querliegend, wir zeichnen in Landschafts-Koordinaten.
+logo.image = Image("logo.png");
+if (logo.image) {
+  scale = Math.Min(W * 0.5 / logo.image.GetWidth(), 1);
+  logo.image = logo.image.Scale(logo.image.GetWidth() * scale, logo.image.GetHeight() * scale);
+  logo.sprite = Sprite(logo.image);
+  logo.sprite.SetPosition(W / 2 - logo.image.GetWidth() / 2, H / 2 - logo.image.GetHeight() / 2 - 20, 1);
+}
+track.image = Image("track.png");
+fill.image = Image("fill.png");
+bw = W * 0.28; bx = W / 2 - bw / 2; by = H / 2 + 70;
+track.sprite = Sprite(track.image.Scale(bw, 4)); track.sprite.SetPosition(bx, by, 1);
+fill.sprite = Sprite(); fill.sprite.SetPosition(bx, by, 2);
+fun progress_cb(duration, progress) {
+  w = Math.Max(1, bw * progress);
+  fill.sprite.SetImage(fill.image.Scale(w, 4));
+}
+Plymouth.SetBootProgressFunction(progress_cb);

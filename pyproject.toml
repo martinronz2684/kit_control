@@ -1,0 +1,9 @@
+[project]
+name = "kitctl"
+version = "0.1.0"
+description = "Lesender USB-Client für den Sintratec Kit (Protokoll aus Central 1.2.0)"
+requires-python = ">=3.9"
+dependencies = ["pyusb>=1.2"]
+
+[project.scripts]
+kitctl = "kitctl.cli:main"

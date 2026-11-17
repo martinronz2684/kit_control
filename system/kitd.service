@@ -1,0 +1,16 @@
+[Unit]
+Description=Kit Controller Dienst (USB zum Sintratec Kit)
+After=network.target
+
+[Service]
+User=kit
+Group=kit
+WorkingDirectory=/opt/kit-controller
+Environment=PYTHONPATH=/opt/kit-controller
+EnvironmentFile=-/etc/kit/kitd.env
+ExecStart=/usr/bin/python3 -m kitd.server
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

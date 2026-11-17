@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Kit Controller</title>
+<style>
+/* Gezeichnet für 800×450 CSS-Pixel: Chromium läuft auf dem 5"-Display (1280×720) mit Faktor 1,6. */
+:root{--bg:#0c0e11;--ink:#eef1f5;--mut:#9aa3b2;--blue:#6b86ff;--blue2:#3a55e6;--heat:#ff7a4d;--red:#e5484d;--ok:#2fd38a;--line:rgba(255,255,255,.08)}
+*{box-sizing:border-box;min-width:0;-webkit-tap-highlight-color:transparent;user-select:none}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:15px/1.35 system-ui,"Inter","Noto Sans",sans-serif;overflow:hidden;cursor:none}
+body{background:radial-gradient(700px 420px at 25% -10%,#1f242d,#0f1115 60%,#08090c)}
+.app{display:flex;height:100%;padding:8px;gap:8px}
+nav{width:64px;display:flex;flex-direction:column;gap:6px;padding:8px 6px;border-radius:18px;background:linear-gradient(180deg,rgba(255,255,255,.06),rgba(255,255,255,.02));border:1px solid var(--line)}
+nav button{height:56px;border:0;border-radius:14px;background:transparent;color:var(--mut);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font:600 10px system-ui,sans-serif}
+nav button.on{background:linear-gradient(180deg,var(--blue),var(--blue2));color:#fff;box-shadow:0 6px 16px rgba(74,103,245,.4)}
+nav button.on.heat{background:linear-gradient(180deg,#ff8a5c,#e9531f);box-shadow:0 6px 16px rgba(233,83,31,.4)}
+nav .sp{flex:1}
+main{flex:1;display:flex;flex-direction:column;gap:8px}
+header{display:flex;align-items:center;gap:8px;height:34px;padding:0 4px}
+header h1{margin:0;font-size:20px;font-weight:600;letter-spacing:-.02em;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dot{display:flex;align-items:center;gap:6px;height:28px;padding:0 10px;border-radius:999px;background:rgba(255,255,255,.05);border:1px solid var(--line);font-size:12px;color:var(--mut)}
+.dot i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.dot.off i{background:var(--red);box-shadow:0 0 8px var(--red)}
+.alert{height:28px;padding:0 12px;border-radius:999px;border:1px solid rgba(255,138,92,.5);background:rgba(255,106,61,.14);color:#ffc2ab;font:600 12px system-ui,sans-serif;max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.alert.err{border-color:rgba(229,72,77,.6);background:rgba(229,72,77,.18);color:#ffb3b5}
+.msg{padding:9px 10px;border-radius:12px;background:rgba(255,106,61,.1);border:1px solid rgba(255,106,61,.25);margin-bottom:6px}
+.msg.err{background:rgba(229,72,77,.12);border-color:rgba(229,72,77,.35)}
+.msg b{display:block;font-size:13px}.msg span{font-size:12px;color:#c9cfd8}
+.ovl{position:fixed;inset:0;z-index:7;display:none;flex-direction:column;gap:8px;padding:10px;background:radial-gradient(700px 420px at 25% -10%,#1f242d,#0c0e11 60%,#08090c)}
+.ovl.on{display:flex}
+.ovl header{height:40px}
+.net{display:flex;align-items:center;gap:10px;width:100%;height:50px;padding:0 14px;border-radius:12px;border:1px solid transparent;background:transparent;color:var(--ink);font:500 15px system-ui,sans-serif;text-align:left}
+.net:active{background:rgba(255,255,255,.06)}
+.net.act{border-color:rgba(107,134,255,.6);background:rgba(107,134,255,.12)}
+.net span{flex:1;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.kb{display:flex;flex-direction:column;gap:5px}
+.kb div{display:flex;gap:5px;justify-content:center}
+.kb button{flex:1;max-width:66px;height:46px;border-radius:10px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg,rgba(255,255,255,.1),rgba(255,255,255,.04));color:var(--ink);font:500 18px system-ui,sans-serif}
+.kb button:active{background:linear-gradient(180deg,var(--blue),var(--blue2))}
+.kb button.w{max-width:none;flex:1.6;font-size:13px;font-weight:600}
+.pw{height:46px;border-radius:12px;background:rgba(0,0,0,.4);border:1px solid rgba(107,134,255,.5);display:flex;align-items:center;padding:0 14px;font:500 18px ui-monospace,monospace;letter-spacing:.06em;overflow:hidden;white-space:nowrap}
+.pw::after{content:"";width:2px;height:22px;background:var(--blue);margin-left:2px;animation:bl 1s steps(1) infinite}
+@keyframes bl{50%{opacity:0}}
+.screen{display:none;flex:1;gap:8px;min-height:0}
+.screen.on{display:flex}
+.panel{background:linear-gradient(180deg,rgba(255,255,255,.055),rgba(255,255,255,.022));border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 30px rgba(0,0,0,.35),inset 0 1px 0 rgba(255,255,255,.05)}
+.col{display:flex;flex-direction:column;gap:8px}
+.lbl{font-size:12px;color:var(--mut);font-weight:500}
+.big{font-size:44px;font-weight:300;letter-spacing:-.04em;line-height:1;font-variant-numeric:tabular-nums}
+.mid{font-size:26px;font-weight:500;letter-spacing:-.03em;line-height:1.1;font-variant-numeric:tabular-nums}
+.num{font-variant-numeric:tabular-nums}
+.btn{height:52px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg,rgba(255,255,255,.09),rgba(255,255,255,.04));color:var(--ink);font:600 14px system-ui,sans-serif;box-shadow:0 6px 14px rgba(0,0,0,.3)}
+.btn:active{background:linear-gradient(180deg,var(--blue),var(--blue2))}
+.btn.pri{border:0;background:linear-gradient(180deg,var(--blue),var(--blue2));color:#fff}
+.btn.red{border:0;background:linear-gradient(180deg,#f0565b,#c9343a);color:#fff}
+.btn.hot{border:0;background:linear-gradient(180deg,#ff8a5c,#e9531f);color:#fff}
+.btn:disabled{opacity:.35}
+.seg{display:flex;gap:4px;padding:4px;border-radius:12px;background:rgba(0,0,0,.35);border:1px solid var(--line)}
+.seg button{flex:1;height:38px;border:0;border-radius:9px;background:transparent;color:var(--mut);font:600 13px system-ui,sans-serif}
+.seg button.on{background:linear-gradient(180deg,var(--blue),var(--blue2));color:#fff}
+.bar{height:5px;border-radius:3px;background:rgba(255,255,255,.08);overflow:hidden}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,#8ea2ff,#4a67f5);box-shadow:0 0 10px rgba(107,134,255,.7)}
+.offline{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(8,9,12,.82);backdrop-filter:blur(4px);z-index:5}
+.offline.on{display:flex}
+.offline .panel{padding:22px 26px;max-width:460px;text-align:center}
+dialog{border:0;padding:0;background:transparent;color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.6)}
+dialog .panel{padding:20px;width:380px;background:#171a1f}
+.toast{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);padding:10px 16px;border-radius:12px;background:#2a1416;border:1px solid rgba(229,72,77,.5);color:#ffb3b5;font-size:13px;display:none;z-index:6}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:3px;background:linear-gradient(90deg,#ffb08f,#ff6a3d)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:linear-gradient(180deg,#fff,#d5dae2);box-shadow:0 3px 8px rgba(0,0,0,.6)}
+.rc{animation:none}
+.rc.go{animation:rc 2.4s ease-in-out}
+@keyframes rc{0%{transform:translateX(0)}45%{transform:translateX(-470px)}55%{transform:translateX(-470px)}100%{transform:translateX(0)}}
+@media (prefers-reduced-motion:reduce){.rc.go{animation:none}}
+</style>
+</head>
+<body>
+<div class="app">
+<nav aria-label="Hauptmenü">
+<div style="height:44px;display:flex;align-items:center;justify-content:center"><svg width="40" height="40" viewBox="0 0 64 64" fill="none" aria-label="Kit Control"><defs><linearGradient id="kfr" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#8a93a3"/></linearGradient><linearGradient id="kbm" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8ea2ff" stop-opacity="0"/><stop offset="1" stop-color="#b9c6ff"/></linearGradient><radialGradient id="kgl"><stop offset="0" stop-color="#ffffff"/><stop offset=".35" stop-color="#8ea2ff"/><stop offset="1" stop-color="#4a67f5" stop-opacity="0"/></radialGradient><linearGradient id="kl1" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#eef1f5" stop-opacity=".35"/><stop offset="1" stop-color="#eef1f5"/></linearGradient></defs><path d="M32 3.5 56.7 17.75V46.25L32 60.5 7.3 46.25V17.75Z" stroke="url(#kfr)" stroke-width="3" stroke-linejoin="round"/><path d="M18 38h28M22 44h20M27 50h10" stroke="url(#kl1)" stroke-width="3" stroke-linecap="round"/><path d="M19 32h14" stroke="#eef1f5" stroke-width="3" stroke-linecap="round"/><path d="M38 32h7" stroke="#eef1f5" stroke-width="3" stroke-linecap="round" opacity=".18"/><path d="M32 9 35 30" stroke="url(#kbm)" stroke-width="2.2" stroke-linecap="round"/><circle cx="35.4" cy="32" r="9" fill="url(#kgl)" opacity=".9"/><circle cx="35.4" cy="32" r="2.6" fill="#ffffff"/></svg></div>
+<button data-go="print" class="on"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M4 20h16M6 16h12M8 12h8M10 8h4"/></svg>Druck</button>
+<button data-go="move"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v18M7 8l5-5 5 5M7 16l5 5 5-5"/></svg>Bewegung</button>
+<button data-go="heat" data-heat="1"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M10 14V5a2 2 0 1 1 4 0v9a4 4 0 1 1-4 0z"/></svg>Heizung</button>
+<button data-go="jobs"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Jobs</button>
+<div class="sp"></div>
+<button data-go="sys"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></svg>System</button>
+</nav>
+<main>
+<header><h1 id="title">Druck</h1><button class="alert" id="alert" hidden></button><button class="dot" id="wifiChip" style="border:1px solid var(--line);font:500 12px system-ui,sans-serif"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor"/></svg><span id="wifiChipT">WLAN</span></button><div class="dot" id="conn"><i></i><span id="connText">—</span></div></header>
+
+<section class="screen on" id="s-print">
+<div class="panel" style="flex:1.35;position:relative;overflow:hidden">
+<div style="position:absolute;left:14px;top:10px;z-index:1"><div class="lbl">Schicht</div><div class="big" id="pLayer">—</div></div>
+<div style="position:absolute;right:14px;top:12px;z-index:1;text-align:right"><div class="mid" id="pPct" style="color:#8ea2ff">—</div><div class="lbl" id="pState">—</div></div>
+<svg viewBox="0 0 660 440" preserveAspectRatio="xMidYMax meet" style="position:absolute;inset:0;width:100%;height:100%">
+<defs>
+<linearGradient id="g1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4a505b"/><stop offset=".15" stop-color="#2c3139"/><stop offset="1" stop-color="#1b1f25"/></linearGradient>
+<linearGradient id="g2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#23272f"/><stop offset="1" stop-color="#121418"/></linearGradient>
+<linearGradient id="g3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#07080a"/><stop offset=".5" stop-color="#14171c"/><stop offset="1" stop-color="#060709"/></linearGradient>
+<linearGradient id="g4" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f4f5f7"/><stop offset="1" stop-color="#a9afb9"/></linearGradient>
+<linearGradient id="g5" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9edf2"/><stop offset=".4" stop-color="#8d95a2"/><stop offset="1" stop-color="#4a515c"/></linearGradient>
+<linearGradient id="g6" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe2d6"/><stop offset="1" stop-color="#ff6a3d"/></linearGradient>
+<linearGradient id="g7" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff6a3d" stop-opacity=".3"/><stop offset="1" stop-color="#ff6a3d" stop-opacity="0"/></linearGradient>
+<filter id="sh"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-opacity=".5"/></filter>
+<filter id="gl" x="-60%" y="-300%" width="220%" height="700%"><feGaussianBlur stdDeviation="8"/></filter>
+<radialGradient id="sp"><stop offset="0" stop-color="#fff"/><stop offset=".3" stop-color="#b9c6ff"/><stop offset="1" stop-color="#4a67f5" stop-opacity="0"/></radialGradient>
+</defs>
+<rect x="50" y="214" width="560" height="212" rx="18" fill="url(#g2)"/><rect x="40" y="200" width="580" height="24" rx="10" fill="url(#g1)"/>
+<rect x="100" y="224" width="200" height="192" rx="6" fill="url(#g3)"/><rect x="104" y="224" width="192" height="122" fill="url(#g4)"/>
+<rect x="124" y="262" width="56" height="74" rx="9" fill="#b9a48c" filter="url(#sh)"/><rect x="196" y="290" width="80" height="46" rx="9" fill="#b9a48c" filter="url(#sh)"/>
+<rect x="104" y="223" width="192" height="3" fill="#6b86ff"/><rect x="102" y="346" width="196" height="12" rx="3" fill="url(#g5)"/><rect x="190" y="358" width="20" height="58" fill="#8d95a2"/>
+<rect x="360" y="224" width="200" height="192" rx="6" fill="url(#g3)"/><rect x="364" y="224" width="192" height="58" fill="url(#g4)"/><rect x="362" y="282" width="196" height="12" rx="3" fill="url(#g5)"/><rect x="450" y="294" width="20" height="122" fill="#8d95a2"/>
+<g class="rc" id="rc"><rect x="566" y="172" width="46" height="24" rx="5" fill="#2c3139" filter="url(#sh)"/><rect x="571" y="196" width="36" height="6" rx="2" fill="#b8bec8"/></g>
+<path d="M92 112h84l26 88H64z" fill="url(#g7)"/><path d="M224 112h84l28 88H198z" fill="url(#g7)"/>
+<g id="lamps"><rect x="96" y="92" width="76" height="16" rx="8" fill="#ff6a3d" filter="url(#gl)"/><rect x="228" y="92" width="76" height="16" rx="8" fill="#ff6a3d" filter="url(#gl)"/></g>
+<rect x="96" y="92" width="76" height="16" rx="8" fill="url(#g6)"/><rect x="228" y="92" width="76" height="16" rx="8" fill="url(#g6)"/>
+<rect x="176" y="24" width="48" height="56" rx="11" fill="#2a2f38" filter="url(#sh)"/>
+<g id="beam"><path d="M200 82L238 224" stroke="#cdd6ff" stroke-width="2"/><circle cx="238" cy="225" r="24" fill="url(#sp)"/></g>
+</svg>
+<div style="position:absolute;left:14px;right:14px;bottom:10px" class="bar"><i id="pBar" style="width:0"></i></div>
+</div>
+<div class="col" style="flex:1">
+<div style="display:flex;gap:8px">
+<div class="panel" style="flex:1;padding:10px 12px"><div class="lbl">Pulveroberfläche</div><div class="mid" id="tSurf" style="color:#ff8a5c">—</div><div class="lbl" id="tSurfT">Soll —</div></div>
+<div class="panel" style="flex:1;padding:10px 12px"><div class="lbl">Kammer</div><div class="mid" id="tCham">—</div><div class="lbl" id="tChamT">Soll —</div></div>
+</div>
+<div style="display:flex;gap:8px">
+<div class="panel" style="flex:1;padding:10px 12px"><div class="lbl">Verstrichen</div><div class="mid" id="pEl" style="font-size:22px">—</div></div>
+<div class="panel" style="flex:1;padding:10px 12px"><div class="lbl">Fertig ca.</div><div class="mid" id="pEta" style="font-size:22px">—</div></div>
+</div>
+<div style="flex:1"></div>
+<button class="btn" data-confirm="stop_sintering">Sintern stoppen &amp; abkühlen</button>
+<button class="btn red" data-confirm="abort_print">Druck abbrechen</button>
+</div>
+</section>
+
+<section class="screen" id="s-move">
+<div class="panel col" style="flex:1;padding:12px">
+<div class="lbl">Schrittweite</div>
+<div class="seg" id="steps"><button data-step="0.1">0,1 mm</button><button data-step="1" class="on">1 mm</button><button data-step="10">10 mm</button></div>
+<div style="display:flex;gap:8px;flex:1">
+<div class="col" style="flex:1"><div class="lbl">Bauplattform</div><button class="btn" style="flex:1;font-size:22px" data-move="print" data-dir="-1">▲</button><button class="btn" style="flex:1;font-size:22px" data-move="print" data-dir="1">▼</button><div class="lbl num" id="mvPrint">seit Start 0,0 mm</div></div>
+<div class="col" style="flex:1"><div class="lbl">Vorrat</div><button class="btn" style="flex:1;font-size:22px" data-move="reservoir" data-dir="-1">▲</button><button class="btn" style="flex:1;font-size:22px" data-move="reservoir" data-dir="1">▼</button><div class="lbl num" id="mvRes">seit Start 0,0 mm</div></div>
+</div>
+</div>
+<div class="col" style="width:290px">
+<div class="panel col" style="padding:12px">
+<div class="lbl">Beschichter · Schichtdicke</div>
+<div class="seg" id="thick"><button data-t="0.1" class="on">0,10</button><button data-t="0.15">0,15</button><button data-t="0.2">0,20</button></div>
+<button class="btn pri" id="layerBtn">Schicht auftragen</button>
+</div>
+<div class="panel col" style="padding:12px">
+<div class="lbl">Pulver laden · Bauhöhe des Jobs</div>
+<div style="display:flex;align-items:center;gap:8px"><button class="btn" style="width:52px" data-h="-5">−</button><div class="mid" style="flex:1;text-align:center" id="jobH">68 mm</div><button class="btn" style="width:52px" data-h="5">+</button></div>
+<button class="btn" id="loadBtn">Vorrat um 73 mm absenken</button>
+</div>
+<button class="btn red" data-cmd="freeze_motors">Motoren stoppen</button>
+</div>
+</section>
+
+<section class="screen" id="s-heat">
+<div class="panel" style="flex:1.2;display:flex;align-items:center;justify-content:center;gap:16px">
+<button class="btn" style="width:60px;height:60px;border-radius:50%;font-size:26px" data-t5="-5">−</button>
+<div style="position:relative;width:250px;height:250px;border-radius:50%" id="ring">
+<div style="position:absolute;inset:16px;border-radius:50%;background:radial-gradient(circle at 50% 30%,#23272f,#121418 75%);box-shadow:inset 0 4px 14px rgba(0,0,0,.6);display:flex;flex-direction:column;align-items:center;justify-content:center">
+<div class="lbl">Kammer jetzt</div><div class="big" id="hNow" style="font-size:58px">—</div>
+<div style="margin-top:6px;font-size:14px"><span class="lbl">Soll </span><b class="num" style="color:#ff8a5c" id="hSet">145 °C</b></div>
+</div></div>
+<button class="btn" style="width:60px;height:60px;border-radius:50%;font-size:26px" data-t5="5">+</button>
+</div>
+<div class="col" style="flex:1">
+<button class="btn hot" id="warmBtn">Vorheizen starten</button>
+<div class="panel col" style="padding:12px;flex:1;justify-content:space-around">
+<div class="lbl">Heizstrahler</div>
+<label class="lbl" style="display:grid;grid-template-columns:52px 1fr 40px;align-items:center;gap:8px"><span style="color:var(--ink)">Links</span><input type="range" min="0" max="100" value="80" data-lamp="left"><b class="num">80</b></label>
+<label class="lbl" style="display:grid;grid-template-columns:52px 1fr 40px;align-items:center;gap:8px"><span style="color:var(--ink)">Rechts</span><input type="range" min="0" max="100" value="80" data-lamp="right"><b class="num">80</b></label>
+<label class="lbl" style="display:grid;grid-template-columns:52px 1fr 40px;align-items:center;gap:8px"><span style="color:var(--ink)">Front</span><input type="range" min="0" max="100" value="65" data-lamp="front"><b class="num">65</b></label>
+</div>
+</div>
+</section>
+
+<section class="screen" id="s-jobs">
+<div class="panel col" style="flex:1;padding:16px;justify-content:center">
+<div class="lbl">Job auf der SD-Karte im Kit</div>
+<div class="mid">Letzten Job erneut drucken</div>
+<div class="lbl" style="font-size:13px;max-width:420px">Startet den Job, den Central zuletzt auf den Kit übertragen hat. Vorher Pulver laden und die Kammer vorheizen. Die Job-Bibliothek mit Schichtansicht folgt mit dem PC-Durchreichen.</div>
+<div style="height:8px"></div>
+<button class="btn pri" style="width:280px" data-confirm="start_print">Druck starten</button>
+</div>
+</section>
+
+<section class="screen" id="s-sys">
+<div class="panel" style="flex:1;padding:12px;overflow:auto" id="sysMsgs"></div>
+<div class="panel col" style="flex:1;padding:12px;gap:2px" id="sysInfo"></div>
+<div class="col" style="width:150px">
+<button class="btn pri" id="wifiBtn" style="height:auto;min-height:62px;padding:8px 10px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0"/><circle cx="12" cy="19.5" r="1" fill="currentColor"/></svg><span id="wifiBtnT" style="font-size:12px;opacity:.85">WLAN</span></button>
+<div style="flex:1"></div>
+<button class="btn" data-sys="reboot">Neustart</button>
+<button class="btn red" data-sys="poweroff">Ausschalten</button>
+</div>
+</section>
+</main>
+</div>
+
+<div class="offline" id="offline"><div class="panel"><div class="mid" style="font-size:20px">Kein Kit verbunden</div><div class="lbl" style="margin-top:8px;font-size:13px" id="offMsg">USB-Kabel und Strom am Kit prüfen. Central am PC muss getrennt sein.</div></div></div>
+<dialog id="dlg"><div class="panel col"><div class="mid" style="font-size:19px" id="dlgT"></div><div class="lbl" style="font-size:13px" id="dlgB"></div><div style="display:flex;gap:8px;margin-top:8px"><button class="btn" style="flex:1" id="dlgNo">Zurück</button><button class="btn red" style="flex:1" id="dlgYes">Ja</button></div></div></dialog>
+<div class="toast" id="toast"></div>
+<div class="ovl" id="wifiOvl">
+<header><h1 id="wTitle">WLAN</h1><button class="btn" style="height:38px;width:110px" id="wRescan">Suchen</button><button class="btn" style="height:38px;width:110px" id="wClose">Fertig</button></header>
+<div id="wList" class="panel" style="flex:1;overflow:auto;padding:6px"></div>
+<div id="wPass" class="col" style="flex:1;display:none">
+<div style="display:flex;gap:8px;align-items:center"><div class="pw" id="wPw" style="flex:1"></div><button class="btn" style="width:70px;height:46px" id="wEye">abc</button><button class="btn pri" style="width:150px;height:46px" id="wGo">Verbinden</button></div>
+<div class="kb" id="kb"></div>
+</div>
+</div>
+
+
+<script>
+{
+const $ = (s) => document.querySelector(s), $$ = (s) => document.querySelectorAll(s);
+const de = (v, d = 1) => v == null || isNaN(v) ? '—' : Number(v).toFixed(d).replace('.', ',');
+const TITLES = { print: 'Druck', move: 'Bewegung', heat: 'Heizung', jobs: 'Jobs', sys: 'System' };
+const CONFIRM = {
+  abort_print: ['Druck abbrechen?', 'Der laufende Druck wird beendet und lässt sich nicht fortsetzen.'],
+  stop_sintering: ['Sintern stoppen?', 'Der Kit hört auf zu belichten und kühlt ab.'],
+  start_print: ['Druck starten?', 'Pulver geladen, Haube geschlossen, Kammer vorgeheizt?'],
+  load: ['Pulver laden?', '']
+};
+let S = {}, step = 1, thick = 0.1, jobH = 68, target = 145, warm = false, lastLayer = null;
+const moved = { print: 0, reservoir: 0 };
+
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; clearTimeout(t._h); t._h = setTimeout(() => t.style.display = 'none', 4000); }
+async function cmd(body) {
+  try {
+    const r = await fetch('/api/cmd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (!j.ok) toast(j.error || 'Fehler');
+    return j.ok;
+  } catch (e) { toast('Dienst nicht erreichbar'); return false; }
+}
+function ask(key, extra, then) {
+  const [t, b] = CONFIRM[key]; $('#dlgT').textContent = t; $('#dlgB').textContent = extra || b;
+  const d = $('#dlg'); d.showModal();
+  $('#dlgNo').onclick = () => d.close();
+  $('#dlgYes').onclick = () => { d.close(); then(); };
+}
+
+$$('nav button').forEach((b) => b.onclick = () => {
+  $$('nav button').forEach((x) => x.classList.remove('on', 'heat'));
+  b.classList.add('on'); if (b.dataset.heat) b.classList.add('heat');
+  $$('.screen').forEach((s) => s.classList.remove('on'));
+  $('#s-' + b.dataset.go).classList.add('on'); $('#title').textContent = TITLES[b.dataset.go];
+});
+$$('[data-confirm]').forEach((b) => b.onclick = () => ask(b.dataset.confirm, '', () => cmd({ cmd: b.dataset.confirm })));
+$$('[data-cmd]').forEach((b) => b.onclick = () => cmd({ cmd: b.dataset.cmd }));
+$$('#steps button').forEach((b) => b.onclick = () => { step = +b.dataset.step; $$('#steps button').forEach((x) => x.classList.toggle('on', x === b)); });
+$$('#thick button').forEach((b) => b.onclick = () => { thick = +b.dataset.t; $$('#thick button').forEach((x) => x.classList.toggle('on', x === b)); });
+$$('[data-move]').forEach((b) => b.onclick = async () => {
+  const p = b.dataset.move, mm = step * +b.dataset.dir;
+  if (await cmd({ cmd: 'move', platform: p, mm })) { moved[p] += mm; $('#mvPrint').textContent = 'seit Start ' + de(moved.print) + ' mm'; $('#mvRes').textContent = 'seit Start ' + de(moved.reservoir) + ' mm'; }
+});
+$('#layerBtn').onclick = () => cmd({ cmd: 'make_layer', mm: thick });
+function showH() { $('#jobH').textContent = jobH + ' mm'; $('#loadBtn').textContent = 'Vorrat um ' + (jobH + 5) + ' mm absenken'; }
+$$('[data-h]').forEach((b) => b.onclick = () => { jobH = Math.max(5, Math.min(105, jobH + +b.dataset.h)); showH(); });
+$('#loadBtn').onclick = () => ask('load', 'Vorrat fährt ' + (jobH + 5) + ' mm nach unten (Bauhöhe ' + jobH + ' mm + 5 mm Puffer). Danach Pulver einfüllen und abziehen.', () => cmd({ cmd: 'move', platform: 'reservoir', mm: jobH + 5 }));
+function showT() { $('#hSet').textContent = target + ' °C'; }
+$$('[data-t5]').forEach((b) => b.onclick = async () => { target = Math.max(40, Math.min(180, target + +b.dataset.t5)); showT(); if (warm) await cmd({ cmd: 'target', which: 'chamber_warmup', celsius: target }); });
+$('#warmBtn').onclick = async () => {
+  if (!warm && !(await cmd({ cmd: 'target', which: 'chamber_warmup', celsius: target }))) return;
+  if (await cmd({ cmd: 'warmup', on: !warm })) { warm = !warm; $('#warmBtn').textContent = warm ? 'Vorheizen stoppen' : 'Vorheizen starten'; $('#warmBtn').className = warm ? 'btn' : 'btn hot'; }
+};
+$$('[data-lamp]').forEach((r) => {
+  r.oninput = () => r.nextElementSibling.textContent = r.value;
+  r.onchange = () => cmd({ cmd: 'lamp', which: r.dataset.lamp, percent: +r.value });
+});
+$$('[data-sys]').forEach((b) => b.onclick = () => cmd({ cmd: b.dataset.sys }));
+
+$('#alert').onclick = () => document.querySelector('nav button[data-go="sys"]').click();
+const esc = (t) => String(t).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]);
+function renderMsgs(s) {
+  const errs = s.errors || [], warns = s.warnings || [], all = errs.map((m) => [m, 1]).concat(warns.map((m) => [m, 0]));
+  const a = $('#alert');
+  a.hidden = !all.length;
+  if (all.length) { a.className = 'alert' + (errs.length ? ' err' : ''); a.textContent = (errs.length ? 'Fehler: ' : 'Warnung: ') + all[0][0].title + (all.length > 1 ? ' (+' + (all.length - 1) + ')' : ''); }
+  $('#sysMsgs').innerHTML = '<div class="lbl" style="margin-bottom:8px">Meldungen vom Kit</div>' + (all.length
+    ? all.map(([m, e]) => '<div class="msg' + (e ? ' err' : '') + '"><b>' + esc(m.code + ' · ' + m.title) + '</b><span>' + esc(m.text) + '</span></div>').join('')
+    : '<div class="lbl" style="color:var(--ink)">Keine Fehler oder Warnungen.</div>');
+}
+function hms(s) { if (s == null) return '—'; const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h + ':' + String(m).padStart(2, '0') + ' h'; }
+function render(s) {
+  S = s;
+  $('#offline').classList.toggle('on', !s.connected);
+  if (!s.connected) $('#offMsg').textContent = (s.message || 'USB-Kabel prüfen.') + ' Central am PC muss getrennt sein.';
+  $('#conn').classList.toggle('off', !s.connected);
+  $('#connText').textContent = s.connected ? (s.model || 'Kit') + ' · FW ' + s.firmware + (s.demo ? ' · Demo' : '') : 'getrennt';
+  $('#pLayer').textContent = s.printing ? s.layer : '—';
+  $('#pPct').textContent = s.printing ? s.percent + ' %' : '';
+  $('#pState').textContent = s.printing ? 'Druck läuft' : (s.waiting_for_sd ? 'Wartet auf SD-Karte' : 'Bereit');
+  $('#pBar').style.width = (s.printing ? s.percent : 0) + '%';
+  $('#beam').style.display = s.printing ? '' : 'none';
+  $('#tSurf').textContent = de(s.surface) + '°'; $('#tCham').textContent = de(s.chamber) + '°';
+  $('#tSurfT').textContent = 'Soll ' + de(s.printing ? s.target_surface_print : s.target_surface_warmup) + ' °C';
+  $('#tChamT').textContent = 'Soll ' + de(s.printing ? s.target_chamber_print : s.target_chamber_warmup) + ' °C';
+  $('#pEl').textContent = s.printing ? hms(s.elapsed_s) : '—';
+  if (s.printing && s.percent > 0) { const rest = s.elapsed_s * (100 - s.percent) / s.percent; const d = new Date(Date.now() + rest * 1000); $('#pEta').textContent = d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0') + ' Uhr'; } else $('#pEta').textContent = '—';
+  if (s.printing && lastLayer != null && s.layer !== lastLayer) { const rc = $('#rc'); rc.classList.remove('go'); void rc.getBoundingClientRect(); rc.classList.add('go'); }
+  lastLayer = s.layer;
+  $$('[data-move],#layerBtn,#loadBtn').forEach((b) => b.disabled = !!s.printing);
+  $('#hNow').textContent = de(s.chamber) + '°';
+  const pct = Math.max(0, Math.min(100, (s.chamber || 0) / target * 100));
+  $('#ring').style.background = 'conic-gradient(#ffb08f 0%, #ff6a3d ' + pct + '%, rgba(255,255,255,.07) ' + pct + '% 100%)';
+  renderMsgs(s);
+  const rows = [['Modell', s.model], ['Firmware', s.firmware], ['Protokoll', s.protocol], ['Geräte-ID', s.uid ? s.uid.slice(0, 16) + '…' : '—'],
+    ['Zustand', s.state], ['Hinweis', s.message || '—']];
+  $('#sysInfo').innerHTML = rows.map(([k, v]) => '<div style="display:flex;justify-content:space-between;gap:10px;padding:5px 0;border-bottom:1px solid var(--line)"><span class="lbl">' + k + '</span><span class="num" style="text-align:right;overflow-wrap:anywhere">' + (v ?? '—') + '</span></div>').join('');
+}
+
+
+// --- WLAN ------------------------------------------------------------------
+const W = { list: [], ssid: '', pw: '', show: false, shift: false, sym: false, cur: '' };
+const BARS = (sig) => sig > 70 ? 4 : sig > 50 ? 3 : sig > 30 ? 2 : 1;
+function bars(sig) { const n = BARS(sig); return '<svg width="20" height="16" viewBox="0 0 20 16">' + [0, 1, 2, 3].map((i) => '<rect x="' + (i * 5) + '" y="' + (12 - i * 4) + '" width="3" height="' + (4 + i * 4) + '" rx="1" fill="' + (i < n ? '#eef1f5' : 'rgba(255,255,255,.18)') + '"/>').join('') + '</svg>'; }
+const LOCK = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9aa3b2" stroke-width="2.2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+async function wifiLoad(rescan) {
+  try { const j = await (await fetch('/api/wifi' + (rescan ? '?rescan=1' : ''))).json(); W.list = j.networks || []; W.cur = j.current || '';
+    $('#wifiChipT').textContent = j.available === false ? 'kein WLAN' : (W.cur || 'nicht verbunden');
+    $('#wifiBtnT').textContent = W.cur ? W.cur + (j.ip ? ' · ' + j.ip : '') : 'nicht verbunden';
+    if (!$('#wList').hidden) wifiList(j);
+  } catch (_) {}
+}
+function wifiList(j) {
+  $('#wList').innerHTML = j && j.available === false ? '<div class="lbl" style="padding:12px">WLAN nicht verfügbar: ' + esc(j.error || '') + '</div>'
+    : W.list.length ? W.list.map((n, i) => '<button class="net' + (n.active ? ' act' : '') + '" data-i="' + i + '">' + bars(n.signal) + '<span>' + esc(n.ssid) + '</span>' + (n.active ? '<b style="font-size:12px;color:#aebcff">verbunden</b>' : '') + (n.secure ? LOCK : '') + '</button>').join('')
+    : '<div class="lbl" style="padding:12px">Suche Netze …</div>';
+  $$('#wList .net').forEach((b) => b.onclick = () => pickNet(W.list[+b.dataset.i]));
+}
+function wifiOpen() { $('#wifiOvl').classList.add('on'); $('#wList').hidden = false; $('#wList').style.display = ''; $('#wPass').style.display = 'none'; $('#wRescan').style.display = ''; $('#wTitle').textContent = 'WLAN'; wifiList(); wifiLoad(true); }
+async function pickNet(n) {
+  if (n.active) { ask('wifi', 'Verbindung zu „' + n.ssid + '“ trennen?', async () => { if (await cmd({ cmd: 'wifi_disconnect' })) wifiLoad(); }); return; }
+  W.ssid = n.ssid; W.pw = '';
+  if (!n.secure) return wifiConnect();
+  $('#wList').hidden = true; $('#wList').style.display = 'none'; $('#wPass').style.display = 'flex'; $('#wRescan').style.display = 'none';
+  $('#wTitle').textContent = 'Passwort für ' + n.ssid; kbDraw(); pwShow();
+}
+function pwShow() { $('#wPw').textContent = W.show ? W.pw : '•'.repeat(W.pw.length); $('#wEye').textContent = W.show ? '•••' : 'abc'; }
+async function wifiConnect() {
+  $('#wGo').disabled = true; $('#wGo').textContent = 'Verbinde …';
+  const ok = await cmd({ cmd: 'wifi_connect', ssid: W.ssid, password: W.pw });
+  $('#wGo').disabled = false; $('#wGo').textContent = 'Verbinden';
+  if (ok) { W.pw = ''; $('#wifiOvl').classList.remove('on'); }
+  wifiLoad();
+}
+const ROWS = { a: ['1234567890', 'qwertzuiop', 'asdfghjklü', 'yxcvbnmöä'], s: ['1234567890', '!@#$%&*()=', '-_+.,:;/?\'', '"<>[]{}~^\\|'] };
+function kbDraw() {
+  const rows = W.sym ? ROWS.s : ROWS.a, up = (c) => W.shift ? c.toUpperCase() : c;
+  let h = rows.map((r, i) => '<div>' + (i === 3 ? '<button class="w" data-k="shift">' + (W.shift ? '⇧ ABC' : '⇧') + '</button>' : '') + [...r].map((c) => '<button data-k="' + esc(up(c)).replace(/"/g, '&quot;') + '">' + esc(up(c)) + '</button>').join('') + (i === 3 ? '<button class="w" data-k="bs">⌫</button>' : '') + '</div>').join('');
+  h += '<div><button class="w" data-k="sym">' + (W.sym ? 'abc' : '#+=') + '</button><button data-k=" " style="max-width:none;flex:5">Leerzeichen</button><button class="w" data-k="back">Zurück</button></div>';
+  $('#kb').innerHTML = h;
+  $$('#kb button').forEach((b) => b.onclick = () => { const k = b.dataset.k;
+    if (k === 'shift') { W.shift = !W.shift; kbDraw(); } else if (k === 'sym') { W.sym = !W.sym; kbDraw(); }
+    else if (k === 'bs') W.pw = W.pw.slice(0, -1); else if (k === 'back') return wifiOpen();
+    else if (W.pw.length < 63) { W.pw += k; if (W.shift) { W.shift = false; kbDraw(); } }
+    pwShow(); });
+}
+CONFIRM.wifi = ['WLAN', ''];
+$('#wifiBtn').onclick = wifiOpen; $('#wifiChip').onclick = wifiOpen;
+$('#wClose').onclick = () => $('#wifiOvl').classList.remove('on');
+$('#wRescan').onclick = () => { W.list = []; wifiList(); wifiLoad(true); };
+$('#wEye').onclick = () => { W.show = !W.show; pwShow(); };
+$('#wGo').onclick = () => { if (W.pw.length < 8) return toast('Passwort hat mindestens 8 Zeichen'); wifiConnect(); };
+wifiLoad(); setInterval(() => wifiLoad(), 15000);
+if (location.hash === '#wifi') wifiOpen();
+
+showH(); showT();
+const es = new EventSource('/api/events');
+es.onmessage = (e) => { try { render(JSON.parse(e.data)); } catch (_) {} };
+es.onerror = () => render({ connected: false, message: 'Dienst kitd startet …' });
+}
+</script>
+</body>
+</html>

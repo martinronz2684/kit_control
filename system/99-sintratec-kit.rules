@@ -1,0 +1,2 @@
+# Sintratec Kit (Atmel SAM3X, Firmware von Sintratec) für die Gruppe plugdev freigeben
+SUBSYSTEM=="usb", ATTR{idVendor}=="03eb", ATTR{idProduct}=="8002", MODE="0660", GROUP="plugdev", SYMLINK+="sintratec-kit"
