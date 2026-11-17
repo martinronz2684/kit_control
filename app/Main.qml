@@ -503,6 +503,7 @@ Window {
                             model: [["Modell", win.st.model], ["Firmware", win.st.firmware], ["Protokoll", win.st.protocol],
                                     ["Geräte-ID", win.st.uid ? win.st.uid.slice(0, 12) + "…" : "—"], ["Zustand", win.st.state],
                                     ["WLAN", win.wifi.current ? win.wifi.current : "—"], ["IP-Adresse", win.wifi.ip || "—"],
+                                    ["Bildschirm", win.width + "×" + win.height + " · DPR " + Screen.devicePixelRatio.toFixed(2) + " · ×" + root.scale.toFixed(2)],
                                     ["Hinweis", win.st.message || "—"]]
                             Item {
                                 width: parent.width; height: 34
@@ -599,7 +600,8 @@ Window {
             }
             Column {
                 visible: wifiOvl.askPw
-                x: 10; y: 56; width: parent.width - 20; spacing: 6
+                x: 10; width: parent.width - 20; spacing: 6
+                anchors.bottom: parent.bottom; anchors.bottomMargin: 10
                 Row {
                     spacing: 8; width: parent.width
                     Rectangle {
