@@ -40,10 +40,11 @@ if ! curl -fsSL "${AUTH[@]}" -o "$WORK/src.tgz" "https://api.github.com/repos/$R
   echo "Download fehlgeschlagen. Token prüfen (Leserecht für Contents auf $REPO)."
   exit 1
 fi
-TOP="$(tar -tzf "$WORK/src.tgz" | head -n1)"
-VERSION="${TOP%/}"; VERSION="${VERSION##*-}"
-mkdir "$WORK/src"
-tar -xzf "$WORK/src.tgz" -C "$WORK/src" --strip-components=1
+mkdir "$WORK/x"
+tar -xzf "$WORK/src.tgz" -C "$WORK/x"
+TOP="$(ls "$WORK/x" | sed -n 1p)"
+VERSION="${TOP##*-}"; VERSION="${VERSION:0:7}"
+mv "$WORK/x/$TOP" "$WORK/src"
 
 bash "$WORK/src/install.sh"
 

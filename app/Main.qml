@@ -731,7 +731,7 @@ Window {
                         }
                     }
                     Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 12
-                        text: win.upd.running ? "Das Update dauert einige Minuten. Die Oberfläche startet dabei kurz neu." : "Während eines Drucks ist kein Update möglich. Ein laufender Druck auf dem Kit wäre davon aber nicht betroffen." }
+                        text: win.upd.running ? "Das Update dauert einige Minuten. Die Oberfläche startet dabei kurz neu." : "Hinweis: Solange der Kit druckt, ist ein Update gesperrt." }
                     Row {
                         spacing: 8
                         KButton { width: 150; height: 46; text: "Schließen"; onClicked: updOvl.visible = false }
