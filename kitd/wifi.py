@@ -27,7 +27,9 @@ def _split(line: str) -> list[str]:
 
 
 def _nmcli(*args: str, timeout: float = 20) -> str:
-    r = subprocess.run(["nmcli", *args], capture_output=True, text=True, timeout=timeout)
+    # LC_ALL=C: sonst liefert nmcli auf deutschem System "ja"/"nein" statt "yes"/"no"
+    env = dict(os.environ, LC_ALL="C", LANG="C")
+    r = subprocess.run(["nmcli", *args], capture_output=True, text=True, timeout=timeout, env=env)
     if r.returncode != 0:
         raise RuntimeError((r.stderr or r.stdout).strip().splitlines()[-1] if (r.stderr or r.stdout).strip() else "nmcli-Fehler")
     return r.stdout
@@ -48,7 +50,7 @@ def status(rescan: bool = False) -> dict:
         f = _split(line)
         if len(f) < 4 or not f[1]:
             continue
-        n = {"ssid": f[1], "signal": int(f[2] or 0), "secure": f[3] not in ("", "--"), "active": f[0] == "yes"}
+        n = {"ssid": f[1], "signal": int(f[2] or 0), "secure": f[3] not in ("", "--"), "active": f[0] in ("yes", "ja", "*")}
         old = best.get(n["ssid"])
         if not old or n["active"] or n["signal"] > old["signal"] and not old["active"]:
             best[n["ssid"]] = n
