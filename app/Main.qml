@@ -772,9 +772,10 @@ Window {
             function show(t) { tt.text = t; visible = true; tTimer.restart() }
             visible: false; z: 10
             anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 14
-            width: tt.implicitWidth + 32; height: 38; radius: 12; color: "#2a1416"; border.color: "#80e5484d"
-            Text { id: tt; anchors.centerIn: parent; color: "#ffb3b5"; font.family: win.fontName; font.pixelSize: 13 }
-            Timer { id: tTimer; interval: 4000; onTriggered: toast.visible = false }
+            width: Math.min(tt.implicitWidth, 620) + 32; height: tt.height + 20; radius: 12; color: "#2a1416"; border.color: "#80e5484d"
+            Text { id: tt; anchors.centerIn: parent; width: Math.min(implicitWidth, 620); wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; color: "#ffb3b5"; font.family: win.fontName; font.pixelSize: 13 }
+            Timer { id: tTimer; interval: 6000; onTriggered: toast.visible = false }
+            MouseArea { anchors.fill: parent; onClicked: toast.visible = false }
         }
     }
 }

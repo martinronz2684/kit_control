@@ -87,29 +87,62 @@ def connect(ssid: str, password: str = "") -> None:
         return
     # Profil immer selbst anlegen: "nmcli dev wifi connect" scheitert auf dem Pi oft mit
     # "802-11-wireless-security.key-mgmt: Eigenschaft fehlt".
+    # Mehrere Versuche, weil der WLAN-Chip des Pi mit gemischten WPA2/WPA3-Netzen
+    # oft nur ohne Management-Frame-Schutz (PMF) oder nur mit SAE zurechtkommt.
     name = f"kit-{ssid}"
-    try:
-        _nmcli("connection", "delete", "id", name, timeout=15)
-    except Exception:
-        pass
-    args = ["connection", "add", "type", "wifi", "ifname", "wlan0", "con-name", name,
-            "ssid", ssid, "connection.autoconnect", "yes"]
-    if password:
-        sec = _security_of(ssid).upper()
-        key_mgmt = "sae" if ("WPA3" in sec and "WPA2" not in sec and "WPA1" not in sec) else "wpa-psk"
-        args += ["wifi-sec.key-mgmt", key_mgmt, "wifi-sec.psk", password]
-    try:
-        _nmcli(*args, timeout=20)
-        _nmcli("connection", "up", "id", name, timeout=45)
-    except (RuntimeError, subprocess.TimeoutExpired) as e:
+    sec = _security_of(ssid).upper() if password else ""
+    if not password:
+        attempts = [[]]
+    elif "WPA3" in sec and "WPA2" not in sec and "WPA1" not in sec:
+        attempts = [["wifi-sec.key-mgmt", "sae"], ["wifi-sec.key-mgmt", "sae", "wifi-sec.pmf", "3"]]
+    else:
+        attempts = [["wifi-sec.key-mgmt", "wpa-psk"],
+                    ["wifi-sec.key-mgmt", "wpa-psk", "wifi-sec.pmf", "1"]]
+        if "WPA3" in sec:
+            attempts.append(["wifi-sec.key-mgmt", "sae"])
+    reason = ""
+    for extra in attempts:
         try:
             _nmcli("connection", "delete", "id", name, timeout=15)
         except Exception:
             pass
-        msg = str(e)
-        if "Secrets were required" in msg or "secrets" in msg.lower() or "802-11-wireless-security.psk" in msg:
-            msg = "Passwort falsch?"
-        raise ValueError(f"Verbindung fehlgeschlagen: {msg}") from e
+        args = ["connection", "add", "type", "wifi", "ifname", "wlan0", "con-name", name,
+                "ssid", ssid, "connection.autoconnect", "yes"] + extra
+        if password:
+            args += ["wifi-sec.psk", password]
+        try:
+            _nmcli(*args, timeout=20)
+            _nmcli("connection", "up", "id", name, timeout=45)
+            return
+        except (RuntimeError, subprocess.TimeoutExpired):
+            reason = _last_reason() or reason
+    try:
+        _nmcli("connection", "delete", "id", name, timeout=15)
+    except Exception:
+        pass
+    text = {
+        "no-secrets": "Passwort falsch?",
+        "supplicant-disconnect": "Passwort falsch oder Verschlüsselung nicht unterstützt",
+        "supplicant-timeout": "Router antwortet nicht – Passwort falsch?",
+        "ssid-not-found": "Netz nicht gefunden – näher an den Router?",
+        "supplicant-failed": "WLAN-Dienst gestört",
+    }.get(reason, f"Grund: {reason}" if reason else "unbekannter Grund")
+    raise ValueError(f"Verbindung fehlgeschlagen: {text}")
+
+
+def _last_reason() -> str:
+    """Letzten Abbruchgrund aus dem Protokoll von NetworkManager lesen."""
+    try:
+        out = subprocess.run(["journalctl", "-u", "NetworkManager", "-n", "60", "--no-pager", "-o", "cat"],
+                             capture_output=True, text=True, timeout=10).stdout
+    except Exception:
+        return ""
+    import re
+    found = re.findall(r"reason '([a-z-]+)'", out)
+    for r in reversed(found):
+        if r not in ("none", "user-requested", "connection-removed", "new-activation", "unknown", "managed"):
+            return r
+    return ""
 
 
 def disconnect() -> None:
