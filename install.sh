@@ -27,6 +27,11 @@ usermod -aG plugdev,video,render,input,systemd-journal kit
 echo "== Programm nach $DST"
 rm -rf "$DST"
 mkdir -p "$DST"
+# Vorige Oberfläche als Rückfallebene aufheben (kit-app.sh startet sie, falls die neue abstürzt)
+if [ -f "$DST/app/Main.qml" ]; then
+  rm -rf "$DST/app.prev"
+  cp -a "$DST/app" "$DST/app.prev"
+fi
 cp -r "$SRC/kitctl" "$SRC/kitd" "$SRC/ui" "$SRC/app" "$SRC/branding" "$SRC/system" "$DST/"
 chmod +x "$DST/system/kit-app.sh" "$DST/system/kit-pclink.sh"
 mkdir -p /etc/kit

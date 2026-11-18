@@ -10,19 +10,19 @@ Window {
     visibility: Window.FullScreen
     width: 800
     height: 450
-    color: "#08090c"
+    color: "#0a0a0c"
     title: "Kit Control"
 
     // ---------- Farben ----------
     readonly property color cBg: "#0c0e11"
     readonly property color cInk: "#eef1f5"
-    readonly property color cMut: "#9aa3b2"
-    readonly property color cBlue: "#6b86ff"
-    readonly property color cBlue2: "#3a55e6"
+    readonly property color cMut: "#8b9099"
+    readonly property color cBlue: "#7c93ff"
+    readonly property color cBlue2: "#4d68f0"
     readonly property color cHeat: "#ff8a5c"
     readonly property color cRed: "#e5484d"
     readonly property color cOk: "#2fd38a"
-    readonly property color cLine: "#1fffffff"
+    readonly property color cLine: "#14ffffff"
     readonly property string fontName: "Inter"
 
     // ---------- Zustand ----------
@@ -89,31 +89,16 @@ Window {
 
     // ---------- Bausteine ----------
     component Panel: Rectangle {
-        radius: 16
-        border.color: "#17ffffff"
-        border.width: 1
-        gradient: Gradient {
-            GradientStop { position: 0; color: "#1c2028" }
-            GradientStop { position: 1; color: "#121419" }
-        }
-        // weicher Schatten unter der Karte
-        BorderImage {
-            z: -1; source: "assets/shadow.png"
-            anchors.fill: parent
-            anchors.leftMargin: -40; anchors.rightMargin: -40; anchors.topMargin: -40; anchors.bottomMargin: -60
-            border.left: 56; border.right: 56; border.top: 56; border.bottom: 76
-            opacity: 0.55
-        }
-        // feine Lichtkante oben
-        Rectangle { x: parent.radius; width: parent.width - 2 * parent.radius; height: 1; y: 1; color: "#1fffffff" }
+        radius: 20
+        color: "#151518"
     }
     component Lbl: Text {
         color: win.cMut; font.family: win.fontName; font.pixelSize: 12; font.weight: Font.Medium
         elide: Text.ElideRight
     }
     component Val: Text {
-        color: win.cInk; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.Medium
-        font.letterSpacing: -0.6
+        color: win.cInk; font.family: win.fontName; font.pixelSize: 28; font.weight: Font.Light
+        font.letterSpacing: -0.8
     }
     component KButton: Rectangle {
         id: kb
@@ -122,26 +107,19 @@ Window {
         property bool ok: true
         property int size: 14
         signal clicked()
-        height: 52; radius: 14
+        height: 52; radius: 26
         opacity: ok ? 1 : 0.35
         scale: ma.pressed ? 0.96 : 1
         Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-        border.width: kind === "normal" ? 1 : 0
-        border.color: "#1affffff"
-        gradient: Gradient {
-            GradientStop { position: 0; color: ma.pressed ? "#6b86ff" : kb.kind === "pri" ? "#6b86ff" : kb.kind === "red" ? "#f0565b" : kb.kind === "hot" ? "#ff8a5c" : "#262a31" }
-            GradientStop { position: 1; color: ma.pressed ? "#3a55e6" : kb.kind === "pri" ? "#3a55e6" : kb.kind === "red" ? "#c9343a" : kb.kind === "hot" ? "#e9531f" : "#1a1d22" }
-        }
+        color: kind === "pri" ? (ma.pressed ? "#3f58d6" : win.cBlue2)
+             : kind === "red" ? (ma.pressed ? "#c23a3f" : "#e5484d")
+             : kind === "hot" ? (ma.pressed ? "#e0602e" : "#ff7a45")
+             : (ma.pressed ? "#2e2e34" : "#232328")
+        Behavior on color { ColorAnimation { duration: 90 } }
         Text {
             anchors.centerIn: parent; width: parent.width - 12
             horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-            text: kb.text; color: "white"; font.family: win.fontName; font.pixelSize: kb.size; font.weight: Font.DemiBold
-        }
-        Rectangle { x: kb.radius * 0.6; width: kb.width - kb.radius * 1.2; height: 1; y: 1; color: kb.kind === "normal" ? "#1affffff" : "#4dffffff" }
-        Image {
-            z: -1; visible: kb.kind !== "normal"; opacity: 0.35
-            source: kb.kind === "hot" ? "assets/glow-heat.png" : kb.kind === "red" ? "assets/glow-heat.png" : "assets/glow-blue.png"
-            width: kb.width + 60; height: kb.height + 50; anchors.centerIn: parent; anchors.verticalCenterOffset: 6
+            text: kb.text; color: "white"; font.family: win.fontName; font.pixelSize: kb.size; font.weight: Font.Medium
         }
         MouseArea { id: ma; anchors.fill: parent; enabled: kb.ok; onClicked: kb.clicked() }
     }
@@ -150,14 +128,15 @@ Window {
         property var items: []        // [[label, value], …]
         property var value
         signal picked(var v)
-        height: 46; radius: 12; color: "#59000000"; border.color: win.cLine
+        height: 44; radius: 22; color: "#1e1e22"
         Row {
             anchors.fill: parent; anchors.margins: 4; spacing: 4
             Repeater {
                 model: sg.items
                 Rectangle {
-                    width: (sg.width - 8 - 4 * (sg.items.length - 1)) / sg.items.length; height: parent.height; radius: 9
-                    color: sg.value === modelData[1] ? win.cBlue2 : "transparent"
+                    width: (sg.width - 8 - 4 * (sg.items.length - 1)) / sg.items.length; height: parent.height; radius: 18
+                    color: sg.value === modelData[1] ? "#3a3a42" : "transparent"
+                    Behavior on color { ColorAnimation { duration: 150 } }
                     Text { anchors.centerIn: parent; text: modelData[0]; color: sg.value === modelData[1] ? "white" : win.cMut; font.family: win.fontName; font.pixelSize: 13; font.weight: Font.DemiBold }
                     MouseArea { anchors.fill: parent; onClicked: sg.picked(modelData[1]) }
                 }
@@ -171,22 +150,14 @@ Window {
         property string icon
         property bool hot: false
         readonly property bool active: win.page === key
-        width: 52; height: 56; radius: 14
-        gradient: Gradient {
-            GradientStop { position: 0; color: nb.active ? (nb.hot ? "#ff8a5c" : "#7b93ff") : "transparent" }
-            GradientStop { position: 1; color: nb.active ? (nb.hot ? "#e2481a" : "#3550e0") : "transparent" }
-        }
-        Image {
-            z: -1; source: nb.hot ? "assets/glow-heat.png" : "assets/glow-blue.png"
-            width: 110; height: 110; anchors.centerIn: parent
-            opacity: nb.active ? 0.45 : 0
-            Behavior on opacity { NumberAnimation { duration: 200 } }
-        }
-        Rectangle { visible: nb.active; x: 10; width: parent.width - 20; height: 1; y: 1; color: "#59ffffff" }
+        width: 56; height: 54; radius: 16
+        color: nb.active ? "#24242a" : "transparent"
+        Behavior on color { ColorAnimation { duration: 150 } }
+        Rectangle { visible: nb.active; width: 3; height: 18; radius: 2; x: -6; anchors.verticalCenter: parent.verticalCenter; color: nb.hot ? win.cHeat : win.cBlue }
         Column {
             anchors.centerIn: parent; spacing: 4
-            Image { anchors.horizontalCenter: parent.horizontalCenter; source: "assets/i-" + nb.icon + ".png"; width: 22; height: 22; smooth: true; mipmap: true; opacity: nb.active ? 1 : 0.55 }
-            Text { anchors.horizontalCenter: parent.horizontalCenter; text: nb.label; color: nb.active ? "white" : win.cMut; font.family: win.fontName; font.pixelSize: 9; font.weight: Font.DemiBold }
+            Image { anchors.horizontalCenter: parent.horizontalCenter; source: "assets/i-" + nb.icon + ".png"; width: 22; height: 22; smooth: true; mipmap: true; opacity: nb.active ? 1 : 0.45 }
+            Text { anchors.horizontalCenter: parent.horizontalCenter; text: nb.label; color: nb.active ? "white" : win.cMut; font.family: win.fontName; font.pixelSize: 9; font.weight: Font.Medium }
         }
         MouseArea { anchors.fill: parent; onClicked: win.page = nb.key }
     }
@@ -194,9 +165,9 @@ Window {
         id: ch
         property string text
         property color dot: "transparent"
-        property color tint: "#0dffffff"
+        property color tint: "#18181c"
         signal clicked()
-        height: 28; radius: 14; color: tint; border.color: win.cLine
+        height: 28; radius: 14; color: tint
         width: Math.min(260, row.implicitWidth + 22)
         Row {
             id: row; anchors.centerIn: parent; spacing: 6
@@ -214,22 +185,12 @@ Window {
         rotation: win.portrait ? win.rot : 0
         scale: win.portrait ? Math.min(win.width / 450, win.height / 800) : Math.min(win.width / 800, win.height / 450)
 
-        Rectangle {
-            anchors.fill: parent
-            gradient: Gradient {
-                GradientStop { position: 0; color: "#1a1e25" }
-                GradientStop { position: 0.6; color: "#0f1115" }
-                GradientStop { position: 1; color: "#08090c" }
-            }
-        }
-
-        Image { source: "assets/glow-blue.png"; x: -260; y: -420; width: 900; height: 900; opacity: 0.10 }
-        Image { source: "assets/glow-heat.png"; x: 520; y: 260; width: 600; height: 600; opacity: 0.05 }
+        Rectangle { anchors.fill: parent; color: "#0a0a0c" }
 
         // Navigation
-        Panel {
+        Item {
             id: nav
-            x: 8; y: 8; width: 64; height: parent.height - 16; radius: 18
+            x: 8; y: 8; width: 64; height: parent.height - 16
             Column {
                 anchors.top: parent.top; anchors.topMargin: 8; anchors.horizontalCenter: parent.horizontalCenter; spacing: 6
                 Image { source: "../branding/mark.png"; width: 38; height: 38; smooth: true; mipmap: true; anchors.horizontalCenter: parent.horizontalCenter }
@@ -253,7 +214,7 @@ Window {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter; x: 4
                     text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", sys: "System" })[win.page]
-                    color: win.cInk; font.family: win.fontName; font.pixelSize: 20; font.weight: Font.DemiBold; font.letterSpacing: -0.4
+                    color: win.cInk; font.family: win.fontName; font.pixelSize: 22; font.weight: Font.Medium; font.letterSpacing: -0.6
                 }
                 Row {
                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
@@ -306,7 +267,7 @@ Window {
                             height: parent.height; radius: 3; clip: true
                             width: parent.width * (win.st.printing ? win.st.percent / 100 : 0)
                             Behavior on width { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
-                            gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "#8ea2ff" } GradientStop { position: 1; color: "#4a67f5" } }
+                            color: win.cBlue
                             Image {
                                 source: "assets/glow-white.png"; width: 80; height: 30; y: -12; opacity: 0.5
                                 NumberAnimation on x { from: -80; to: bar.width; duration: 2200; loops: Animation.Infinite; running: win.st.printing === true }
@@ -481,7 +442,7 @@ Window {
                                         x: 60; width: parent.width - 108; height: 40
                                         Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 6; radius: 3; color: "#1affffff" }
                                         Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width * lampRow.value / 100; height: 6; radius: 3
-                                            gradient: Gradient { orientation: Gradient.Horizontal; GradientStop { position: 0; color: "#ffb08f" } GradientStop { position: 1; color: "#ff6a3d" } } }
+                                            color: win.cHeat }
                                         Rectangle { width: 30; height: 30; radius: 15; anchors.verticalCenter: parent.verticalCenter; x: track.width * lampRow.value / 100 - 15; color: "#e6e9ee" }
                                         MouseArea {
                                             anchors.fill: parent
@@ -778,13 +739,5 @@ Window {
             MouseArea { anchors.fill: parent; onClicked: toast.visible = false }
         }
 
-    }
-    // Dithering über allem, in echten Bildschirmpixeln (nicht mitskaliert), kaum sichtbar
-    Image {
-        anchors.fill: parent
-        source: "assets/noise.png"
-        fillMode: Image.Tile
-        smooth: false
-        z: 1000
     }
 }
