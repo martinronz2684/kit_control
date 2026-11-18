@@ -107,19 +107,22 @@ Window {
         property bool ok: true
         property int size: 14
         signal clicked()
-        height: 52; radius: 26
+        height: 52; radius: height / 2
         opacity: ok ? 1 : 0.35
-        scale: ma.pressed ? 0.96 : 1
-        Behavior on scale { NumberAnimation { duration: 90; easing.type: Easing.OutQuad } }
-        color: kind === "pri" ? (ma.pressed ? "#3f58d6" : win.cBlue2)
-             : kind === "red" ? (ma.pressed ? "#c23a3f" : "#e5484d")
-             : kind === "hot" ? (ma.pressed ? "#e0602e" : "#ff7a45")
-             : (ma.pressed ? "#2e2e34" : "#232328")
-        Behavior on color { ColorAnimation { duration: 90 } }
+        scale: ma.pressed ? 0.97 : 1
+        Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        // Hauptaktion weiß mit dunkler Schrift, Warnaktionen nur farbig getönt
+        color: kind === "pri" ? (ma.pressed ? "#d4d6db" : "#f2f3f5")
+             : kind === "red" ? (ma.pressed ? "#4de5484d" : "#29e5484d")
+             : kind === "hot" ? (ma.pressed ? "#4dff7a45" : "#29ff7a45")
+             : (ma.pressed ? "#2c2c31" : "#1d1d21")
+        Behavior on color { ColorAnimation { duration: 120 } }
         Text {
-            anchors.centerIn: parent; width: parent.width - 12
+            anchors.centerIn: parent; width: parent.width - 16
             horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
-            text: kb.text; color: "white"; font.family: win.fontName; font.pixelSize: kb.size; font.weight: Font.Medium
+            text: kb.text
+            color: kb.kind === "pri" ? "#0a0a0c" : kb.kind === "red" ? "#ff6b70" : kb.kind === "hot" ? "#ff9b70" : "#eef1f5"
+            font.family: win.fontName; font.pixelSize: kb.size; font.weight: Font.Medium; font.letterSpacing: -0.2
         }
         MouseArea { id: ma; anchors.fill: parent; enabled: kb.ok; onClicked: kb.clicked() }
     }
