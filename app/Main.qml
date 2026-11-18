@@ -778,13 +778,13 @@ Window {
             MouseArea { anchors.fill: parent; onClicked: toast.visible = false }
         }
 
-        // Feines Rauschen über allem: bricht die Stufen in dunklen Verläufen auf (Dithering)
-        Image {
-            anchors.fill: parent
-            source: "assets/noise.png"
-            fillMode: Image.Tile
-            opacity: 0.035
-            smooth: false
-        }
+    }
+    // Dithering über allem, in echten Bildschirmpixeln (nicht mitskaliert), kaum sichtbar
+    Image {
+        anchors.fill: parent
+        source: "assets/noise.png"
+        fillMode: Image.Tile
+        smooth: false
+        z: 1000
     }
 }
