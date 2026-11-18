@@ -777,5 +777,14 @@ Window {
             Timer { id: tTimer; interval: 6000; onTriggered: toast.visible = false }
             MouseArea { anchors.fill: parent; onClicked: toast.visible = false }
         }
+
+        // Feines Rauschen über allem: bricht die Stufen in dunklen Verläufen auf (Dithering)
+        Image {
+            anchors.fill: parent
+            source: "assets/noise.png"
+            fillMode: Image.Tile
+            opacity: 0.035
+            smooth: false
+        }
     }
 }
