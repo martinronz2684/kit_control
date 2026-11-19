@@ -330,65 +330,120 @@ Window {
             }
 
             // ======= Bewegung =======
+            // Je Achse eine Karte: große Position, Schacht mit Pulver und massiver Platte, Fahrtasten daneben.
             Item {
+                id: movePage
                 opacity: win.page === "move" ? 1 : 0; visible: opacity > 0
                 Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
-                Panel {
-                    id: movePanel
-                    width: parent.width - 298; height: parent.height
-                    Column {
-                        anchors.fill: parent; anchors.margins: 12; spacing: 8
-                        Lbl { text: win.st.printing ? "Während des Drucks gesperrt" : "Schrittweite" }
-                        Seg { width: parent.width; items: [["0,1 mm", 0.1], ["1 mm", 1], ["10 mm", 10]]; value: win.step; onPicked: function (v) { win.step = v } }
-                        // Bauraum mit Platten, die live mitfahren (Ausschnitt: Deck und Kammern)
-                        Item {
-                            id: moveView
-                            width: parent.width; height: 260 * sc; clip: true
-                            readonly property real sc: width / 464
-                            function px(u) { return (u - 96) * sc }
-                            Chamber {
-                                fit: moveView.sc; x: -96 * moveView.sc; y: -168 * moveView.sc
-                                buildDrop: win.moved.print; resDrop: win.moved.reservoir
-                            }
-                            Repeater {
-                                model: [["Bauplattform", "print", 200], ["Vorrat", "reservoir", 394]]
-                                Item {
-                                    x: moveView.px(modelData[2]) - 84; y: 0; width: 168; height: Math.max(lab.height + 4, (221 - 168) * moveView.sc)
-                                    Rectangle { anchors.fill: parent; color: "#151518" }   // deckt die Heizstrahl-Linien ab
-                                    Column {
-                                        id: lab; width: parent.width
-                                        Lbl { anchors.horizontalCenter: parent.horizontalCenter; text: modelData[0] }
-                                        Text { anchors.horizontalCenter: parent.horizontalCenter
-                                            text: (win.moved[modelData[1]] > 0 ? "−" : win.moved[modelData[1]] < 0 ? "+" : "") + Api.de(Math.abs(win.moved[modelData[1]])) + " mm"
-                                            color: win.cInk; font.family: win.fontName; font.pixelSize: 18; font.weight: Font.Medium }
-                                    }
-                                }
-                            }
+                readonly property real leftW: width - 268
+                property bool coating: false
+
+                Seg {
+                    width: movePage.leftW; height: 44
+                    items: [["0,1 mm", 0.1], ["1 mm", 1], ["10 mm", 10]]; value: win.step; onPicked: function (v) { win.step = v }
+                }
+                Repeater {
+                    // [Name, Achse, angenommene Starttiefe in mm für die Zeichnung]
+                    model: [["Bauplattform", "print", 40], ["Vorrat", "reservoir", 15]]
+                    Panel {
+                        id: ax
+                        readonly property string key: modelData[1]
+                        readonly property real depth: Math.max(0, Math.min(110, modelData[2] + win.moved[key]))
+                        x: index * (movePage.leftW / 2 + 4); y: 52
+                        width: movePage.leftW / 2 - 4; height: movePage.height - 52
+
+                        Lbl { x: 14; y: 12; text: modelData[0] }
+                        Row {
+                            x: 14; y: 28; spacing: 4
+                            Text { text: (win.moved[ax.key] > 0 ? "−" : win.moved[ax.key] < 0 ? "+" : "") + Api.de(Math.abs(win.moved[ax.key]))
+                                color: win.cInk; font.family: win.fontName; font.pixelSize: 40; font.weight: Font.Light; font.letterSpacing: -1.4 }
+                            Text { y: 21; text: "mm"; color: win.cMut; font.family: win.fontName; font.pixelSize: 16 }
                         }
-                        // Fahrtasten direkt unter der jeweiligen Kammer
+                        Lbl { x: 14; y: 78; text: win.st.printing ? "Während des Drucks gesperrt" : "seit Start"; font.pixelSize: 11 }
+
+                        // Schacht: dünnes Blech, Pulver mit Korn, massive Platte
                         Item {
-                            width: parent.width; height: 56
-                            Repeater {
-                                model: [["print", 200], ["reservoir", 394]]
-                                Row {
-                                    spacing: 8
-                                    x: moveView.px(modelData[1]) - width / 2
-                                    KButton { width: 76; height: 56; text: "▲"; size: 20; ok: !win.st.printing; onClicked: win.jog(modelData[0], -win.step) }
-                                    KButton { width: 76; height: 56; text: "▼"; size: 20; ok: !win.st.printing; onClicked: win.jog(modelData[0], win.step) }
+                            id: well
+                            x: 22; y: 108; width: parent.width - 22 - 14 - 76 - 18; height: parent.height - 108 - 16
+                            readonly property real plateY: 4 + ax.depth / 110 * (height - 14)
+                            Rectangle { x: -8; y: 0; width: 8; height: 1.5; color: "#c9ced6" }                 // Deck links
+                            Rectangle { x: well.width; y: 0; width: 8; height: 1.5; color: "#c9ced6" }         // Deck rechts
+                            Item {
+                                x: 1.5; y: 1.5; width: parent.width - 3; height: parent.height - 3; clip: true
+                                Image { width: parent.width; height: well.plateY; source: "assets/powder.png"; fillMode: Image.Tile; smooth: false
+                                    Behavior on height { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } } }
+                                Rectangle {
+                                    visible: ax.key === "print"
+                                    x: parent.width * 0.18; width: parent.width * 0.3; height: Math.min(40, well.plateY * 0.5); radius: 4
+                                    y: well.plateY - height - 6
+                                    color: "#292fa6cc"; border.color: "#5cc3e3"; border.width: 1.2
+                                    Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                                }
+                                Rectangle {
+                                    visible: ax.key === "print"
+                                    x: parent.width * 0.56; width: parent.width * 0.3; height: Math.min(24, well.plateY * 0.35); radius: 4
+                                    y: well.plateY - height - 6
+                                    color: "#292fa6cc"; border.color: "#5cc3e3"; border.width: 1.2
+                                    Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
+                                }
+                                Rectangle {
+                                    y: well.plateY; width: parent.width; height: 10; radius: 1.5
+                                    color: "#b4bac2"; border.color: "#c9ced6"; border.width: 1
+                                    Behavior on y { NumberAnimation { duration: 300; easing.type: Easing.OutCubic } }
                                 }
                             }
+                            Rectangle { x: 0; y: 0; width: 1.5; height: parent.height; color: "#c9ced6" }
+                            Rectangle { x: parent.width - 1.5; y: 0; width: 1.5; height: parent.height; color: "#c9ced6" }
+                            Rectangle { x: 0; y: parent.height - 1.5; width: parent.width; height: 1.5; color: "#c9ced6" }
+                        }
+                        // Fahrtasten
+                        Column {
+                            x: parent.width - 14 - 76; y: 108; width: 76; spacing: 8
+                            readonly property real h: (ax.height - 108 - 16 - 16 - 44) / 2
+                            KButton { width: 76; height: parent.h; text: "▲"; size: 22; ok: !win.st.printing; onClicked: win.jog(ax.key, -win.step) }
+                            KButton { width: 76; height: parent.h; text: "▼"; size: 22; ok: !win.st.printing; onClicked: win.jog(ax.key, win.step) }
+                            KButton { width: 76; height: 44; text: "Start"; size: 13; ok: !win.st.printing && win.moved[ax.key] !== 0
+                                onClicked: win.jog(ax.key, -win.moved[ax.key]) }
                         }
                     }
                 }
+
+                // Rechte Spalte: Beschichter, Pulver laden, Stopp
                 Column {
-                    x: movePanel.width + 8; width: 290; spacing: 8
+                    x: movePage.leftW + 8; width: 260; spacing: 8
                     Panel {
-                        width: parent.width; height: 128
+                        width: parent.width; height: 176
                         Column { anchors.fill: parent; anchors.margins: 12; spacing: 8
-                            Lbl { text: "Beschichter · Schichtdicke" }
-                            Seg { width: parent.width; height: 40; items: [["0,10", 0.1], ["0,15", 0.15], ["0,20", 0.2]]; value: win.thick; onPicked: function (v) { win.thick = v } }
-                            KButton { width: parent.width; height: 44; kind: "pri"; text: "Schicht auftragen"; ok: !win.st.printing; onClicked: win.send({ cmd: "make_layer", mm: win.thick }) }
+                            Item { width: parent.width; height: 16
+                                Lbl { text: "Beschichter" }
+                                Lbl { anchors.right: parent.right; text: movePage.coating ? "fährt …" : "in Parkposition" } }
+                            // Mini-Ansicht: Bauplatte, Blech, Vorrat, Parkplatz
+                            Item {
+                                id: rc; width: parent.width; height: 30
+                                Rectangle { y: 22; width: parent.width * 0.42; height: 1.5; color: "#c9ced6" }
+                                Rectangle { x: parent.width * 0.42; y: 22; width: 1.5; height: 8; color: "#c9ced6" }
+                                Rectangle { x: parent.width * 0.425; y: 22; width: parent.width * 0.42; height: 1.5; color: "#8b9099" }
+                                Rectangle { x: parent.width * 0.845; y: 22; width: parent.width * 0.155; height: 1.5; color: "#c9ced6" }
+                                Rectangle {
+                                    id: rcCar; y: 6; width: 30; height: 15; radius: 3; color: "#151518"; border.color: "#c9ced6"; border.width: 1.2
+                                    x: rc.width - width
+                                    Rectangle { x: 5; y: parent.height; width: 20; height: 2; color: "#c9ced6" }
+                                }
+                                SequentialAnimation {
+                                    id: rcAnim
+                                    NumberAnimation { target: rcCar; property: "x"; to: 0; duration: 1200; easing.type: Easing.InOutCubic }
+                                    NumberAnimation { target: rcCar; property: "x"; to: rc.width - 30; duration: 1200; easing.type: Easing.InOutCubic }
+                                    onStopped: movePage.coating = false
+                                }
+                            }
+                            Seg { width: parent.width; height: 38; items: [["0,10", 0.1], ["0,15", 0.15], ["0,20", 0.2]]; value: win.thick; onPicked: function (v) { win.thick = v } }
+                            KButton { width: parent.width; height: 44; kind: "pri"; text: "Schicht auftragen"; ok: !win.st.printing && !movePage.coating
+                                onClicked: win.send({ cmd: "make_layer", mm: win.thick }, function (ok) {
+                                    if (!ok) return
+                                    movePage.coating = true; rcAnim.restart()
+                                    var m = { print: win.moved.print + win.thick, reservoir: win.moved.reservoir - win.thick }; win.moved = m
+                                }) }
                         }
                     }
                     Panel {
@@ -396,9 +451,9 @@ Window {
                         Column { anchors.fill: parent; anchors.margins: 12; spacing: 8
                             Lbl { text: "Pulver laden · Bauhöhe des Jobs" }
                             Row { spacing: 8; width: parent.width
-                                KButton { width: 52; height: 44; text: "−"; size: 20; onClicked: win.jobH = Math.max(5, win.jobH - 5) }
-                                Val { width: parent.width - 120; height: 44; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; text: win.jobH + " mm" }
-                                KButton { width: 52; height: 44; text: "+"; size: 20; onClicked: win.jobH = Math.min(105, win.jobH + 5) } }
+                                KButton { width: 48; height: 44; text: "−"; size: 20; onClicked: win.jobH = Math.max(5, win.jobH - 5) }
+                                Val { width: parent.width - 112; height: 44; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; text: win.jobH + " mm" }
+                                KButton { width: 48; height: 44; text: "+"; size: 20; onClicked: win.jobH = Math.min(105, win.jobH + 5) } }
                             KButton { width: parent.width; height: 44; text: "Vorrat um " + (win.jobH + 5) + " mm absenken"; ok: !win.st.printing
                                 onClicked: win.ask("Pulver laden?", "Vorrat fährt " + (win.jobH + 5) + " mm nach unten (Bauhöhe " + win.jobH + " mm + 5 mm Puffer). Danach Pulver einfüllen und abziehen.", function () { win.jog("reservoir", win.jobH + 5) }) }
                         }
