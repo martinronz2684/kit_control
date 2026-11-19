@@ -54,6 +54,13 @@ Window {
             if (after) after(j.ok)
         })
     }
+    function jog(platform, mm) {
+        win.send({ cmd: "move", platform: platform, mm: mm }, function (ok) {
+            if (!ok) return
+            var m = { print: win.moved.print, reservoir: win.moved.reservoir }
+            m[platform] += mm; win.moved = m
+        })
+    }
     function ask(title, text, action) {
         dlg.title = title; dlg.text = text; dlg.action = action; dlg.visible = true
     }
@@ -260,6 +267,7 @@ Window {
                     Chamber {
                         id: chamber
                         printing: !!win.st.printing
+                        buildDrop: win.moved.print; resDrop: win.moved.reservoir
                         anchors.bottom: parent.bottom; anchors.bottomMargin: 18
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
@@ -333,18 +341,41 @@ Window {
                         anchors.fill: parent; anchors.margins: 12; spacing: 8
                         Lbl { text: win.st.printing ? "Während des Drucks gesperrt" : "Schrittweite" }
                         Seg { width: parent.width; items: [["0,1 mm", 0.1], ["1 mm", 1], ["10 mm", 10]]; value: win.step; onPicked: function (v) { win.step = v } }
-                        Row {
-                            width: parent.width; height: parent.height - 62; spacing: 8
+                        // Bauraum mit Platten, die live mitfahren (Ausschnitt: Deck und Kammern)
+                        Item {
+                            id: moveView
+                            width: parent.width; height: 260 * sc; clip: true
+                            readonly property real sc: width / 464
+                            function px(u) { return (u - 96) * sc }
+                            Chamber {
+                                fit: moveView.sc; x: -96 * moveView.sc; y: -168 * moveView.sc
+                                buildDrop: win.moved.print; resDrop: win.moved.reservoir
+                            }
                             Repeater {
-                                model: [["Bauplattform", "print"], ["Vorrat", "reservoir"]]
-                                Column {
-                                    width: (parent.width - 8) / 2; height: parent.height; spacing: 8
-                                    Lbl { text: modelData[0] }
-                                    KButton { width: parent.width; height: (parent.height - 56) / 2; text: "▲"; size: 22; ok: !win.st.printing
-                                        onClicked: win.send({ cmd: "move", platform: modelData[1], mm: -win.step }, function (ok) { if (ok) { var m = win.moved; m[modelData[1]] -= win.step; win.moved = m } }) }
-                                    KButton { width: parent.width; height: (parent.height - 56) / 2; text: "▼"; size: 22; ok: !win.st.printing
-                                        onClicked: win.send({ cmd: "move", platform: modelData[1], mm: win.step }, function (ok) { if (ok) { var m = win.moved; m[modelData[1]] += win.step; win.moved = m } }) }
-                                    Lbl { text: "seit Start " + Api.de(win.moved[modelData[1]]) + " mm" }
+                                model: [["Bauplattform", "print", 200], ["Vorrat", "reservoir", 394]]
+                                Item {
+                                    x: moveView.px(modelData[2]) - 84; y: 0; width: 168; height: Math.max(lab.height + 4, (221 - 168) * moveView.sc)
+                                    Rectangle { anchors.fill: parent; color: "#151518" }   // deckt die Heizstrahl-Linien ab
+                                    Column {
+                                        id: lab; width: parent.width
+                                        Lbl { anchors.horizontalCenter: parent.horizontalCenter; text: modelData[0] }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter
+                                            text: (win.moved[modelData[1]] > 0 ? "−" : win.moved[modelData[1]] < 0 ? "+" : "") + Api.de(Math.abs(win.moved[modelData[1]])) + " mm"
+                                            color: win.cInk; font.family: win.fontName; font.pixelSize: 18; font.weight: Font.Medium }
+                                    }
+                                }
+                            }
+                        }
+                        // Fahrtasten direkt unter der jeweiligen Kammer
+                        Item {
+                            width: parent.width; height: 56
+                            Repeater {
+                                model: [["print", 200], ["reservoir", 394]]
+                                Row {
+                                    spacing: 8
+                                    x: moveView.px(modelData[1]) - width / 2
+                                    KButton { width: 76; height: 56; text: "▲"; size: 20; ok: !win.st.printing; onClicked: win.jog(modelData[0], -win.step) }
+                                    KButton { width: 76; height: 56; text: "▼"; size: 20; ok: !win.st.printing; onClicked: win.jog(modelData[0], win.step) }
                                 }
                             }
                         }
@@ -369,7 +400,7 @@ Window {
                                 Val { width: parent.width - 120; height: 44; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; text: win.jobH + " mm" }
                                 KButton { width: 52; height: 44; text: "+"; size: 20; onClicked: win.jobH = Math.min(105, win.jobH + 5) } }
                             KButton { width: parent.width; height: 44; text: "Vorrat um " + (win.jobH + 5) + " mm absenken"; ok: !win.st.printing
-                                onClicked: win.ask("Pulver laden?", "Vorrat fährt " + (win.jobH + 5) + " mm nach unten (Bauhöhe " + win.jobH + " mm + 5 mm Puffer). Danach Pulver einfüllen und abziehen.", function () { win.send({ cmd: "move", platform: "reservoir", mm: win.jobH + 5 }) }) }
+                                onClicked: win.ask("Pulver laden?", "Vorrat fährt " + (win.jobH + 5) + " mm nach unten (Bauhöhe " + win.jobH + " mm + 5 mm Puffer). Danach Pulver einfüllen und abziehen.", function () { win.jog("reservoir", win.jobH + 5) }) }
                         }
                     }
                     KButton { width: parent.width; kind: "red"; text: "Motoren stoppen"; onClicked: win.send({ cmd: "freeze_motors" }) }

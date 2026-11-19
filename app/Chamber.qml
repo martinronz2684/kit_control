@@ -5,13 +5,49 @@ import QtQuick
 Item {
     id: c
     property bool printing: false
+    // Wie weit die Platten seit Start nach unten gefahren sind (mm, + = runter)
+    property real buildDrop: 0
+    property real resDrop: 0
+    property real fit: -1               // fester Maßstab (Bewegen-Seite), sonst automatisch
+    readonly property real k: 1.6       // Zeichnungseinheiten pro mm
     function sweep() { if (printing) sweepAnim.restart() }
 
     width: 660; height: 440
-    scale: parent ? Math.min(parent.width / 660, (parent.height - 30) / 440) : 1
-    transformOrigin: Item.Bottom
+    scale: fit > 0 ? fit : (parent ? Math.min(parent.width / 660, (parent.height - 30) / 440) : 1)
+    transformOrigin: fit > 0 ? Item.TopLeft : Item.Bottom
 
+    // Gehäuse, Deck, Heizer, Laserkopf
     Image { anchors.fill: parent; source: "assets/chamber.png"; smooth: true; mipmap: true }
+
+    // Plattformen fahren live mit; Pulver liegt auf den Platten
+    property real buildY: Math.max(232, Math.min(408, 346 + buildDrop * k))
+    property real resY: Math.max(232, Math.min(408, 282 + resDrop * k))
+    Behavior on buildY { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+    Behavior on resY { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
+
+    Item {   // Baukammer
+        x: 104; y: 224; width: 192; height: 194; clip: true
+        Image { y: Math.max(0, c.buildY - 224 - 122); width: parent.width; height: c.buildY - 224 - y; source: "assets/powder.png"; fillMode: Image.Tile; smooth: false }
+        Repeater {
+            model: [[20, -84, 54, 72], [92, -56, 78, 44], [20, -108, 40, 18]]
+            Rectangle {
+                x: modelData[0]; y: c.buildY - 224 + modelData[1]; width: modelData[2]; height: modelData[3]; radius: 5
+                color: "#292fa6cc"; border.color: "#5cc3e3"; border.width: 1.2
+            }
+        }
+        Rectangle { x: 1; y: c.buildY - 224; width: 190; height: 8; radius: 1; color: "#b4bac2"; border.color: "#c9ced6"; border.width: 1 }
+    }
+    Item {   // Vorrat
+        x: 298; y: 224; width: 192; height: 194; clip: true
+        Image { y: Math.max(0, c.resY - 224 - 58); width: parent.width; height: c.resY - 224 - y; source: "assets/powder.png"; fillMode: Image.Tile; smooth: false }
+        Rectangle { x: 1; y: c.resY - 224; width: 190; height: 8; radius: 1; color: "#b4bac2"; border.color: "#c9ced6"; border.width: 1 }
+    }
+    // Kammerwände aus Blech (über dem Pulver)
+    Repeater {
+        model: [103, 297, 491]
+        Rectangle { x: modelData - 0.75; y: 224; width: 1.5; height: 194.75; color: "#c9ced6" }
+    }
+    Rectangle { x: 102.25; y: 417.25; width: 389.5; height: 1.5; color: "#c9ced6" }
 
     // Heizstrahler glimmen
     Repeater {
