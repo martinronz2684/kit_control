@@ -118,7 +118,7 @@ Window {
     component KButton: Rectangle {
         id: kb
         property string text: ""
-        property string kind: "normal"     // normal | pri | red | hot
+        property string kind: "normal"     // normal | pri | acc (Petrol) | red | hot (Heizen)
         property bool ok: true
         property int size: 14
         signal clicked()
@@ -130,13 +130,14 @@ Window {
         color: kind === "pri" ? (ma.pressed ? "#d4d6db" : "#f2f3f5")
              : kind === "red" ? (ma.pressed ? "#4de5484d" : "#29e5484d")
              : kind === "hot" ? (ma.pressed ? "#4dff7a45" : "#29ff7a45")
+             : kind === "acc" ? (ma.pressed ? "#166d88" : win.cBlue2)
              : (ma.pressed ? "#2c2c31" : "#1d1d21")
         Behavior on color { ColorAnimation { duration: 120 } }
         Text {
             anchors.centerIn: parent; width: parent.width - 16
             horizontalAlignment: Text.AlignHCenter; elide: Text.ElideRight
             text: kb.text
-            color: kb.kind === "pri" ? "#0a0a0c" : kb.kind === "red" ? "#ff6b70" : kb.kind === "hot" ? "#ff9b70" : "#eef1f5"
+            color: kb.kind === "pri" ? "#0a0a0c" : kb.kind === "red" ? "#ff6b70" : kb.kind === "hot" ? "#ff9b70" : kb.kind === "acc" ? "#ffffff" : "#eef1f5"
             font.family: win.fontName; font.pixelSize: kb.size; font.weight: Font.Medium; font.letterSpacing: -0.2
         }
         MouseArea { id: ma; anchors.fill: parent; enabled: kb.ok; onClicked: kb.clicked() }
@@ -701,7 +702,7 @@ Window {
                 Column {
                     x: infoPanel.x + infoPanel.width + 8; width: 150; height: parent.height; spacing: 8
                     KButton { width: parent.width; height: 50; kind: "pri"; text: "WLAN"; onClicked: wifiOvl.open() }
-                    KButton { width: parent.width; height: 50; kind: win.upd.available ? "hot" : "normal"; text: win.upd.running ? "Update läuft …" : (win.upd.available ? "Update verfügbar" : "Software"); onClicked: updOvl.open() }
+                    KButton { width: parent.width; height: 50; kind: win.upd.available ? "acc" : "normal"; text: win.upd.running ? "Update läuft …" : (win.upd.available ? "Update verfügbar" : "Software"); onClicked: updOvl.open() }
                     Lbl { text: "PC-Verbindung für Central" }
                     Seg {
                         width: parent.width; height: 40
@@ -863,8 +864,8 @@ Window {
                         spacing: 10; width: parent.width
                         Rectangle { width: (parent.width - 10) / 2; height: 62; radius: 12; color: "#0bffffff"
                             Column { x: 12; y: 10; Lbl { text: "Installiert" } Val { font.pixelSize: 20; text: win.upd.current || "—" } } }
-                        Rectangle { width: (parent.width - 10) / 2; height: 62; radius: 12; color: win.upd.available ? "#24ff6a3d" : "#0bffffff"
-                            Column { x: 12; y: 10; Lbl { text: "Im Repository" } Val { font.pixelSize: 20; color: win.upd.available ? win.cHeat : win.cInk; text: win.upd.latest || "—" } } }
+                        Rectangle { width: (parent.width - 10) / 2; height: 62; radius: 12; color: win.upd.available ? "#262fa6cc" : "#0bffffff"
+                            Column { x: 12; y: 10; Lbl { text: "Im Repository" } Val { font.pixelSize: 20; color: win.upd.available ? "#5cc3e3" : win.cInk; text: win.upd.latest || "—" } } }
                     }
                     Rectangle {
                         width: parent.width; height: 96; radius: 12; color: "#59000000"; clip: true
@@ -882,7 +883,7 @@ Window {
                         spacing: 8
                         KButton { width: 150; height: 46; text: "Schließen"; onClicked: updOvl.visible = false }
                         KButton { width: 150; height: 46; text: "Neu prüfen"; ok: !win.upd.running; onClicked: win.checkUpd() }
-                        KButton { width: 184; height: 46; kind: "hot"; ok: !win.upd.running && !win.st.printing
+                        KButton { width: 184; height: 46; kind: "acc"; ok: !win.upd.running && !win.st.printing
                             text: win.upd.running ? "Läuft …" : "Jetzt aktualisieren"
                             onClicked: win.send({ cmd: "update_start" }, function (ok) { if (ok) { win.updWasRunning = true; win.loadUpd() } }) }
                     }
