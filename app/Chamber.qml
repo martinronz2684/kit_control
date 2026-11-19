@@ -5,11 +5,11 @@ import QtQuick
 Item {
     id: c
     property bool printing: false
-    // Wie weit die Platten seit Start nach unten gefahren sind (mm, + = runter)
-    property real buildDrop: 0
-    property real resDrop: 0
+    // Tiefe der Platten unter der Pulverebene in mm (0 = oben, 110 = ganz unten)
+    property real buildDepth: 70
+    property real resDepth: 30
     property real fit: -1               // fester Maßstab (Bewegen-Seite), sonst automatisch
-    readonly property real k: 1.6       // Zeichnungseinheiten pro mm
+    readonly property real k: (408 - 226) / 110   // Zeichnungseinheiten pro mm
     function sweep() { if (printing) sweepAnim.restart() }
 
     width: 660; height: 440
@@ -20,14 +20,14 @@ Item {
     Image { anchors.fill: parent; source: "assets/chamber.png"; smooth: true; mipmap: true }
 
     // Plattformen fahren live mit; Pulver liegt auf den Platten
-    property real buildY: Math.max(232, Math.min(408, 346 + buildDrop * k))
-    property real resY: Math.max(232, Math.min(408, 282 + resDrop * k))
+    property real buildY: 226 + Math.max(0, Math.min(110, buildDepth)) * k
+    property real resY: 226 + Math.max(0, Math.min(110, resDepth)) * k
     Behavior on buildY { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
     Behavior on resY { NumberAnimation { duration: 400; easing.type: Easing.OutCubic } }
 
     Item {   // Baukammer
         x: 104; y: 224; width: 192; height: 194; clip: true
-        Image { y: Math.max(0, c.buildY - 224 - 122); width: parent.width; height: c.buildY - 224 - y; source: "assets/powder.png"; fillMode: Image.Tile; smooth: false }
+        Image { width: parent.width; height: c.buildY - 224; source: "assets/powder.png"; fillMode: Image.Tile; smooth: false }
         Repeater {
             model: [[20, -84, 54, 72], [92, -56, 78, 44], [20, -108, 40, 18]]
             Rectangle {
@@ -39,7 +39,7 @@ Item {
     }
     Item {   // Vorrat
         x: 298; y: 224; width: 192; height: 194; clip: true
-        Image { y: Math.max(0, c.resY - 224 - 58); width: parent.width; height: c.resY - 224 - y; source: "assets/powder.png"; fillMode: Image.Tile; smooth: false }
+        Image { width: parent.width; height: c.resY - 224; source: "assets/powder.png"; fillMode: Image.Tile; smooth: false }
         Rectangle { x: 1; y: c.resY - 224; width: 190; height: 8; radius: 1; color: "#b4bac2"; border.color: "#c9ced6"; border.width: 1 }
     }
     // Kammerwände aus Blech (über dem Pulver)

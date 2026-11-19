@@ -35,6 +35,9 @@ Window {
     property int target: 145
     property bool warm: false
     property var moved: ({ print: 0, reservoir: 0 })
+    // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
+    readonly property var baseDepth: ({ print: 70, reservoir: 30 })
+    function depth(k) { return Math.max(0, Math.min(110, win.baseDepth[k] + win.moved[k])) }
     property int lastLayer: -1
     property bool kitdUp: false
     property var upd: ({ current: "", latest: null, available: false, running: false, log: [] })
@@ -267,7 +270,7 @@ Window {
                     Chamber {
                         id: chamber
                         printing: !!win.st.printing
-                        buildDrop: win.moved.print; resDrop: win.moved.reservoir
+                        buildDepth: win.depth("print"); resDepth: win.depth("reservoir")
                         anchors.bottom: parent.bottom; anchors.bottomMargin: 18
                         anchors.horizontalCenter: parent.horizontalCenter
                     }
@@ -346,11 +349,11 @@ Window {
                 KButton { x: movePage.leftW - 142; width: 142; height: 44; kind: "red"; text: "Motoren stoppen"; size: 13; onClicked: win.send({ cmd: "freeze_motors" }) }
                 Repeater {
                     // [Name, Achse, angenommene Starttiefe in mm für die Zeichnung]
-                    model: [["Bauplattform", "print", 40], ["Vorrat", "reservoir", 15]]
+                    model: [["Bauplattform", "print"], ["Vorrat", "reservoir"]]
                     Panel {
                         id: ax
                         readonly property string key: modelData[1]
-                        readonly property real depth: Math.max(0, Math.min(110, modelData[2] + win.moved[key]))
+                        readonly property real depth: win.depth(key)
                         x: index * (movePage.leftW / 2 + 4); y: 52
                         width: movePage.leftW / 2 - 4; height: movePage.height - 52
 
