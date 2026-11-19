@@ -17,8 +17,8 @@ Window {
     readonly property color cBg: "#0c0e11"
     readonly property color cInk: "#eef1f5"
     readonly property color cMut: "#8b9099"
-    readonly property color cBlue: "#7c93ff"
-    readonly property color cBlue2: "#4d68f0"
+    readonly property color cBlue: "#2fa6cc"
+    readonly property color cBlue2: "#1b809f"
     readonly property color cHeat: "#ff8a5c"
     readonly property color cRed: "#e5484d"
     readonly property color cOk: "#2fd38a"
@@ -254,7 +254,7 @@ Window {
                     }
                     Column {
                         anchors.right: parent.right; anchors.rightMargin: 14; y: 12; z: 2
-                        Text { anchors.right: parent.right; text: win.st.printing ? win.st.percent + " %" : ""; color: "#8ea2ff"; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.DemiBold }
+                        Text { anchors.right: parent.right; text: win.st.printing ? win.st.percent + " %" : ""; color: "#5cc3e3"; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.DemiBold }
                         Lbl { anchors.right: parent.right; text: win.st.printing ? "Druck läuft" : (win.st.waiting_for_sd ? "Wartet auf SD-Karte" : "Bereit") }
                     }
                     Chamber {
@@ -610,15 +610,15 @@ Window {
                     model: win.wifi.networks || []
                     delegate: Rectangle {
                         width: ListView.view.width; height: 50; radius: 12
-                        color: modelData.active ? "#1f6b86ff" : (dm.pressed ? "#0fffffff" : "transparent")
-                        border.color: modelData.active ? "#996b86ff" : "transparent"
+                        color: modelData.active ? "#1f2fa6cc" : (dm.pressed ? "#0fffffff" : "transparent")
+                        border.color: modelData.active ? "#992fa6cc" : "transparent"
                         Row { x: 14; anchors.verticalCenter: parent.verticalCenter; spacing: 3
                             Repeater { model: 4
                                 Rectangle { width: 3; height: 4 + index * 4; radius: 1; anchors.bottom: parent.bottom
                                     color: index < (modelData.signal > 70 ? 4 : modelData.signal > 50 ? 3 : modelData.signal > 30 ? 2 : 1) ? win.cInk : "#2effffff" } } }
                         Text { x: 46; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 170; elide: Text.ElideRight; text: modelData.ssid; color: win.cInk; font.family: win.fontName; font.pixelSize: 15 }
                         Text { anchors.right: parent.right; anchors.rightMargin: 14; anchors.verticalCenter: parent.verticalCenter
-                            text: (modelData.active ? "verbunden  " : "") + (modelData.secure ? "gesichert" : "offen"); color: "#aebcff"; font.family: win.fontName; font.pixelSize: 12; font.weight: Font.DemiBold }
+                            text: (modelData.active ? "verbunden  " : "") + (modelData.secure ? "gesichert" : "offen"); color: "#8fd3ea"; font.family: win.fontName; font.pixelSize: 12; font.weight: Font.DemiBold }
                         MouseArea { id: dm; anchors.fill: parent; onClicked: wifiOvl.pick(modelData) }
                     }
                 }
@@ -631,7 +631,7 @@ Window {
                 Row {
                     spacing: 8; width: parent.width
                     Rectangle {
-                        width: parent.width - 236; height: 46; radius: 12; color: "#66000000"; border.color: "#806b86ff"; clip: true
+                        width: parent.width - 236; height: 46; radius: 12; color: "#66000000"; border.color: "#802fa6cc"; clip: true
                         Text { x: 14; anchors.verticalCenter: parent.verticalCenter; text: (wifiOvl.showPw ? wifiOvl.pw : "•".repeat(wifiOvl.pw.length)) + "|"; color: win.cInk; font.family: "monospace"; font.pixelSize: 18 }
                     }
                     KButton { width: 70; height: 46; text: wifiOvl.showPw ? "•••" : "abc"; onClicked: wifiOvl.showPw = !wifiOvl.showPw }
