@@ -8,6 +8,7 @@ Conflicts=getty@tty1.service
 User=kit
 SupplementaryGroups=video render input
 RuntimeDirectory=kit-app
+StateDirectory=kit-app
 Environment=XDG_RUNTIME_DIR=/run/kit-app
 Environment=QT_QPA_PLATFORM=eglfs
 Environment=QT_QPA_EGLFS_INTEGRATION=eglfs_kms

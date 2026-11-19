@@ -35,8 +35,27 @@ fi
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-echo "== Lade $REPO ($BRANCH)"
-if ! curl -fsSL "${AUTH[@]}" -o "$WORK/src.tgz" "https://api.github.com/repos/$REPO/tarball/$BRANCH"; then
+SHA="$(curl -fsSL "${AUTH[@]}" -H "Accept: application/vnd.github.sha" "https://api.github.com/repos/$REPO/commits/$BRANCH" || true)"
+if [ -n "$SHA" ] && [ -z "${KIT_SKIP_CHECK:-}" ]; then
+  # Hat GitHub die Oberfläche für diesen Stand geprüft? Fehlgeschlagen -> nicht installieren.
+  VERDICT="$(curl -fsSL "${AUTH[@]}" "https://api.github.com/repos/$REPO/commits/$SHA/check-runs" | python3 -c '
+import json, sys
+runs = [r for r in json.load(sys.stdin).get("check_runs", []) if "qml" in r.get("name", "").lower()]
+if any(r.get("conclusion") == "failure" for r in runs): print("failure")
+elif any(r.get("status") != "completed" for r in runs): print("pending")
+else: print("ok")' 2>/dev/null || echo ok)"
+  if [ "$VERDICT" = failure ]; then
+    echo "Stand ${SHA:0:7} hat die Prüfung der Oberfläche nicht bestanden – Update übersprungen."
+    exit 3
+  fi
+  if [ "$VERDICT" = pending ]; then
+    echo "Stand ${SHA:0:7} wird gerade noch geprüft – bitte in ein paar Minuten erneut versuchen."
+    exit 4
+  fi
+fi
+REF="${SHA:-$BRANCH}"
+echo "== Lade $REPO ($BRANCH, ${REF:0:7})"
+if ! curl -fsSL "${AUTH[@]}" -o "$WORK/src.tgz" "https://api.github.com/repos/$REPO/tarball/$REF"; then
   echo "Download fehlgeschlagen. Token prüfen (Leserecht für Contents auf $REPO)."
   exit 1
 fi

@@ -28,7 +28,9 @@ echo "== Programm nach $DST"
 rm -rf "$DST"
 mkdir -p "$DST"
 # Vorige Oberfläche als Rückfallebene aufheben (kit-app.sh startet sie, falls die neue abstürzt)
-if [ -f "$DST/app/Main.qml" ]; then
+# Nur eine Oberfläche sichern, die nachweislich gelaufen ist (kit-app.sh merkt sich ihren Fingerabdruck).
+if [ -f "$DST/app/Main.qml" ] && [ -f /var/lib/kit-app/good ] && \
+   [ "$(cat "$DST"/app/*.qml | sha256sum | cut -d' ' -f1)" = "$(cat /var/lib/kit-app/good)" ]; then
   rm -rf "$DST/app.prev"
   cp -a "$DST/app" "$DST/app.prev"
 fi

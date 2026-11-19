@@ -10,7 +10,12 @@ done
 ROT="${KIT_ROTATION:-90}"
 D=/opt/kit-controller
 start=$(date +%s)
-"$Q" "$D/app/Main.qml" -- --rotation "$ROT"
+"$Q" "$D/app/Main.qml" -- --rotation "$ROT" &
+pid=$!
+# Läuft die Oberfläche nach 15 s noch, gilt dieser Stand als gut (Rückfallebene fürs nächste Update)
+( sleep 15; if kill -0 $pid 2>/dev/null && [ -d /var/lib/kit-app ]; then
+    cat "$D"/app/*.qml | sha256sum | cut -d' ' -f1 > /var/lib/kit-app/good; fi ) &
+wait $pid
 rc=$?
 if [ $rc -ne 0 ] && [ $(( $(date +%s) - start )) -lt 20 ] && [ -f "$D/app.prev/Main.qml" ]; then
   echo "Neue Oberfläche startet nicht (Code $rc) – nehme vorige Version" >&2
