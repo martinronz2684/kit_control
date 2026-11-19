@@ -37,6 +37,11 @@ Window {
     property var moved: ({ print: 0, reservoir: 0 })
     // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
     readonly property var baseDepth: ({ print: 70, reservoir: 30 })
+    // Schichtdaten: Im Demo-Modus ein Beispieljob. Für echte Jobs folgt das, sobald das Jobformat von Central entschlüsselt ist.
+    // parts: [x %, y %, Breite %, Höhe %, Rundung, Z von mm, Z bis mm]
+    readonly property var demoJob: ({ name: "Scharniergehäuse_v3", layers: 680, layerMm: 0.1,
+        parts: [[12, 14, 30, 40, 12, 0, 68], [50, 18, 36, 25, 12, 0, 30], [54, 56, 18, 28, 50, 10, 55], [12, 62, 30, 20, 12, 40, 68]] })
+    readonly property var job: win.st.demo ? win.demoJob : null
     function depth(k) { return Math.max(0, Math.min(110, win.baseDepth[k] + win.moved[k])) }
     property int lastLayer: -1
     property bool kitdUp: false
@@ -174,6 +179,28 @@ Window {
         }
         MouseArea { anchors.fill: parent; onClicked: win.page = nb.key }
     }
+    // Draufsicht auf die Bauplatte: Teile in dieser Schicht gefüllt, übrige nur als Umriss
+    component LayerView: Rectangle {
+        id: lv
+        property var parts: []
+        property real z: 0
+        radius: 6; color: "#0e0f11"; border.color: "#c9ced6"; border.width: 1.5
+        Image { anchors.fill: parent; anchors.margins: 2; source: "assets/powder.png"; fillMode: Image.Tile; opacity: 0.5; smooth: false }
+        Repeater {
+            model: lv.parts
+            Rectangle {
+                readonly property bool inLayer: lv.z >= modelData[5] && lv.z <= modelData[6]
+                x: 6 + modelData[0] / 100 * (lv.width - 12); y: 6 + modelData[1] / 100 * (lv.height - 12)
+                width: modelData[2] / 100 * (lv.width - 12); height: modelData[3] / 100 * (lv.height - 12)
+                radius: Math.min(width, height) / 2 * modelData[4] / 50
+                color: inLayer ? "#4d2fa6cc" : "transparent"
+                border.color: inLayer ? "#5cc3e3" : "#33ffffff"; border.width: inLayer ? 1.5 : 1
+                Behavior on color { ColorAnimation { duration: 200 } }
+            }
+        }
+        Text { visible: !lv.parts || lv.parts.length === 0; anchors.centerIn: parent; width: parent.width - 20; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+            text: "Schichtdaten folgen"; color: win.cMut; font.family: win.fontName; font.pixelSize: 11 }
+    }
     component Chip: Rectangle {
         id: ch
         property string text
@@ -309,24 +336,32 @@ Window {
                                 Lbl { text: "Soll " + Api.de(win.st.printing ? win.st.target_chamber_print : win.st.target_chamber_warmup) + " °C" } }
                         }
                     }
-                    Row {
-                        spacing: 8; width: parent.width
-                        Panel {
-                            width: (parent.width - 8) / 2; height: 64
-                            Column { x: 12; y: 10; Lbl { text: "Verstrichen" } Val { font.pixelSize: 22; text: win.st.printing ? Api.hms(win.st.elapsed_s) : "—" } }
+                    Panel {
+                        width: parent.width; height: parent.height - 84 - 52 - 52 - 24
+                        LayerView {
+                            id: curLayer
+                            x: 10; y: 10; width: parent.height - 20; height: width
+                            parts: win.job ? win.job.parts : []
+                            z: win.job && win.st.printing ? win.st.layer * win.job.layerMm : 0
                         }
-                        Panel {
-                            width: (parent.width - 8) / 2; height: 64
-                            Column { x: 12; y: 10; Lbl { text: "Fertig ca." }
-                                Val { font.pixelSize: 22
-                                    text: {
-                                        if (!win.st.printing || !(win.st.percent > 0)) return "—"
-                                        var d = new Date(Date.now() + win.st.elapsed_s * (100 - win.st.percent) / win.st.percent * 1000)
-                                        return d.getHours() + ":" + ("0" + d.getMinutes()).slice(-2) + " Uhr"
-                                    } } }
+                        Column {
+                            x: curLayer.width + 22; y: 10; width: parent.width - curLayer.width - 32; spacing: 2
+                            Lbl { text: "Aktuelle Schicht" }
+                            Text { text: win.st.printing ? win.st.layer : "—"; color: win.cInk; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.Light }
+                            Lbl { text: win.job && win.st.printing ? "von " + win.job.layers + " · Z " + Api.de(win.st.layer * win.job.layerMm) + " mm" : " " ; font.pixelSize: 11 }
+                            Item { width: 1; height: 6 }
+                            Lbl { text: "Verstrichen" }
+                            Text { text: win.st.printing ? Api.hms(win.st.elapsed_s) : "—"; color: win.cInk; font.family: win.fontName; font.pixelSize: 16 }
+                            Item { width: 1; height: 4 }
+                            Lbl { text: "Fertig ca." }
+                            Text { color: win.cInk; font.family: win.fontName; font.pixelSize: 16
+                                text: {
+                                    if (!win.st.printing || !(win.st.percent > 0)) return "—"
+                                    var d = new Date(Date.now() + win.st.elapsed_s * (100 - win.st.percent) / win.st.percent * 1000)
+                                    return d.getHours() + ":" + ("0" + d.getMinutes()).slice(-2) + " Uhr"
+                                } }
                         }
                     }
-                    Item { width: 1; height: parent.height - 84 - 64 - 52 - 52 - 32 }
                     KButton { width: parent.width; text: "Sintern stoppen & abkühlen"; onClicked: win.ask("Sintern stoppen?", "Der Kit hört auf zu belichten und kühlt ab.", function () { win.send({ cmd: "stop_sintering" }) }) }
                     KButton { width: parent.width; kind: "red"; text: "Druck abbrechen"; onClicked: win.ask("Druck abbrechen?", "Der laufende Druck wird beendet und lässt sich nicht fortsetzen.", function () { win.send({ cmd: "abort_print" }) }) }
                 }
@@ -555,20 +590,64 @@ Window {
             }
 
             // ======= Jobs =======
-            Panel {
+            Item {
+                id: jobsPage
                 opacity: win.page === "jobs" ? 1 : 0; visible: opacity > 0
                 Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
-                Column {
-                    anchors.centerIn: parent; width: 440; spacing: 8
-                    Lbl { text: "Job auf der SD-Karte im Kit" }
-                    Val { text: "Letzten Job erneut drucken" }
-                    Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 13
-                        text: "Startet den Job, den Central zuletzt auf den Kit übertragen hat. Vorher Pulver laden und die Kammer vorheizen. Die Job-Bibliothek mit Schichtansicht folgt mit dem PC-Durchreichen." }
-                    Item { width: 1; height: 6 }
-                    KButton { width: 260; kind: "pri"; text: "Druck starten"; ok: !win.st.printing
+                property int pick: 0          // gewählte Schicht in der Vorschau
+                readonly property int layers: win.job ? win.job.layers : 0
+                Panel {
+                    id: prevPanel
+                    width: parent.height; height: parent.height
+                    LayerView {
+                        id: prevView
+                        height: parent.height - 28 - 56; width: height; x: (parent.width - width) / 2; y: 14
+                        parts: win.job ? win.job.parts : []
+                        z: win.job ? jobsPage.pick * win.job.layerMm : 0
+                    }
+                    // Schichtregler
+                    Item {
+                        id: slider
+                        x: 14; y: parent.height - 14 - 40; width: parent.width - 28; height: 40
+                        opacity: jobsPage.layers > 0 ? 1 : 0.3
+                        Rectangle { y: 18; width: parent.width; height: 4; radius: 2; color: "#2a2a30" }
+                        Rectangle { y: 18; width: knob.x + 14; height: 4; radius: 2; color: win.cBlue }
+                        Rectangle {
+                            id: knob; y: 6; width: 28; height: 28; radius: 14; color: "#f2f3f5"
+                            x: jobsPage.layers > 0 ? (jobsPage.pick - 1) / Math.max(1, jobsPage.layers - 1) * (slider.width - 28) : 0
+                        }
+                        MouseArea {
+                            anchors.fill: parent; enabled: jobsPage.layers > 0
+                            function setFrom(mx) { jobsPage.pick = Math.round(1 + Math.max(0, Math.min(1, (mx - 14) / (slider.width - 28))) * (jobsPage.layers - 1)) }
+                            onPressed: function (m) { setFrom(m.x) }
+                            onPositionChanged: function (m) { setFrom(m.x) }
+                        }
+                    }
+                }
+                Panel {
+                    x: prevPanel.width + 8; width: parent.width - prevPanel.width - 8; height: parent.height
+                    Column {
+                        anchors.fill: parent; anchors.margins: 16; spacing: 6
+                        Lbl { text: win.job ? "Job" : "Job auf der SD-Karte im Kit" }
+                        Val { width: parent.width; elide: Text.ElideRight; font.pixelSize: 22; text: win.job ? win.job.name : "Letzter Job von Central" }
+                        Item { width: 1; height: 8 }
+                        Lbl { text: "Schicht" }
+                        Row { spacing: 4
+                            Text { text: jobsPage.layers > 0 ? jobsPage.pick : "—"; color: win.cInk; font.family: win.fontName; font.pixelSize: 44; font.weight: Font.Light; font.letterSpacing: -1.6 }
+                            Text { y: 24; text: jobsPage.layers > 0 ? "/ " + jobsPage.layers : ""; color: win.cMut; font.family: win.fontName; font.pixelSize: 16 } }
+                        Lbl { text: win.job ? "Z " + Api.de(jobsPage.pick * win.job.layerMm) + " mm · Bauhöhe " + Api.de(jobsPage.layers * win.job.layerMm) + " mm" : "" }
+                        Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 12; visible: !win.job
+                            text: "Die Schichtvorschau braucht die Geometrie des Jobs. Das Jobformat von Central ist noch nicht entschlüsselt – bis dahin gibt es sie im Demo-Modus mit einem Beispieljob." }
+                        Item { width: 1; height: 8 }
+                        KButton { width: parent.width; height: 48; text: "Bauhöhe für Laden & Entladen übernehmen"; size: 13; visible: !!win.job
+                            onClicked: { win.jobH = Math.round(jobsPage.layers * win.job.layerMm); toast.show("Bauhöhe " + win.jobH + " mm übernommen") } }
+                    }
+                    KButton { x: 16; y: parent.height - 16 - 52; width: parent.width - 32; kind: "pri"; text: "Druck starten"; ok: !win.st.printing
                         onClicked: win.ask("Druck starten?", "Pulver geladen, Haube geschlossen, Kammer vorgeheizt?", function () { win.send({ cmd: "start_print" }) }) }
                 }
+                Component.onCompleted: pick = Math.round(layers * 0.6)
+                onLayersChanged: pick = Math.max(1, Math.round(layers * 0.6))
             }
 
             // ======= System =======
