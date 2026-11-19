@@ -107,7 +107,7 @@ Window {
         property bool ok: true
         property int size: 14
         signal clicked()
-        height: 52; radius: height / 2
+        height: 52; radius: Math.min(height / 2, 22)
         opacity: ok ? 1 : 0.35
         scale: ma.pressed ? 0.97 : 1
         Behavior on scale { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
