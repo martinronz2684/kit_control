@@ -15,10 +15,10 @@ Item {
 
     // Heizstrahler glimmen
     Repeater {
-        model: [134, 266]
+        model: [150, 250]
         Image {
             source: "assets/glow-heat.png"
-            x: modelData - 70; y: 30; width: 140; height: 140
+            x: modelData - 50; y: 51; width: 100; height: 100
             opacity: c.printing ? 0.55 : 0.2
             SequentialAnimation on opacity {
                 running: c.printing; loops: Animation.Infinite
@@ -30,7 +30,7 @@ Item {
 
     // frisch belichtete Schicht leuchtet
     Image {
-        source: "assets/glow-blue.png"; x: 70; y: 196; width: 260; height: 56
+        source: "assets/glow-blue.png"; x: 84; y: 196; width: 232; height: 56
         opacity: c.printing ? 0.6 : 0
         Behavior on opacity { NumberAnimation { duration: 400 } }
     }
@@ -69,12 +69,12 @@ Item {
     // Beschichter: parkt rechts, fährt bei jeder neuen Schicht über beide Behälter
     Image {
         id: coater
-        source: "assets/coater.png"; x: 559; y: 176; width: 60; height: 40; smooth: true
+        source: "assets/coater.png"; x: 497; y: 188; width: 60; height: 40; smooth: true
         SequentialAnimation {
             id: sweepAnim
-            NumberAnimation { target: coater; property: "x"; to: 89; duration: 1200; easing.type: Easing.InOutCubic }
+            NumberAnimation { target: coater; property: "x"; to: 94; duration: 1200; easing.type: Easing.InOutCubic }
             PauseAnimation { duration: 150 }
-            NumberAnimation { target: coater; property: "x"; to: 559; duration: 1200; easing.type: Easing.InOutCubic }
+            NumberAnimation { target: coater; property: "x"; to: 497; duration: 1200; easing.type: Easing.InOutCubic }
         }
     }
 
