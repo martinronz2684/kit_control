@@ -340,9 +340,10 @@ Window {
                 property bool coating: false
 
                 Seg {
-                    width: movePage.leftW; height: 44
+                    width: movePage.leftW - 150; height: 44
                     items: [["0,1 mm", 0.1], ["1 mm", 1], ["10 mm", 10]]; value: win.step; onPicked: function (v) { win.step = v }
                 }
+                KButton { x: movePage.leftW - 142; width: 142; height: 44; kind: "red"; text: "Motoren stoppen"; size: 13; onClicked: win.send({ cmd: "freeze_motors" }) }
                 Repeater {
                     // [Name, Achse, angenommene Starttiefe in mm für die Zeichnung]
                     model: [["Bauplattform", "print", 40], ["Vorrat", "reservoir", 15]]
@@ -447,18 +448,19 @@ Window {
                         }
                     }
                     Panel {
-                        width: parent.width; height: 140
+                        width: parent.width; height: 196
                         Column { anchors.fill: parent; anchors.margins: 12; spacing: 8
-                            Lbl { text: "Pulver laden · Bauhöhe des Jobs" }
+                            Lbl { text: "Laden & Entladen · Bauhöhe des Jobs" }
                             Row { spacing: 8; width: parent.width
                                 KButton { width: 48; height: 44; text: "−"; size: 20; onClicked: win.jobH = Math.max(5, win.jobH - 5) }
                                 Val { width: parent.width - 112; height: 44; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; text: win.jobH + " mm" }
                                 KButton { width: 48; height: 44; text: "+"; size: 20; onClicked: win.jobH = Math.min(105, win.jobH + 5) } }
-                            KButton { width: parent.width; height: 44; text: "Vorrat um " + (win.jobH + 5) + " mm absenken"; ok: !win.st.printing
+                            KButton { width: parent.width; height: 44; text: "Pulver laden · Vorrat −" + (win.jobH + 5) + " mm"; size: 13; ok: !win.st.printing
                                 onClicked: win.ask("Pulver laden?", "Vorrat fährt " + (win.jobH + 5) + " mm nach unten (Bauhöhe " + win.jobH + " mm + 5 mm Puffer). Danach Pulver einfüllen und abziehen.", function () { win.jog("reservoir", win.jobH + 5) }) }
+                            KButton { width: parent.width; height: 44; text: "Entladen · Bauplatte +" + win.jobH + " mm"; size: 13; ok: !win.st.printing
+                                onClicked: win.ask("Kuchen entnehmen?", "Die Bauplattform fährt " + win.jobH + " mm nach oben und hebt den Pulverkuchen aus der Kammer. Nur bei abgekühlter Kammer öffnen.", function () { win.jog("print", -win.jobH) }) }
                         }
                     }
-                    KButton { width: parent.width; kind: "red"; text: "Motoren stoppen"; onClicked: win.send({ cmd: "freeze_motors" }) }
                 }
             }
 
