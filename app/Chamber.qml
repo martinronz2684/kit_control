@@ -38,7 +38,7 @@ Item {
     // Laserstrahl mit Brennpunkt, der über die Schicht wandert
     Item {
         id: laser
-        visible: c.printing
+        visible: c.printing && !sweepAnim.running   // beim Beschichten ist der Laser aus
         property real tx: 160
         SequentialAnimation on tx {
             running: c.printing; loops: Animation.Infinite
