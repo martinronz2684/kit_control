@@ -196,7 +196,7 @@ Window {
             x: 8; y: 8; width: 64; height: parent.height - 16
             Column {
                 anchors.top: parent.top; anchors.topMargin: 8; anchors.horizontalCenter: parent.horizontalCenter; spacing: 6
-                Image { source: "../branding/mark.png"; width: 38; height: 38; smooth: true; mipmap: true; anchors.horizontalCenter: parent.horizontalCenter }
+                Image { source: "../branding/mark.png"; width: 40; height: 40; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true; anchors.horizontalCenter: parent.horizontalCenter }
                 Item { width: 1; height: 2 }
                 NavBtn { key: "print"; label: "Druck"; icon: "print" }
                 NavBtn { key: "move"; label: "Bewegung"; icon: "move" }
