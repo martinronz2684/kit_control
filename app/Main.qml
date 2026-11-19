@@ -618,11 +618,11 @@ Window {
                 }
                 Column {
                     x: infoPanel.x + infoPanel.width + 8; width: 150; height: parent.height; spacing: 8
-                    KButton { width: parent.width; height: 60; kind: "pri"; text: "WLAN"; onClicked: wifiOvl.open() }
-                    KButton { width: parent.width; height: 60; kind: win.upd.available ? "hot" : "normal"; text: win.upd.running ? "Update läuft …" : (win.upd.available ? "Update verfügbar" : "Software"); onClicked: updOvl.open() }
+                    KButton { width: parent.width; height: 50; kind: "pri"; text: "WLAN"; onClicked: wifiOvl.open() }
+                    KButton { width: parent.width; height: 50; kind: win.upd.available ? "hot" : "normal"; text: win.upd.running ? "Update läuft …" : (win.upd.available ? "Update verfügbar" : "Software"); onClicked: updOvl.open() }
                     Lbl { text: "PC-Verbindung für Central" }
                     Seg {
-                        width: parent.width; height: 42
+                        width: parent.width; height: 40
                         items: [["WLAN", "wlan"], ["USB", "usb"]]
                         value: win.st.pc_link || "wlan"
                         onPicked: function (v) {
@@ -633,7 +633,18 @@ Window {
                                     function () { win.send({ cmd: "pc_link", mode: v }) })
                         }
                     }
-                    Item { width: 1; height: parent.height - 60 - 60 - 16 - 42 - 52 - 52 - 48 }
+                    Lbl { text: "Demo ohne Kit" }
+                    Seg {
+                        width: parent.width; height: 40
+                        items: [["Aus", false], ["An", true]]
+                        value: win.st.demo === true
+                        onPicked: function (v) {
+                            if (v === (win.st.demo === true)) return
+                            win.send({ cmd: "demo", on: v })
+                            toast.show(v ? "Demo-Modus an: simulierter Kit, nichts wird an echte Hardware gesendet" : "Demo-Modus aus: suche Kit über USB")
+                        }
+                    }
+                    Item { width: 1; height: Math.max(0, parent.height - 50 - 50 - 16 - 40 - 16 - 40 - 52 - 52 - 72) }
                     KButton { width: parent.width; text: "Neustart"; onClicked: win.ask("Neu starten?", "Der Kit Controller startet neu. Ein laufender Druck läuft auf dem Kit weiter.", function () { win.send({ cmd: "reboot" }) }) }
                     KButton { width: parent.width; kind: "red"; text: "Ausschalten"; onClicked: win.ask("Ausschalten?", "Danach den Strom erst trennen, wenn das Display schwarz ist.", function () { win.send({ cmd: "poweroff" }) }) }
                 }
@@ -656,7 +667,8 @@ Window {
                     visible: !!win.st.message; text: win.st.message || "" }
                 Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 8; topPadding: 4
                     KButton { width: 150; height: 44; text: "WLAN"; onClicked: wifiOvl.open() }
-                    KButton { width: 150; height: 44; text: "System"; onClicked: win.page = "sys" } }
+                    KButton { width: 150; height: 44; text: "System"; onClicked: win.page = "sys" }
+                    KButton { width: 150; height: 44; kind: "pri"; text: "Demo starten"; visible: win.kitdUp; onClicked: { win.send({ cmd: "demo", on: true }); toast.show("Demo-Modus an: simulierter Kit") } } }
             }
         }
 

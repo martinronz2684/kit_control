@@ -39,6 +39,9 @@ class KitWorker(threading.Thread):
         self.kit: Kit | None = None
         # Alle USB-Zugriffe laufen unter dieser Sperre (eigene Abfragen und Central über WLAN).
         self.usb = threading.RLock()
+        # Demo-Modus: simulierter Kit statt USB. Umschaltbar unter System, gilt bis zum Neustart.
+        self.demo = DEMO
+        self.want_demo = DEMO
 
     # -- state -----------------------------------------------------------------
     def snapshot(self) -> dict:
@@ -53,11 +56,24 @@ class KitWorker(threading.Thread):
     # -- loop ------------------------------------------------------------------
     def run(self):
         while True:
+            if self.want_demo != self.demo:
+                self.demo = self.want_demo
+                if self.kit is not None:
+                    try:
+                        self.kit.close()
+                    except Exception:
+                        pass
+                    self.kit = None
+                with self.lock:   # alte Werte verwerfen
+                    self.state = {"connected": False, "message": "Demo startet …" if self.demo else "Suche Kit …"}
             if self.kit is None:
                 self._connect()
                 if self.kit is None:
                     self._drain_cmds("Kein Kit verbunden")
-                    time.sleep(3)
+                    for _ in range(30):   # 3 s warten, aber auf Demo-Umschaltung sofort reagieren
+                        if self.want_demo != self.demo:
+                            break
+                        time.sleep(0.1)
                     continue
             try:
                 with self.usb:
@@ -74,7 +90,7 @@ class KitWorker(threading.Thread):
 
     def _connect(self):
         try:
-            if DEMO:
+            if self.demo:
                 from kitd.demo import DemoTransport
                 t = DemoTransport()
             else:
@@ -84,7 +100,7 @@ class KitWorker(threading.Thread):
             ident = kit.connect()
             self.kit = kit
             self._set(connected=True, message="", model=ident.model_name, firmware=ident.firmware,
-                      protocol=ident.comm, uid=ident.uid.hex(), demo=DEMO)
+                      protocol=ident.comm, uid=ident.uid.hex(), demo=self.demo)
         except SystemExit as e:  # UsbTransport: no device
             self._set(connected=False, message=str(e))
         except Exception as e:
@@ -286,6 +302,9 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             except ValueError as e:
                 return self._json({"ok": False, "error": str(e)})
+        if cmd.get("cmd") == "demo":
+            WORKER.want_demo = bool(cmd.get("on"))
+            return self._json({"ok": True})
         if cmd.get("cmd") in ("reboot", "poweroff"):
             import subprocess
             subprocess.Popen(["sudo", "-n", "/usr/bin/systemctl", cmd["cmd"]])
