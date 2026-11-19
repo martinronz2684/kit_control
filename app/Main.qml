@@ -184,13 +184,13 @@ Window {
     component LayerView: Rectangle {
         id: lv
         property var parts: []
-        property real z: 0
+        property real layerZ: 0
         radius: 6; color: "#0e0f11"; border.color: "#c9ced6"; border.width: 1.5
         Image { anchors.fill: parent; anchors.margins: 2; source: "assets/powder.png"; fillMode: Image.Tile; opacity: 0.5; smooth: false }
         Repeater {
             model: lv.parts
             Rectangle {
-                readonly property bool inLayer: lv.z >= modelData[5] && lv.z <= modelData[6]
+                readonly property bool inLayer: lv.layerZ >= modelData[5] && lv.layerZ <= modelData[6]
                 x: 6 + modelData[0] / 100 * (lv.width - 12); y: 6 + modelData[1] / 100 * (lv.height - 12)
                 width: modelData[2] / 100 * (lv.width - 12); height: modelData[3] / 100 * (lv.height - 12)
                 radius: Math.min(width, height) / 2 * modelData[4] / 50
@@ -343,7 +343,7 @@ Window {
                             id: curLayer
                             x: 10; y: 15; width: parent.height - 30; height: width
                             parts: win.job ? win.job.parts : []
-                            z: win.job && win.st.printing ? win.st.layer * win.job.layerMm : 0
+                            layerZ: win.job && win.st.printing ? win.st.layer * win.job.layerMm : 0
                         }
                         Column {
                             x: curLayer.width + 22; y: 10; width: parent.width - curLayer.width - 32; spacing: 2
@@ -605,7 +605,7 @@ Window {
                         id: prevView
                         height: parent.height - 28 - 56; width: height; x: (parent.width - width) / 2; y: 14
                         parts: win.job ? win.job.parts : []
-                        z: win.job ? jobsPage.pick * win.job.layerMm : 0
+                        layerZ: win.job ? jobsPage.pick * win.job.layerMm : 0
                     }
                     // Schichtregler
                     Item {
