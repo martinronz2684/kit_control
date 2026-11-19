@@ -340,7 +340,7 @@ Window {
                         width: parent.width; height: parent.height - 84 - 52 - 52 - 24
                         LayerView {
                             id: curLayer
-                            x: 10; y: 10; width: parent.height - 20; height: width
+                            x: 10; y: 15; width: parent.height - 30; height: width
                             parts: win.job ? win.job.parts : []
                             z: win.job && win.st.printing ? win.st.layer * win.job.layerMm : 0
                         }
