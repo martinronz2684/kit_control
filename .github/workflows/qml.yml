@@ -1,0 +1,21 @@
+name: Oberfläche prüfen
+
+on:
+  push:
+    branches: [main]
+    paths: ["app/**", "branding/**", "tools/qml-check.sh", ".github/workflows/qml.yml"]
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  qml:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Qt 6 QML installieren
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y qml-qt6 qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript qt6-qpa-plugins fonts-inter
+      - name: Oberfläche laden
+        run: sh tools/qml-check.sh

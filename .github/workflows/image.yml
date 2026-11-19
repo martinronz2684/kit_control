@@ -9,7 +9,11 @@ permissions:
   contents: write
 
 jobs:
+  qml:
+    uses: ./.github/workflows/qml.yml
+
   image:
+    needs: qml
     runs-on: ubuntu-24.04
     timeout-minutes: 180
     steps:
