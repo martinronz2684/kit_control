@@ -1,0 +1,161 @@
+<html><body style="margin:0;background:transparent"><svg viewBox="0 0 660 440" width="1320" height="880" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <!-- gebürstetes Aluminium: Grundverlauf + feine horizontale Riefen -->
+  <filter id="brush" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.004 0.9" numOctaves="2" seed="3" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.22 0" result="s"/>
+    <feComposite in="s" in2="SourceGraphic" operator="in" result="s2"/>
+    <feBlend in="s2" in2="SourceGraphic" mode="overlay"/>
+  </filter>
+  <!-- Pulverkorn -->
+  <filter id="grain" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="1.6" numOctaves="2" seed="8" result="n"/>
+    <feColorMatrix in="n" type="matrix" values="0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0 0.5  0 0 0 0.9 -0.35" result="g"/>
+    <feComposite in="g" in2="SourceGraphic" operator="in" result="g2"/>
+    <feBlend in="g2" in2="SourceGraphic" mode="soft-light"/>
+  </filter>
+  <filter id="noise" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="2.2" numOctaves="1" seed="5"/>
+    <feColorMatrix type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  -1.6 0 0 0 1.05"/>
+  </filter>
+  <filter id="noiseW" x="0" y="0" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="2.2" numOctaves="1" seed="11"/>
+    <feColorMatrix type="matrix" values="0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  1.8 0 0 0 -1.05"/>
+  </filter>
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="190%"><feDropShadow dx="0" dy="2" stdDeviation="2.2" flood-color="#000" flood-opacity="0.45"/></filter>
+  <filter id="big" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="14" stdDeviation="14" flood-color="#000" flood-opacity="0.6"/></filter>
+  <filter id="blur6"><feGaussianBlur stdDeviation="6"/></filter>
+  <filter id="blur2"><feGaussianBlur stdDeviation="2"/></filter>
+  <filter id="inset" x="0" y="0" width="100%" height="100%">
+    <feFlood flood-color="#000" flood-opacity="0.55"/><feComposite in2="SourceAlpha" operator="out"/>
+    <feGaussianBlur stdDeviation="5"/><feOffset dy="3"/><feComposite in2="SourceAlpha" operator="in" result="sh"/>
+    <feMerge><feMergeNode in="SourceGraphic"/><feMergeNode in="sh"/></feMerge>
+  </filter>
+
+  <linearGradient id="alu" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#e3e6ea"/><stop offset="0.45" stop-color="#b4bac2"/><stop offset="1" stop-color="#868d97"/></linearGradient>
+  <linearGradient id="aluSide" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#7c838d"/><stop offset="0.5" stop-color="#bfc5cc"/><stop offset="1" stop-color="#737a84"/></linearGradient>
+  <linearGradient id="aluWall" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#a9afb7"/><stop offset="1" stop-color="#5d636c"/></linearGradient>
+  <linearGradient id="rod" x1="0" y1="0" x2="1" y2="0">
+    <stop offset="0" stop-color="#3d424a"/><stop offset="0.3" stop-color="#e9ecef"/><stop offset="0.55" stop-color="#9aa1aa"/><stop offset="1" stop-color="#30353c"/></linearGradient>
+  <linearGradient id="body" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#26292f"/><stop offset="1" stop-color="#16181c"/></linearGradient>
+  <linearGradient id="cav" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#0d0e11"/><stop offset="1" stop-color="#050607"/></linearGradient>
+  <linearGradient id="powder" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#a7a39a"/><stop offset="0.08" stop-color="#97938a"/><stop offset="1" stop-color="#6f6b64"/></linearGradient>
+  <linearGradient id="part" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#c3b8a4"/><stop offset="1" stop-color="#998e7b"/></linearGradient>
+  <linearGradient id="refl" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#d7dce1"/><stop offset="1" stop-color="#7d848d"/></linearGradient>
+  <linearGradient id="tube" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#fff1e6"/><stop offset="0.5" stop-color="#ffb08a"/><stop offset="1" stop-color="#ff6a3d"/></linearGradient>
+  <linearGradient id="heat" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#ff7a45" stop-opacity="0.22"/><stop offset="1" stop-color="#ff7a45" stop-opacity="0"/></linearGradient>
+  <linearGradient id="headG" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0" stop-color="#2d3036"/><stop offset="1" stop-color="#141518"/></linearGradient>
+  <clipPath id="cBuild"><rect x="106" y="224" width="188" height="200"/></clipPath>
+  <clipPath id="cRes"><rect x="366" y="224" width="188" height="200"/></clipPath>
+</defs>
+
+<!-- Schatten am Boden -->
+<ellipse cx="330" cy="430" rx="290" ry="9" fill="#000" opacity="0.55" filter="url(#blur6)"/>
+
+<!-- Gehäuse (Schnitt) -->
+<g filter="url(#big)">
+  <rect x="48" y="220" width="564" height="206" rx="14" fill="url(#body)"/>
+</g>
+<rect x="48" y="220" width="564" height="206" rx="14" fill="none" stroke="#ffffff" stroke-opacity="0.05"/>
+
+<!-- Schächte: dunkler Hohlraum -->
+<rect x="98" y="224" width="204" height="194" rx="4" fill="url(#cav)"/>
+<rect x="358" y="224" width="204" height="194" rx="4" fill="url(#cav)"/>
+
+<!-- Schachtwände aus Alu -->
+<g filter="url(#brush)">
+  <rect x="98" y="224" width="8" height="194" fill="url(#aluSide)"/>
+  <rect x="294" y="224" width="8" height="194" fill="url(#aluSide)"/>
+  <rect x="358" y="224" width="8" height="194" fill="url(#aluSide)"/>
+  <rect x="554" y="224" width="8" height="194" fill="url(#aluSide)"/>
+</g>
+
+<!-- Bauraum: Pulverkuchen mit Bauteilen -->
+<g clip-path="url(#cBuild)">
+  <rect x="106" y="224" width="188" height="122" fill="url(#powder)"/>
+  <rect x="106" y="224" width="188" height="122" fill="#000" filter="url(#noise)" opacity="0.35"/>
+  <rect x="106" y="224" width="188" height="122" fill="#000" filter="url(#noiseW)" opacity="0.25"/>
+  <g filter="url(#soft)" opacity="0.92">
+    <rect x="124" y="262" width="54" height="72" rx="7" fill="url(#part)"/>
+    <rect x="194" y="290" width="80" height="44" rx="7" fill="url(#part)"/>
+    <rect x="124" y="238" width="40" height="18" rx="5" fill="url(#part)"/>
+  </g>
+  <!-- Pulver liegt leicht über den Teilen: Schleier -->
+  <rect x="106" y="224" width="188" height="122" fill="#8f8b83" opacity="0.18"/>
+  <!-- Wandschatten -->
+  <rect x="106" y="224" width="14" height="122" fill="#000" opacity="0.1" filter="url(#blur2)"/>
+  <rect x="280" y="224" width="14" height="122" fill="#000" opacity="0.1" filter="url(#blur2)"/>
+</g>
+<!-- Bauplattform -->
+<g filter="url(#soft)"><rect x="106" y="346" width="188" height="11" fill="url(#alu)" filter="url(#brush)"/></g>
+<rect x="106" y="346" width="188" height="1" fill="#ffffff" opacity="0.6"/>
+<rect x="191" y="357" width="18" height="61" fill="url(#rod)"/>
+
+<!-- Vorrat -->
+<g clip-path="url(#cRes)">
+  <rect x="366" y="224" width="188" height="58" fill="url(#powder)"/>
+  <rect x="366" y="224" width="188" height="58" fill="#000" filter="url(#noise)" opacity="0.35"/>
+  <rect x="366" y="224" width="188" height="58" fill="#000" filter="url(#noiseW)" opacity="0.25"/>
+  <rect x="366" y="224" width="14" height="58" fill="#000" opacity="0.1" filter="url(#blur2)"/>
+  <rect x="540" y="224" width="14" height="58" fill="#000" opacity="0.1" filter="url(#blur2)"/>
+</g>
+<g filter="url(#soft)"><rect x="366" y="282" width="188" height="11" fill="url(#alu)" filter="url(#brush)"/></g>
+<rect x="366" y="282" width="188" height="1" fill="#ffffff" opacity="0.6"/>
+<rect x="451" y="293" width="18" height="125" fill="url(#rod)"/>
+
+<!-- Deckplatte aus Alu mit Öffnungen -->
+<g filter="url(#soft)">
+  <g filter="url(#brush)">
+    <path d="M40 214 h58 v12 h-58 z" fill="url(#alu)"/>
+    <path d="M302 214 h56 v12 h-56 z" fill="url(#alu)"/>
+    <path d="M562 214 h58 v12 h-58 z" fill="url(#alu)"/>
+  </g>
+</g>
+<rect x="40" y="214" width="58" height="1.2" fill="#fff" opacity="0.75"/>
+<rect x="302" y="214" width="56" height="1.2" fill="#fff" opacity="0.75"/>
+<rect x="562" y="214" width="58" height="1.2" fill="#fff" opacity="0.75"/>
+<!-- frische Schicht: dünne Kante -->
+<rect x="106" y="223" width="188" height="1.5" fill="#6b86ff" opacity="0.7"/>
+
+<!-- Heizstrahler: Reflektor + Quarzrohr -->
+<path d="M92 114 h84 l30 100 h-144 z" fill="url(#heat)"/>
+<path d="M224 114 h84 l30 100 h-144 z" fill="url(#heat)"/>
+<g>
+  <rect x="96" y="96" width="76" height="10" rx="5" fill="#ff6a3d" filter="url(#blur6)" opacity="0.9"/>
+  <rect x="228" y="96" width="76" height="10" rx="5" fill="#ff6a3d" filter="url(#blur6)" opacity="0.9"/>
+  <rect x="98" y="97" width="72" height="8" rx="4" fill="url(#tube)"/>
+  <rect x="230" y="97" width="72" height="8" rx="4" fill="url(#tube)"/>
+</g>
+<g filter="url(#soft)">
+  <path d="M86 82 h96 l-6 14 h-84 z" fill="url(#refl)" filter="url(#brush)"/>
+  <path d="M218 82 h96 l-6 14 h-84 z" fill="url(#refl)" filter="url(#brush)"/>
+</g>
+<rect x="86" y="82" width="96" height="1" fill="#fff" opacity="0.7"/>
+<rect x="218" y="82" width="96" height="1" fill="#fff" opacity="0.7"/>
+
+<!-- Laserkopf: schwarz eloxiert, Alu-Kühlrippen -->
+<g filter="url(#soft)">
+  <g filter="url(#brush)">
+    <rect x="178" y="16" width="44" height="3" rx="1" fill="url(#alu)"/>
+    <rect x="178" y="21" width="44" height="3" rx="1" fill="url(#alu)"/>
+    <rect x="178" y="26" width="44" height="3" rx="1" fill="url(#alu)"/>
+  </g>
+  <rect x="174" y="31" width="52" height="42" rx="8" fill="url(#headG)"/>
+  <rect x="189" y="73" width="22" height="7" rx="2" fill="#0a0b0d"/>
+</g>
+<rect x="174" y="31" width="52" height="1" fill="#fff" opacity="0.18"/>
+<circle cx="214" cy="40" r="2" fill="#2fa6cc"/>
+<circle cx="214" cy="40" r="5" fill="#2fa6cc" opacity="0.35" filter="url(#blur2)"/>
+<rect x="194" y="79" width="12" height="2" rx="1" fill="#6b86ff" opacity="0.8"/>
+</svg></body></html>

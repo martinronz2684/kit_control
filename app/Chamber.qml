@@ -69,7 +69,7 @@ Item {
     // Beschichter: parkt rechts, fährt bei jeder neuen Schicht über beide Behälter
     Image {
         id: coater
-        source: "assets/coater.png"; x: 559; y: 168; width: 60; height: 40; smooth: true
+        source: "assets/coater.png"; x: 559; y: 176; width: 60; height: 40; smooth: true
         SequentialAnimation {
             id: sweepAnim
             NumberAnimation { target: coater; property: "x"; to: 89; duration: 1200; easing.type: Easing.InOutCubic }
