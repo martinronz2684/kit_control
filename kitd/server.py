@@ -120,6 +120,14 @@ class KitWorker(threading.Thread):
             return
         pct = {k: round((getattr(sc, k) - 1) * 100, 2) for k in "xyz"}
         self._set(scaling=pct, scaling_error="")
+        live = None
+        try:
+            with self.usb:
+                lv = self.kit.request("live")
+            live = {"surface_warmup": lv.surface_warmup, "chamber_warmup": lv.chamber_warmup,
+                    "surface_print": lv.surface_print, "chamber_print": lv.chamber_print, "laser_speed": lv.laser_speed}
+        except Exception:
+            pass
         if backup:
             uid = self.snapshot().get("uid", "unbekannt")
             f = os.path.join(STATE_DIR, f"werkswerte-{'demo' if self.demo else uid}.json")
@@ -127,7 +135,7 @@ class KitWorker(threading.Thread):
                 if not os.path.exists(f):
                     os.makedirs(STATE_DIR, exist_ok=True)
                     with open(f, "w") as fh:
-                        json.dump({"scaling": pct, "saved": time.strftime("%Y-%m-%d %H:%M")}, fh)
+                        json.dump({"scaling": pct, "live": live, "saved": time.strftime("%Y-%m-%d %H:%M")}, fh)
                 with open(f) as fh:
                     self._set(factory=json.load(fh))
             except OSError:
@@ -190,7 +198,7 @@ class KitWorker(threading.Thread):
                 return
             try:
                 payload = self._encode(cmd)
-                strict = cmd.get("cmd") in ("scaling", "pattern")
+                strict = cmd.get("cmd") in ("scaling", "pattern", "targets", "laser_speed")
                 with self.usb:
                     self.kit.command(payload, strict=strict)
                 if cmd.get("cmd") == "scaling":
@@ -202,7 +210,7 @@ class KitWorker(threading.Thread):
     def _encode(self, c: dict) -> bytes:
         name = c.get("cmd")
         printing = self.snapshot().get("printing", False)
-        motion = {"move", "make_layer", "powder_prep_on", "pattern", "scaling", "exit_calibration"}
+        motion = {"move", "make_layer", "powder_prep_on", "pattern", "scaling", "exit_calibration", "targets", "laser_speed"}
         if printing and name in motion:
             raise ValueError("Während des Drucks gesperrt")
         if name == "move":
@@ -219,9 +227,21 @@ class KitWorker(threading.Thread):
             return P.cmd_lamp(c["which"], float(c["percent"]))
         if name == "target":
             t = float(c["celsius"])
-            if not 0 <= t <= 185:
-                raise ValueError("Temperatur 0–185 °C")
+            lim = P.MAX_CHAMBER if c["which"].startswith("chamber") else P.MAX_SURFACE
+            if not 0 <= t <= lim:
+                raise ValueError(f"Temperatur 0–{lim:g} °C")
             return P.cmd_target(c["which"], t)
+        if name == "targets":   # alle vier Sollwerte wie Central „Send parameters to Sintratec Kit“
+            sw, cw, sp, cp = (float(c[k]) for k in ("surface_warmup", "chamber_warmup", "surface_print", "chamber_print"))
+            for v, lim in ((sw, P.MAX_SURFACE), (sp, P.MAX_SURFACE), (cw, P.MAX_CHAMBER), (cp, P.MAX_CHAMBER)):
+                if not 0 <= v <= lim:
+                    raise ValueError(f"Temperatur außerhalb 0–{lim:g} °C")
+            return P.cmd_targets(sw, cw, sp, cp)
+        if name == "laser_speed":
+            v = float(c["mm_s"])
+            if not P.MIN_LASER <= v <= P.MAX_LASER:
+                raise ValueError(f"Lasergeschwindigkeit {P.MIN_LASER:g}–{P.MAX_LASER:g} mm/s")
+            return P.cmd_laser_speed("general", v)
         if name == "pattern":
             if c.get("name") not in P.PATTERNS:
                 raise ValueError("unbekanntes Muster")

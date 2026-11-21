@@ -327,6 +327,17 @@ def cmd_warmup(on: bool) -> bytes:
     return code(COM_WARMUPMODE) + bytes([1 if on else 0])
 
 
+# Grenzen wie die Regler in Central („Kit Heat Up/Print Temperature Targets“, „Kit Laser Speed“)
+MAX_SURFACE = 180.0
+MAX_CHAMBER = 150.0
+MIN_LASER, MAX_LASER = 1.0, 1000.0
+# Materialvorgaben aus Central (Sollwerte Oberfläche/Kammer, Aufwärmen/Druck)
+MATERIALS = {
+    "PA12": {"surface_warmup": 150, "chamber_warmup": 140, "surface_print": 170, "chamber_print": 140},
+    "TPE": {"surface_warmup": 90, "chamber_warmup": 40, "surface_print": 96, "chamber_print": 40},
+}
+
+
 # Kalibrierung, wie im Central-Fenster „Calibrate“
 PATTERNS = {"off": 0, "pattern": 1, "center": 2, "home": 4}   # 0 = Anzeige aus, 4 = Referenzfahrt aller Achsen
 MAX_SCALING_PERCENT = 5.0                                      # Central erlaubt höchstens ±5 %

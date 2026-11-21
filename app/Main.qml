@@ -47,7 +47,21 @@ Window {
     property bool scDirty: false
     function scKit(k) { return win.st.scaling ? win.st.scaling[k] : 0 }
     function pct(v) { return (v > 0 ? "+" : v < 0 ? "−" : "±") + Api.de(Math.abs(v).toFixed(2)) + " %" }
-    onStChanged: if (!scDirty && st.scaling) scEdit = { x: st.scaling.x, y: st.scaling.y, z: st.scaling.z }
+    // Material & Parameter: Sollwerte (°C) und Lasergeschwindigkeit (mm/s), erst mit „An Kit senden“ übertragen
+    readonly property var materials: ({ PA12: { sw: 150, cw: 140, sp: 170, cp: 140 }, TPE: { sw: 90, cw: 40, sp: 96, cp: 40 } })
+    property var pEdit: ({ sw: 150, cw: 140, sp: 170, cp: 140, laser: 650 })
+    property bool pDirty: false
+    function pKit() { return { sw: st.target_surface_warmup, cw: st.target_chamber_warmup, sp: st.target_surface_print, cp: st.target_chamber_print, laser: st.laser_speed } }
+    function materialOf(p) {
+        for (var m in materials) { var t = materials[m]; if (p.sw === t.sw && p.cw === t.cw && p.sp === t.sp && p.cp === t.cp) return m }
+        return "custom"
+    }
+    // Wie Central: Liegt der Druck-Sollwert der Oberfläche unter 130 °C, ist der Kit auf TPE eingestellt
+    readonly property string kitMaterial: st.target_surface_print === undefined ? "" : (st.target_surface_print < 130 ? "TPE" : "PA12")
+    onStChanged: {
+        if (!scDirty && st.scaling) scEdit = { x: st.scaling.x, y: st.scaling.y, z: st.scaling.z }
+        if (!pDirty && st.target_surface_print !== undefined) pEdit = pKit()
+    }
     function depth(k) { return Math.max(0, Math.min(110, win.baseDepth[k] + win.moved[k])) }
     property int lastLayer: -1
     property bool kitdUp: false
@@ -174,7 +188,7 @@ Window {
         property string label
         property string icon
         property bool hot: false
-        readonly property bool active: win.page === key
+        readonly property bool active: key === "sys" ? ["sys", "cal", "params"].indexOf(win.page) >= 0 : win.page === key
         width: 56; height: 54; radius: 16
         color: nb.active ? "#24242a" : "transparent"
         Behavior on color { ColorAnimation { duration: 150 } }
@@ -246,7 +260,6 @@ Window {
                 NavBtn { key: "move"; label: "Bewegung"; icon: "move" }
                 NavBtn { key: "heat"; label: "Heizung"; icon: "heat"; hot: true }
                 NavBtn { key: "jobs"; label: "Jobs"; icon: "jobs" }
-                NavBtn { key: "cal"; label: "Kalibrieren"; icon: "cal" }
             }
             NavBtn { key: "sys"; label: "System"; icon: "system"; anchors.bottom: parent.bottom; anchors.bottomMargin: 8; anchors.horizontalCenter: parent.horizontalCenter }
         }
@@ -259,9 +272,17 @@ Window {
             Item {
                 id: head
                 width: parent.width; height: 34
+                // Unterseiten von System: Zurück-Pfeil
+                Rectangle {
+                    id: backBtn
+                    visible: win.page === "cal" || win.page === "params"
+                    width: visible ? 34 : 0; height: 34; radius: 17; color: backMa.pressed ? "#2c2c31" : "#1d1d21"
+                    Text { anchors.centerIn: parent; text: "‹"; color: win.cInk; font.family: win.fontName; font.pixelSize: 24; anchors.verticalCenterOffset: -2 }
+                    MouseArea { id: backMa; anchors.fill: parent; onClicked: win.page = "sys" }
+                }
                 Text {
-                    anchors.verticalCenter: parent.verticalCenter; x: 4
-                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "Kalibrieren", sys: "System" })[win.page]
+                    anchors.verticalCenter: parent.verticalCenter; x: backBtn.width + (backBtn.visible ? 10 : 4)
+                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "System · Kalibrieren", params: "System · Material & Parameter", sys: "System" })[win.page]
                     color: win.cInk; font.family: win.fontName; font.pixelSize: 22; font.weight: Font.Medium; font.letterSpacing: -0.6
                 }
                 Row {
@@ -795,6 +816,102 @@ Window {
                 }
             }
 
+            // ======= Material & Parameter =======
+            Item {
+                id: parPage
+                opacity: win.page === "params" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+                y: 42; width: parent.width; height: parent.height - 42
+                readonly property bool locked: !win.st.connected || !!win.st.printing
+                function set(k, v, lo, hi) {
+                    var e = { sw: win.pEdit.sw, cw: win.pEdit.cw, sp: win.pEdit.sp, cp: win.pEdit.cp, laser: win.pEdit.laser }
+                    e[k] = Math.max(lo, Math.min(hi, Math.round(v))); win.pEdit = e; win.pDirty = true
+                }
+                Panel {
+                    id: tPanel
+                    width: parent.width - 276; height: parent.height
+                    Column {
+                        anchors.fill: parent; anchors.margins: 14; spacing: 8
+                        Item { width: parent.width; height: 16
+                            Lbl { text: "Material" }
+                            Lbl { anchors.right: parent.right; text: win.kitMaterial ? "im Kit eingestellt: " + win.kitMaterial : "" } }
+                        Seg {
+                            width: parent.width; height: 42
+                            items: [["PA12", "PA12"], ["TPE", "TPE"], ["Eigene", "custom"]]
+                            value: win.materialOf(win.pEdit)
+                            onPicked: function (v) {
+                                if (v === "custom" || parPage.locked) return
+                                var t = win.materials[v]
+                                win.pEdit = { sw: t.sw, cw: t.cw, sp: t.sp, cp: t.cp, laser: win.pEdit.laser }; win.pDirty = true
+                            }
+                        }
+                        Item { width: 1; height: 2 }
+                        Repeater {
+                            model: [["Aufwärmen · Pulveroberfläche", "sw", 180], ["Aufwärmen · Kammer", "cw", 150],
+                                    ["Druck · Pulveroberfläche", "sp", 180], ["Druck · Kammer", "cp", 150]]
+                            Item {
+                                width: parent.width; height: 52
+                                Column { y: 6
+                                    Lbl { text: modelData[0] }
+                                    Lbl { font.pixelSize: 11; text: "Kit: " + (win.pKit()[modelData[1]] !== undefined ? Math.round(win.pKit()[modelData[1]]) + " °C" : "—") + " · max. " + modelData[2] + " °C" } }
+                                KButton { x: parent.width - 196; y: 2; width: 48; height: 48; text: "−"; size: 20; ok: !parPage.locked; onClicked: parPage.set(modelData[1], win.pEdit[modelData[1]] - 1, 0, modelData[2]) }
+                                Text { x: parent.width - 144; width: 92; height: 52; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                    text: win.pEdit[modelData[1]] + " °C"; color: win.cHeat; font.family: win.fontName; font.pixelSize: 24; font.weight: Font.Light }
+                                KButton { x: parent.width - 48; y: 2; width: 48; height: 48; text: "+"; size: 20; ok: !parPage.locked; onClicked: parPage.set(modelData[1], win.pEdit[modelData[1]] + 1, 0, modelData[2]) }
+                            }
+                        }
+                    }
+                }
+                Column {
+                    x: tPanel.width + 8; width: 268; spacing: 8
+                    Panel {
+                        width: parent.width; height: 168
+                        Column { anchors.fill: parent; anchors.margins: 12; spacing: 6
+                            Lbl { text: "Lasergeschwindigkeit" }
+                            Row { spacing: 4
+                                Text { text: win.pEdit.laser; color: win.cInk; font.family: win.fontName; font.pixelSize: 38; font.weight: Font.Light; font.letterSpacing: -1.2 }
+                                Text { y: 20; text: "mm/s"; color: win.cMut; font.family: win.fontName; font.pixelSize: 14 } }
+                            Lbl { font.pixelSize: 11; text: "Kit: " + (win.st.laser_speed !== undefined ? Math.round(win.st.laser_speed) + " mm/s" : "—") + " · Central-Vorgabe 650" }
+                            Row { spacing: 6
+                                KButton { width: 59; height: 44; size: 12; text: "−50"; ok: !parPage.locked; onClicked: parPage.set("laser", win.pEdit.laser - 50, 1, 1000) }
+                                KButton { width: 59; height: 44; size: 12; text: "−10"; ok: !parPage.locked; onClicked: parPage.set("laser", win.pEdit.laser - 10, 1, 1000) }
+                                KButton { width: 59; height: 44; size: 12; text: "+10"; ok: !parPage.locked; onClicked: parPage.set("laser", win.pEdit.laser + 10, 1, 1000) }
+                                KButton { width: 59; height: 44; size: 12; text: "+50"; ok: !parPage.locked; onClicked: parPage.set("laser", win.pEdit.laser + 50, 1, 1000) } }
+                        }
+                    }
+                    Panel {
+                        width: parent.width; height: parent.parent.height - 168 - 8
+                        Column { anchors.fill: parent; anchors.margins: 12; spacing: 8
+                            Lbl { text: win.pDirty ? "Änderungen noch nicht gesendet" : "Werte wie im Kit"; color: win.pDirty ? win.cHeat : win.cMut }
+                            Row { spacing: 8
+                                KButton { width: 118; height: 46; size: 13; text: "Kit-Werte"; ok: win.pDirty; onClicked: { win.pDirty = false; win.pEdit = win.pKit() } }
+                                KButton { width: 118; height: 46; size: 13; text: "Werkswerte"; ok: !parPage.locked && !!(win.st.factory && win.st.factory.live)
+                                    onClicked: { var f = win.st.factory.live
+                                        win.pEdit = { sw: Math.round(f.surface_warmup), cw: Math.round(f.chamber_warmup), sp: Math.round(f.surface_print), cp: Math.round(f.chamber_print), laser: Math.round(f.laser_speed) }
+                                        win.pDirty = true; toast.show("Werkswerte vom " + win.st.factory.saved + " geladen – noch nicht gesendet") } } }
+                            Item { width: 1; height: Math.max(0, parent.height - 16 - 46 - 52 - 24) }
+                            KButton {
+                                width: parent.width; kind: "pri"; text: "An Kit senden"; ok: !parPage.locked && win.pDirty
+                                onClicked: {
+                                    var e = win.pEdit, newMat = win.materialOf(e), old = win.kitMaterial
+                                    var txt = "Aufwärmen " + e.sw + " / " + e.cw + " °C · Druck " + e.sp + " / " + e.cp + " °C · Laser " + e.laser + " mm/s"
+                                    if (old === "PA12" && newMat === "TPE")
+                                        txt = "Umstellung auf TPE: Im Kit darf kein PA12 mehr sein. Laut Sintratec ist der Weg zurück zu PA12 danach nicht ohne Weiteres möglich.\n" + txt
+                                    else if (old === "TPE" && newMat === "PA12")
+                                        txt = "Umstellung auf PA12: Kein TPE mehr im Kit. Laut Sintratec müssen danach alle Pulverdichtungen gegen neue getauscht werden.\n" + txt
+                                    win.ask("Parameter senden?", txt, function () {
+                                        win.send({ cmd: "targets", surface_warmup: e.sw, chamber_warmup: e.cw, surface_print: e.sp, chamber_print: e.cp }, function (ok) {
+                                            if (!ok) return
+                                            win.send({ cmd: "laser_speed", mm_s: e.laser }, function (ok2) { if (ok2) { win.pDirty = false; toast.show("Parameter im Kit gespeichert") } })
+                                        })
+                                    })
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // ======= System =======
             Item {
                 opacity: win.page === "sys" ? 1 : 0; visible: opacity > 0
@@ -802,7 +919,7 @@ Window {
                 y: 42; width: parent.width; height: parent.height - 42
                 Panel {
                     id: msgPanel
-                    width: (parent.width - 166) / 2; height: parent.height; clip: true
+                    width: (parent.width - 166) / 2; height: parent.height - 60; clip: true
                     Flickable {
                         anchors.fill: parent; anchors.margins: 12; contentHeight: msgCol.height; clip: true
                         Column {
@@ -821,6 +938,11 @@ Window {
                             }
                         }
                     }
+                }
+                Row {
+                    y: msgPanel.height + 8; spacing: 8
+                    KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13; text: "Kalibrieren"; onClicked: win.page = "cal" }
+                    KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13; text: "Material & Parameter"; onClicked: win.page = "params" }
                 }
                 Panel {
                     id: infoPanel
