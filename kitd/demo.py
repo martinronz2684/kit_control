@@ -13,6 +13,7 @@ class DemoTransport:
         self.laser = 650.0
         self.printing = False      # startet bereit; „Druck starten“ unter Jobs startet einen simulierten Druck
         self.layers = 680
+        self.powder = False
         self.scaling = [1.0, 1.0, 1.0]
         self._next = b""
 
@@ -23,7 +24,8 @@ class DemoTransport:
         if c == P.COM_IDENTIFY:
             self._next = P.code(P.SIG_IDENTIFY) + struct.pack("<III", 4, 4, 12) + bytes(16)
         elif c == P.COM_REQUESTGENERALPRINTERSTATE:
-            self._next = P.code(P.SIG_GENERALPRINTERSTATE) + b"\x03" + le(0) + le(0)
+            st = 7 if self.printing else (4 if self.powder else 1)
+            self._next = P.code(P.SIG_GENERALPRINTERSTATE) + bytes([st]) + le(0) + le(0)
         elif c == P.COM_REQUESTPRINTSTATUS:
             layer = min(self.layers, int(t / 2)) if self.printing else 0
             if self.printing and layer >= self.layers:
@@ -47,6 +49,9 @@ class DemoTransport:
             self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
         elif c == P.COM_ABORTPRINT:
             self.printing = False
+            self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
+        elif c in (P.COM_GO_POWDERPREPARATION, P.COM_EXIT_POWDERPREPARATION):
+            self.powder = c == P.COM_GO_POWDERPREPARATION
             self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
         elif c == P.COM_REQUEST_SCALINGPARAMETERS1:
             self._next = P.code(P.SIG_SCALINGPARAMETERS1) + b"".join(le(v * 10000) for v in self.scaling)

@@ -62,6 +62,16 @@ Window {
         if (!scDirty && st.scaling) scEdit = { x: st.scaling.x, y: st.scaling.y, z: st.scaling.z }
         if (!pDirty && st.target_surface_print !== undefined) pEdit = pKit()
     }
+    // Wie Central (Pulver-Fenster): Beim Öffnen von „Bewegung“ geht der Kit in die Pulvervorbereitung,
+    // beim Verlassen wieder heraus. Nur darin lassen sich Platten fahren und Schichten auftragen.
+    property string lastPage: "print"
+    onPageChanged: {
+        if (page === "move" && st.connected && st.state === 1)
+            send({ cmd: "powder_prep_on" })
+        else if (lastPage === "move" && page !== "move" && st.connected && st.state === 4)
+            send({ cmd: "powder_prep_off" })
+        lastPage = page
+    }
     function depth(k) { return Math.max(0, Math.min(110, win.baseDepth[k] + win.moved[k])) }
     property int lastLayer: -1
     property bool kitdUp: false
@@ -951,7 +961,7 @@ Window {
                         anchors.fill: parent; anchors.margins: 12; spacing: 0
                         Repeater {
                             model: [["Modell", win.st.model], ["Firmware", win.st.firmware], ["Protokoll", win.st.protocol],
-                                    ["Geräte-ID", win.st.uid ? win.st.uid.slice(0, 12) + "…" : "—"], ["Zustand", win.st.state],
+                                    ["Geräte-ID", win.st.uid ? win.st.uid.slice(0, 12) + "…" : "—"], ["Zustand", win.st.state_name || win.st.state],
                                     ["WLAN", win.wifi.current ? win.wifi.current : "—"], ["Central", win.st.central ? "verbunden (" + win.st.central_peer + ")" : "—"], ["IP-Adresse", win.wifi.ip || "—"],
                                     
                                     ["Hinweis", win.st.message || "—"]]

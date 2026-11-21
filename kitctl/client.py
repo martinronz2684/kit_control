@@ -223,7 +223,11 @@ class Kit:
     # read-only requests ------------------------------------------------------
     def request(self, name: str):
         cmd, length, parse = P.READ_ONLY[name]
-        return parse(self.transact(P.code(cmd), length))
+        ans = self.transact(P.code(cmd), length)
+        if len(ans) < length:
+            # Central prüft die Antwortlänge nicht (ENFORCE_ANSWER_SIZE_CHECK = false): fehlende Bytes als 0
+            ans = ans + bytes(length - len(ans))
+        return parse(ans)
 
     def snapshot(self) -> dict:
         out = {}

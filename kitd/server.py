@@ -25,7 +25,8 @@ UI_DIR = Path(os.environ.get("KIT_UI_DIR", Path(__file__).resolve().parent.paren
 PORT = int(os.environ.get("KIT_PORT", "8080"))
 DEMO = os.environ.get("KIT_DEMO") == "1"
 # Vorzeichen der Fahrbefehle: +1 heißt "positiver Wert = Plattform runter". Nach dem ersten Test anpassen.
-MOVE_SIGN = float(os.environ.get("KIT_MOVE_SIGN", "1"))
+# Oberfläche: mm > 0 = nach unten. Central: positiver Fahrweg = nach oben (PowderPaneControllerKit) -> umdrehen
+MOVE_SIGN = float(os.environ.get("KIT_MOVE_SIGN", "-1"))
 
 
 STATE_DIR = os.environ.get("KIT_STATE_DIR", "/var/lib/kitd")
@@ -150,7 +151,8 @@ class KitWorker(threading.Thread):
         out = {}
         st = snap["state"]
         if not isinstance(st, Exception):
-            out.update(state=st.state, warning_code=st.warnings, error_code=st.errors,
+            out.update(state=st.state, state_name=P.STATE_NAMES.get(st.state, f"Zustand {st.state}"),
+                       warning_code=st.warnings, error_code=st.errors,
                        waiting_for_sd=st.state == P.STATE_WAITING_FOR_SD_CARD)
         pr = snap["print"]
         if not isinstance(pr, Exception):
@@ -203,6 +205,11 @@ class KitWorker(threading.Thread):
             try:
                 payload = self._encode(cmd)
                 strict = cmd.get("cmd") in ("scaling", "pattern", "targets", "laser_speed")
+                if cmd.get("cmd") in ("move", "make_layer") and self.snapshot().get("state") != P.STATE_POWDER_PREP:
+                    # Wie Central: Fahren und Schicht auftragen nur in der Pulvervorbereitung
+                    with self.usb:
+                        self.kit.command(P.cmd_simple(P.COM_GO_POWDERPREPARATION), strict=True)
+                    self._set(state=P.STATE_POWDER_PREP, state_name=P.STATE_NAMES[P.STATE_POWDER_PREP])
                 with self.usb:
                     self.kit.command(payload, strict=strict)
                 if cmd.get("cmd") == "scaling":

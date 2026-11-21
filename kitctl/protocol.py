@@ -100,6 +100,12 @@ SUPPORTED_FIRMWARE = 12
 SUPPORTED_PROTOCOL = 4
 
 STATE_WAITING_FOR_SD_CARD = 200  # GeneralPrinterStateKit
+# Zustände wie Central sie auswertet (PowderPaneControllerKit): 1 bereit, 4 Pulvervorbereitung,
+# 5/6 heizt auf, 7–9 druckt, 10 Tür offen. Manuelles Fahren geht nur in der Pulvervorbereitung (4).
+STATE_IDLE = 1
+STATE_POWDER_PREP = 4
+STATE_NAMES = {1: "Bereit", 2: "Beschäftigt", 3: "Beschäftigt", 4: "Pulvervorbereitung", 5: "Heizt auf", 6: "Heizt auf",
+               7: "Druckt", 8: "Druckt", 9: "Druckt", 10: "Tür offen", 200: "Wartet auf SD-Karte"}
 
 
 class ProtocolError(Exception):
