@@ -46,11 +46,11 @@ elif any(r.get("status") != "completed" for r in runs): print("pending")
 else: print("ok")' 2>/dev/null || echo ok)"
   if [ "$VERDICT" = failure ]; then
     echo "Stand ${SHA:0:7} hat die Prüfung der Oberfläche nicht bestanden – Update übersprungen."
-    exit 3
+    exit 0
   fi
   if [ "$VERDICT" = pending ]; then
     echo "Stand ${SHA:0:7} wird gerade noch geprüft – bitte in ein paar Minuten erneut versuchen."
-    exit 4
+    exit 0
   fi
 fi
 REF="${SHA:-$BRANCH}"
