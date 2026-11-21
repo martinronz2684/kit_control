@@ -205,13 +205,26 @@ class KitWorker(threading.Thread):
             try:
                 payload = self._encode(cmd)
                 strict = cmd.get("cmd") in ("scaling", "pattern", "targets", "laser_speed")
-                if cmd.get("cmd") in ("move", "make_layer") and self.snapshot().get("state") != P.STATE_POWDER_PREP:
+                motion = cmd.get("cmd") in ("move", "make_layer")
+                if motion and self.snapshot().get("state") != P.STATE_POWDER_PREP:
                     # Wie Central: Fahren und Schicht auftragen nur in der Pulvervorbereitung
                     with self.usb:
-                        self.kit.command(P.cmd_simple(P.COM_GO_POWDERPREPARATION), strict=True)
-                    self._set(state=P.STATE_POWDER_PREP, state_name=P.STATE_NAMES[P.STATE_POWDER_PREP])
-                with self.usb:
-                    self.kit.command(payload, strict=strict)
+                        self.kit.command(P.cmd_simple(P.COM_GO_POWDERPREPARATION))
+                        st = self.kit.request("state")
+                    self._set(state=st.state, state_name=P.STATE_NAMES.get(st.state, f"Zustand {st.state}"))
+                try:
+                    with self.usb:
+                        # Central wertet auch bei Fahrbefehlen das Erfolgs-Byte aus („Printer reported unsuccessful …“)
+                        self.kit.command(payload, strict=strict or motion)
+                except P.ProtocolError as e:
+                    if motion:
+                        snap = self.snapshot()
+                        why = [f"Zustand: {snap.get('state_name', '?')}"]
+                        warn = [w.get("code") for w in snap.get("warnings", []) if isinstance(w, dict)]
+                        if 81 in warn or 82 in warn:
+                            why.append("Referenzfahrt beim Einschalten fehlgeschlagen (81/82) – zuerst System → Kalibrieren → Referenzfahrt")
+                        raise P.ProtocolError(f"Kit führt die Bewegung nicht aus ({'; '.join(why)})") from e
+                    raise
                 if cmd.get("cmd") == "scaling":
                     self._read_scaling()
                 reply.put({"ok": True})
