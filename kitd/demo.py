@@ -11,6 +11,7 @@ class DemoTransport:
         self.chamber_target = 145.0
         self.printing = False      # startet bereit; „Druck starten“ unter Jobs startet einen simulierten Druck
         self.layers = 680
+        self.scaling = [1.0, 1.0, 1.0]
         self._next = b""
 
     def write(self, data):
@@ -44,6 +45,11 @@ class DemoTransport:
             self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
         elif c == P.COM_ABORTPRINT:
             self.printing = False
+            self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
+        elif c == P.COM_REQUEST_SCALINGPARAMETERS1:
+            self._next = P.code(P.SIG_SCALINGPARAMETERS1) + b"".join(le(v * 10000) for v in self.scaling)
+        elif c == P.COM_SET_SCALINGPARAMETERS1:
+            self.scaling = [struct.unpack_from("<i", data, 2 + 4 * k)[0] / 10000 for k in range(3)]
             self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
         elif c == P.COM_TARGET_CHAMBER_PRINT:
             self.chamber_target = struct.unpack_from("<i", data, 2)[0] / 1000

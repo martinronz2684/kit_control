@@ -112,13 +112,16 @@ class Kit:
         return out
 
     # commands that change something -----------------------------------------
-    def command(self, payload: bytes) -> None:
+    def command(self, payload: bytes, strict: bool = False) -> None:
+        """strict: auch das Erfolgs-Byte der Antwort prüfen (wie Central bei Scaling und Testmustern)."""
         ans = self.transact(payload, P.OK_LENGTH)
         c = P.code_of(ans)
         if c != P.SIG_OPERATIONSUCCESSFUL:
             if c == P.SIG_UNKNOWN_COMMAND:
                 raise P.ProtocolError("Kit kennt den Befehl nicht")
             raise P.ProtocolError(f"Kit hat nicht bestätigt (Antwort {c})")
+        if strict and len(ans) >= 3 and ans[2] == 0:
+            raise P.ProtocolError("Kit meldet: nicht erfolgreich")
 
     def close(self) -> None:
         self.t.close()

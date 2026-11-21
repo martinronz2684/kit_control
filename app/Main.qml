@@ -42,6 +42,12 @@ Window {
     readonly property var demoJob: ({ name: "Scharniergehäuse_v3", layers: 680, layerMm: 0.1,
         parts: [[12, 14, 30, 40, 12, 0, 68], [50, 18, 36, 25, 12, 0, 30], [54, 56, 18, 28, 50, 10, 55], [12, 62, 30, 20, 12, 40, 68]] })
     readonly property var job: win.st.demo ? win.demoJob : null
+    // Kalibrierung: bearbeitete Skalierung in % (wird erst mit „An Kit senden“ übertragen)
+    property var scEdit: ({ x: 0, y: 0, z: 0 })
+    property bool scDirty: false
+    function scKit(k) { return win.st.scaling ? win.st.scaling[k] : 0 }
+    function pct(v) { return (v > 0 ? "+" : v < 0 ? "−" : "±") + Api.de(Math.abs(v).toFixed(2)) + " %" }
+    onStChanged: if (!scDirty && st.scaling) scEdit = { x: st.scaling.x, y: st.scaling.y, z: st.scaling.z }
     function depth(k) { return Math.max(0, Math.min(110, win.baseDepth[k] + win.moved[k])) }
     property int lastLayer: -1
     property bool kitdUp: false
@@ -240,6 +246,7 @@ Window {
                 NavBtn { key: "move"; label: "Bewegung"; icon: "move" }
                 NavBtn { key: "heat"; label: "Heizung"; icon: "heat"; hot: true }
                 NavBtn { key: "jobs"; label: "Jobs"; icon: "jobs" }
+                NavBtn { key: "cal"; label: "Kalibrieren"; icon: "cal" }
             }
             NavBtn { key: "sys"; label: "System"; icon: "system"; anchors.bottom: parent.bottom; anchors.bottomMargin: 8; anchors.horizontalCenter: parent.horizontalCenter }
         }
@@ -254,7 +261,7 @@ Window {
                 width: parent.width; height: 34
                 Text {
                     anchors.verticalCenter: parent.verticalCenter; x: 4
-                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", sys: "System" })[win.page]
+                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "Kalibrieren", sys: "System" })[win.page]
                     color: win.cInk; font.family: win.fontName; font.pixelSize: 22; font.weight: Font.Medium; font.letterSpacing: -0.6
                 }
                 Row {
@@ -649,6 +656,143 @@ Window {
                 }
                 Component.onCompleted: pick = Math.round(layers * 0.6)
                 onLayersChanged: pick = Math.max(1, Math.round(layers * 0.6))
+            }
+
+            // ======= Kalibrieren =======
+            // Wie das Central-Fenster „Calibrate“: Muster/Mittelpunkt zeigen, Referenzfahrt, digitale Skalierung (max. ±5 %)
+            Item {
+                id: calPage
+                opacity: win.page === "cal" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+                y: 42; width: parent.width; height: parent.height - 42
+                readonly property bool locked: !win.st.connected || !!win.st.printing
+                function step(k, d) {
+                    var v = Math.round((win.scEdit[k] + d) * 100) / 100
+                    v = Math.max(-5, Math.min(5, v))
+                    var e = { x: win.scEdit.x, y: win.scEdit.y, z: win.scEdit.z }; e[k] = v
+                    win.scEdit = e; win.scDirty = true
+                }
+                Panel {
+                    id: scPanel
+                    width: parent.width - 276; height: parent.height
+                    Column {
+                        anchors.fill: parent; anchors.margins: 14; spacing: 8
+                        Item { width: parent.width; height: 16
+                            Lbl { text: "Digitale Skalierung · max. ±5 %" }
+                            Lbl { anchors.right: parent.right; text: win.scDirty ? "nicht gesendet" : (win.st.scaling ? "wie im Kit" : "—"); color: win.scDirty ? win.cHeat : win.cMut } }
+                        Repeater {
+                            model: [["X", "x"], ["Y", "y"], ["Z", "z"]]
+                            Item {
+                                width: parent.width; height: 58
+                                Text { y: 8; text: modelData[0]; color: win.cInk; font.family: win.fontName; font.pixelSize: 22; font.weight: Font.Medium }
+                                KButton { x: 36; y: 4; width: 52; height: 48; text: "−"; size: 20; ok: !calPage.locked; onClicked: calPage.step(modelData[1], -0.05) }
+                                Column {
+                                    x: 96; width: parent.width - 96 - 60; y: 2
+                                    Text { width: parent.width; horizontalAlignment: Text.AlignHCenter; text: win.pct(win.scEdit[modelData[1]])
+                                        color: win.cInk; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.Light }
+                                    Lbl { width: parent.width; horizontalAlignment: Text.AlignHCenter; font.pixelSize: 11; text: "Kit: " + win.pct(win.scKit(modelData[1])) }
+                                }
+                                KButton { x: parent.width - 52; y: 4; width: 52; height: 48; text: "+"; size: 20; ok: !calPage.locked; onClicked: calPage.step(modelData[1], 0.05) }
+                            }
+                        }
+                        Lbl { text: "Z-Skalierung möglichst gering halten."; font.pixelSize: 11 }
+                        Row {
+                            spacing: 8; width: parent.width
+                            KButton { width: (parent.width - 16) / 3; height: 46; size: 13; text: "Berechnen"; ok: !calPage.locked; onClicked: calcOvl.open() }
+                            KButton { width: (parent.width - 16) / 3; height: 46; size: 13; text: "Kit-Werte"; ok: win.scDirty
+                                onClicked: { win.scDirty = false; win.scEdit = { x: win.scKit("x"), y: win.scKit("y"), z: win.scKit("z") } } }
+                            KButton { width: (parent.width - 16) / 3; height: 46; size: 13; text: "Werkswerte"; ok: !calPage.locked && !!win.st.factory
+                                onClicked: { var f = win.st.factory.scaling; win.scEdit = { x: f.x, y: f.y, z: f.z }; win.scDirty = true
+                                    toast.show("Werkswerte vom " + win.st.factory.saved + " geladen – noch nicht gesendet") } }
+                        }
+                        KButton {
+                            width: parent.width; kind: "pri"; text: "An Kit senden"; ok: !calPage.locked && win.scDirty
+                            onClicked: win.ask("Skalierung senden?",
+                                "X " + win.pct(win.scEdit.x) + " · Y " + win.pct(win.scEdit.y) + " · Z " + win.pct(win.scEdit.z) + "\nWirkt auf alle folgenden Drucke.",
+                                function () { win.send({ cmd: "scaling", x: win.scEdit.x, y: win.scEdit.y, z: win.scEdit.z }, function (ok) { if (ok) { win.scDirty = false; toast.show("Skalierung im Kit gespeichert") } }) })
+                        }
+                    }
+                }
+                Column {
+                    x: scPanel.width + 8; width: 268; spacing: 8
+                    Panel {
+                        width: parent.width; height: 214
+                        Column { anchors.fill: parent; anchors.margins: 12; spacing: 8
+                            Lbl { text: "Kalibriermuster" }
+                            KButton { width: parent.width; height: 46; text: "Muster anzeigen"; ok: !calPage.locked; onClicked: win.send({ cmd: "pattern", name: "pattern" }) }
+                            KButton { width: parent.width; height: 46; text: "Mittelpunkt anzeigen"; ok: !calPage.locked; onClicked: win.send({ cmd: "pattern", name: "center" }) }
+                            KButton { width: parent.width; height: 46; text: "Anzeige aus"; ok: !!win.st.connected; onClicked: win.send({ cmd: "pattern", name: "off" }) }
+                        }
+                    }
+                    Panel {
+                        width: parent.width; height: 170
+                        Column { anchors.fill: parent; anchors.margins: 12; spacing: 8
+                            Lbl { text: "Referenzfahrt" }
+                            Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 12
+                                text: "Fährt Bauplattform, Vorrat und Beschichter auf ihre Ausgangsposition – wie „Home all axes“ in Central." }
+                            KButton { width: parent.width; height: 46; text: "Referenzfahrt starten"; ok: !calPage.locked
+                                onClicked: win.ask("Referenzfahrt?", "Alle Achsen fahren auf ihre Ausgangsposition. Bauraum frei?", function () {
+                                    win.send({ cmd: "pattern", name: "home" }, function (ok) { if (ok) win.moved = { print: 0, reservoir: 0 } }) }) }
+                        }
+                    }
+                }
+
+                // Berechnen aus dem vermessenen Kalibrierdruck (Formel wie Central)
+                Rectangle {
+                    id: calcOvl
+                    parent: root; anchors.fill: parent; color: "#cc000000"; visible: false; z: 20
+                    property var soll: ({ x: 50, y: 50, z: 50 })
+                    property var ist: ({ x: 50, y: 50, z: 50 })
+                    function open() { visible = true }
+                    function bump(which, k, d) {
+                        var o = which === "soll" ? soll : ist
+                        var n = { x: o.x, y: o.y, z: o.z }; n[k] = Math.max(1, Math.round((o[k] + d) * 100) / 100)
+                        if (which === "soll") soll = n; else ist = n
+                    }
+                    MouseArea { anchors.fill: parent }
+                    Panel {
+                        anchors.centerIn: parent; width: 640; height: 330; color: "#1b1b1f"
+                        Column {
+                            anchors.fill: parent; anchors.margins: 16; spacing: 10
+                            Text { text: "Aus Messung berechnen"; color: win.cInk; font.family: win.fontName; font.pixelSize: 20; font.weight: Font.Medium }
+                            Lbl { text: "Kalibrierdruck vermessen. Berücksichtigt die im Kit eingestellte Skalierung." }
+                            Repeater {
+                                model: [["X", "x"], ["Y", "y"], ["Z", "z"]]
+                                Row {
+                                    spacing: 6; height: 44
+                                    Text { width: 24; anchors.verticalCenter: parent.verticalCenter; text: modelData[0]; color: win.cInk; font.family: win.fontName; font.pixelSize: 18; font.weight: Font.Medium }
+                                    Lbl { width: 30; anchors.verticalCenter: parent.verticalCenter; text: "Soll" }
+                                    KButton { width: 40; height: 44; text: "−"; onClicked: calcOvl.bump("soll", modelData[1], -1) }
+                                    Text { width: 84; anchors.verticalCenter: parent.verticalCenter; horizontalAlignment: Text.AlignHCenter; text: Api.de(calcOvl.soll[modelData[1]].toFixed(2)) + " mm"; color: win.cInk; font.family: win.fontName; font.pixelSize: 15 }
+                                    KButton { width: 40; height: 44; text: "+"; onClicked: calcOvl.bump("soll", modelData[1], 1) }
+                                    Item { width: 10; height: 1 }
+                                    Lbl { width: 22; anchors.verticalCenter: parent.verticalCenter; text: "Ist" }
+                                    KButton { width: 50; height: 44; size: 12; text: "−0,1"; onClicked: calcOvl.bump("ist", modelData[1], -0.1) }
+                                    KButton { width: 54; height: 44; size: 12; text: "−0,01"; onClicked: calcOvl.bump("ist", modelData[1], -0.01) }
+                                    Text { width: 84; anchors.verticalCenter: parent.verticalCenter; horizontalAlignment: Text.AlignHCenter; text: Api.de(calcOvl.ist[modelData[1]].toFixed(2)) + " mm"; color: win.cInk; font.family: win.fontName; font.pixelSize: 15 }
+                                    KButton { width: 54; height: 44; size: 12; text: "+0,01"; onClicked: calcOvl.bump("ist", modelData[1], 0.01) }
+                                    KButton { width: 50; height: 44; size: 12; text: "+0,1"; onClicked: calcOvl.bump("ist", modelData[1], 0.1) }
+                                }
+                            }
+                            Row {
+                                spacing: 8; width: parent.width
+                                KButton { width: (parent.width - 8) / 2; height: 48; text: "Abbrechen"; onClicked: calcOvl.visible = false }
+                                KButton { width: (parent.width - 8) / 2; height: 48; kind: "pri"; text: "Übernehmen"
+                                    onClicked: {
+                                        var e = {}, keys = ["x", "y", "z"]
+                                        for (var i = 0; i < 3; i++) {
+                                            var k = keys[i], f = 1 + win.scKit(k) / 100
+                                            var p = (f * calcOvl.soll[k] / calcOvl.ist[k] - 1) * 100
+                                            if (Math.abs(p) > 5.0005) { toast.show(k.toUpperCase() + ": mehr als ±5 % – bitte mechanisch nachjustieren"); return }
+                                            e[k] = Math.round(p * 100) / 100
+                                        }
+                                        win.scEdit = e; win.scDirty = true; calcOvl.visible = false
+                                        toast.show("Neue Werte übernommen – mit „An Kit senden“ übertragen")
+                                    } }
+                            }
+                        }
+                    }
+                }
             }
 
             // ======= System =======

@@ -93,3 +93,19 @@ class ProtocolTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def test_kalibrierung_wie_central():
+    # Testmuster: Code + 1 Byte (1 Muster, 2 Mittelpunkt, 0 aus, 4 Referenzfahrt)
+    assert P.cmd_test_pattern("pattern") == P.code(P.COM_TESTPATTERN) + b"\x01"
+    assert P.cmd_test_pattern("home")[-1] == 4
+    # Scaling: Faktor x 10000 als int32 LE; Prozent wie Central gerundet; max ±5 %
+    assert P.scaling_factor(1.25) == 1.0125
+    assert P.cmd_scaling(1.0125, 1.0, 0.99)[2:] == struct.pack("<iii", 10125, 10000, 9900)
+    import pytest
+    with pytest.raises(ValueError):
+        P.scaling_factor(5.2)
+    # Berechnen: (Faktor * Soll / Ist - 1) * 100
+    assert abs(P.new_scaling_percent(1.0, 50, 49.5) - 1.0101) < 1e-3
+    sc = P.ScalingParameters.parse(P.code(P.SIG_SCALINGPARAMETERS1) + struct.pack("<iii", 10125, 10000, 9950))
+    assert (sc.x, sc.y, sc.z) == (1.0125, 1.0, 0.995)

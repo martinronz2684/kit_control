@@ -28,6 +28,9 @@ DEMO = os.environ.get("KIT_DEMO") == "1"
 MOVE_SIGN = float(os.environ.get("KIT_MOVE_SIGN", "1"))
 
 
+STATE_DIR = os.environ.get("KIT_STATE_DIR", "/var/lib/kitd")
+
+
 class KitWorker(threading.Thread):
     """Owns the USB connection. Polls once per second, runs queued commands in between."""
 
@@ -101,10 +104,34 @@ class KitWorker(threading.Thread):
             self.kit = kit
             self._set(connected=True, message="", model=ident.model_name, firmware=ident.firmware,
                       protocol=ident.comm, uid=ident.uid.hex(), demo=self.demo)
+            self._read_scaling(backup=True)
         except SystemExit as e:  # UsbTransport: no device
             self._set(connected=False, message=str(e))
         except Exception as e:
             self._set(connected=False, message=f"Verbindung fehlgeschlagen: {e}")
+
+    def _read_scaling(self, backup=False):
+        """Scaling vom Kit lesen; beim ersten Verbinden je Kit die Werkswerte sichern."""
+        try:
+            with self.usb:
+                sc = self.kit.request("scaling")
+        except Exception as e:
+            self._set(scaling=None, scaling_error=str(e))
+            return
+        pct = {k: round((getattr(sc, k) - 1) * 100, 2) for k in "xyz"}
+        self._set(scaling=pct, scaling_error="")
+        if backup:
+            uid = self.snapshot().get("uid", "unbekannt")
+            f = os.path.join(STATE_DIR, f"werkswerte-{'demo' if self.demo else uid}.json")
+            try:
+                if not os.path.exists(f):
+                    os.makedirs(STATE_DIR, exist_ok=True)
+                    with open(f, "w") as fh:
+                        json.dump({"scaling": pct, "saved": time.strftime("%Y-%m-%d %H:%M")}, fh)
+                with open(f) as fh:
+                    self._set(factory=json.load(fh))
+            except OSError:
+                pass
 
     def _poll(self):
         snap = self.kit.snapshot()
@@ -163,8 +190,11 @@ class KitWorker(threading.Thread):
                 return
             try:
                 payload = self._encode(cmd)
+                strict = cmd.get("cmd") in ("scaling", "pattern")
                 with self.usb:
-                    self.kit.command(payload)
+                    self.kit.command(payload, strict=strict)
+                if cmd.get("cmd") == "scaling":
+                    self._read_scaling()
                 reply.put({"ok": True})
             except (P.ProtocolError, ValueError, KeyError) as e:
                 reply.put({"ok": False, "error": str(e)})
@@ -172,7 +202,7 @@ class KitWorker(threading.Thread):
     def _encode(self, c: dict) -> bytes:
         name = c.get("cmd")
         printing = self.snapshot().get("printing", False)
-        motion = {"move", "make_layer", "powder_prep_on"}
+        motion = {"move", "make_layer", "powder_prep_on", "pattern", "scaling", "exit_calibration"}
         if printing and name in motion:
             raise ValueError("Während des Drucks gesperrt")
         if name == "move":
@@ -192,6 +222,12 @@ class KitWorker(threading.Thread):
             if not 0 <= t <= 185:
                 raise ValueError("Temperatur 0–185 °C")
             return P.cmd_target(c["which"], t)
+        if name == "pattern":
+            if c.get("name") not in P.PATTERNS:
+                raise ValueError("unbekanntes Muster")
+            return P.cmd_test_pattern(c["name"])
+        if name == "scaling":
+            return P.cmd_scaling(*(P.scaling_factor(float(c[k])) for k in "xyz"))
         if name == "warmup":
             return P.cmd_warmup(bool(c["on"]))
         if name in P.SIMPLE:

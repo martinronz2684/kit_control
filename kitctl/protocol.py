@@ -249,6 +249,20 @@ class Frame:
         return bool(self.codes)
 
 
+@dataclass
+class ScalingParameters:
+    """Digitale Skalierung des Laserbilds als Faktor (1.0 = 0 %), je Achse."""
+    x: float
+    y: float
+    z: float
+    LENGTH = 14  # code(2) + 3 x int32 / 10000
+
+    @classmethod
+    def parse(cls, buf: bytes) -> "ScalingParameters":
+        expect(buf, SIG_SCALINGPARAMETERS1, cls.LENGTH)
+        return cls(*(i32(buf, 2 + 4 * k) / 10000.0 for k in range(3)))
+
+
 # --- Read-only requests: (command code, answer length, parser) ----------------
 READ_ONLY = {
     "state": (COM_REQUESTGENERALPRINTERSTATE, GeneralState.LENGTH, GeneralState.parse),
@@ -259,6 +273,7 @@ READ_ONLY = {
     "countdown": (COM_REQUEST_PRINTWARMUPCOUNTDOWN, WarmupCountdown.LENGTH, WarmupCountdown.parse),
     "errors": (COM_REQUEST_ERRORFRAME, Frame.LENGTH, lambda b: Frame.parse(b, SIG_ERRORFRAME)),
     "warnings": (COM_REQUEST_WARNINGFRAME, Frame.LENGTH, lambda b: Frame.parse(b, SIG_WARNINGFRAME)),
+    "scaling": (COM_REQUEST_SCALINGPARAMETERS1, ScalingParameters.LENGTH, ScalingParameters.parse),
 }
 
 # Codes this tool refuses to send, whatever the caller asks for.
@@ -312,6 +327,41 @@ def cmd_warmup(on: bool) -> bytes:
     return code(COM_WARMUPMODE) + bytes([1 if on else 0])
 
 
+# Kalibrierung, wie im Central-Fenster „Calibrate“
+PATTERNS = {"off": 0, "pattern": 1, "center": 2, "home": 4}   # 0 = Anzeige aus, 4 = Referenzfahrt aller Achsen
+MAX_SCALING_PERCENT = 5.0                                      # Central erlaubt höchstens ±5 %
+
+
+def cmd_test_pattern(name: str) -> bytes:
+    return code(COM_TESTPATTERN) + bytes([PATTERNS[name]])
+
+
+def scaling_factor(percent: float) -> float:
+    """Wie Central: Prozent -> Faktor, auf 4 Nachkommastellen gerundet."""
+    if abs(percent) > MAX_SCALING_PERCENT + 0.0005:
+        raise ValueError(f"Skalierung höchstens ±{MAX_SCALING_PERCENT:g} %")
+    return round((1 + percent / 100.0) * 10000) / 10000.0
+
+
+def new_scaling_percent(current_factor: float, expected_mm: float, measured_mm: float) -> float:
+    """Wie Central „Calculate“: berücksichtigt die bereits eingestellte Skalierung."""
+    if expected_mm <= 0 or measured_mm <= 0:
+        raise ValueError("Maße müssen größer als 0 sein")
+    p = (current_factor * expected_mm / measured_mm - 1) * 100
+    if abs(p) > MAX_SCALING_PERCENT + 0.0005:
+        raise ValueError(f"Mehr als ±{MAX_SCALING_PERCENT:g} % – bitte mechanisch nachjustieren")
+    return p
+
+
+def cmd_scaling(x: float, y: float, z: float) -> bytes:
+    return code(COM_SET_SCALINGPARAMETERS1) + b"".join(i32le(f * 10000) for f in (x, y, z))
+
+
+def cmd_laser_speed(which: str, mm_s: float) -> bytes:
+    c = {"general": COM_GENERALLASERSPEED, "contour": COM_SETLASERSPEED_CONTOUR}[which]
+    return code(c) + i32le(mm_s * 1000)
+
+
 def cmd_simple(c: int) -> bytes:
     return code(c)
 
@@ -323,4 +373,5 @@ SIMPLE = {
     "freeze_motors": COM_FREEZE_ALL_MOTOR_FUNCTIONS,
     "powder_prep_on": COM_GO_POWDERPREPARATION,
     "powder_prep_off": COM_EXIT_POWDERPREPARATION,
+    "exit_calibration": COM_EXITCALIBRATION,
 }

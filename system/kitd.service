@@ -3,6 +3,7 @@ Description=Kit Controller Dienst (USB zum Sintratec Kit)
 After=network.target
 
 [Service]
+StateDirectory=kitd
 User=kit
 Group=kit
 WorkingDirectory=/opt/kit-controller
