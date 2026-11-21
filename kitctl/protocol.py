@@ -18,6 +18,7 @@ from dataclasses import dataclass
 VENDOR_ID = 0x03EB          # Atmel   (Central: VID 1003)
 PRODUCT_ID = 0x8002         #         (Central: PID -32766 as Java short)
 INTERFACE = 0               # Central claims interface 0 (the SD card is a separate MSC interface)
+ALT_SETTING = 1             # Central: setInterfaceAltSetting(handle, 0, 1) – nur dort liegen die Bulk-Endpunkte
 EP_OUT = 0x06               # PrinterSpecUSBV.getCommandBulkOutEndPoint()
 EP_IN = 0x85                # PrinterSpecUSBV.getSignalBulkInEndPoint()
 BULK_BUFFER = 512           # PrinterSpecKit.getBulkBufferSize()

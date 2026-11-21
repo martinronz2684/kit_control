@@ -65,7 +65,7 @@ def usb_diag(dev) -> str:
 class UsbTransport:
     """Wie Central (usb4java/libusb, USBV_HandShake):
     Gerät 03eb:8002 öffnen, Kernel-Treiber lösen, Interface 0 beanspruchen,
-    Alt-Setting 0 setzen, dann Bulk OUT 0x06 / Bulk IN 0x85 mit 2000 ms Timeout.
+    Alt-Setting 1 setzen, dann Bulk OUT 0x06 / Bulk IN 0x85 mit 2000 ms Timeout.
     Bei Fehlern wird alles wieder freigegeben (sonst bleibt das Interface belegt: „Resource busy“)."""
 
     def __init__(self, timeout_ms: int = P.TIMEOUT_MS):
@@ -120,11 +120,10 @@ class UsbTransport:
             pass
         self.step = "Interface 0 beanspruchen"
         usb.util.claim_interface(dev, P.INTERFACE)
-        self.step = "Alt-Setting 0"
-        try:
-            dev.set_interface_altsetting(interface=P.INTERFACE, alternate_setting=0)
-        except usb.core.USBError:
-            pass   # manche Firmwares antworten mit STALL, obwohl es nur ein Alt-Setting gibt
+        # Wie Central (LibUsb.setInterfaceAltSetting(handle, 0, 1)): Erst Alt-Setting 1 hat die
+        # Bulk-Endpunkte 0x06/0x85 – Alt-Setting 0 hat gar keine, Senden ergäbe [Errno 5].
+        self.step = "Alt-Setting 1"
+        dev.set_interface_altsetting(interface=P.INTERFACE, alternate_setting=P.ALT_SETTING)
 
     def _flush(self) -> None:
         """Alte Antworten im Puffer verwerfen (z. B. nach einem abgebrochenen Lauf)."""
