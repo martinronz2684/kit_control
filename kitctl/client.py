@@ -34,6 +34,34 @@ def _usb_holders(dev) -> list[str]:
     return out
 
 
+def usb_diag(dev) -> str:
+    """Kurzbeschreibung der USB-Schnittstellen des Kits samt gebundenem Linux-Treiber."""
+    import os
+    try:
+        path = f"{dev.bus}-" + ".".join(str(p) for p in (dev.port_numbers or ()))
+    except Exception:
+        path = "?"
+    parts = []
+    try:
+        cfg = dev.get_active_configuration()
+        parts.append(f"Konfig {cfg.bConfigurationValue}")
+    except Exception as e:
+        cfg = None
+        parts.append(f"Konfig ? ({e})")
+    try:
+        for c in dev:
+            for intf in c:
+                eps = "/".join(f"{ep.bEndpointAddress:02x}" for ep in intf)
+                drv = "-"
+                link = f"/sys/bus/usb/devices/{path}:{c.bConfigurationValue}.{intf.bInterfaceNumber}/driver"
+                if os.path.islink(link):
+                    drv = os.path.basename(os.readlink(link))
+                parts.append(f"IF{intf.bInterfaceNumber}.{intf.bAlternateSetting} Kl.{intf.bInterfaceClass:02x} EP {eps} Treiber {drv}")
+    except Exception as e:
+        parts.append(f"Deskriptoren nicht lesbar ({e})")
+    return f"USB {path}: " + "; ".join(parts)
+
+
 class UsbTransport:
     """Wie Central (usb4java/libusb, USBV_HandShake):
     Gerät 03eb:8002 öffnen, Kernel-Treiber lösen, Interface 0 beanspruchen,
@@ -77,18 +105,22 @@ class UsbTransport:
                 who = _usb_holders(dev)
                 raise P.ProtocolError("USB-Schnittstelle des Kits ist belegt"
                                       + (f" von {', '.join(who)}" if who else " (anderes Programm?)"))
-            raise P.ProtocolError(f"USB-Fehler beim Öffnen: {last}")
+            raise P.ProtocolError(f"USB-Fehler bei „{getattr(self, 'step', 'Öffnen')}“: {last} · {usb_diag(dev)}")
+        self.diag = usb_diag(self.dev)
         self._flush()
 
     def _open(self, dev) -> None:
         usb = self._usb
+        self.step = "Kernel-Treiber lösen"
         try:
             if dev.is_kernel_driver_active(P.INTERFACE):
                 dev.detach_kernel_driver(P.INTERFACE)
                 self._reattach = True
         except NotImplementedError:
             pass
+        self.step = "Interface 0 beanspruchen"
         usb.util.claim_interface(dev, P.INTERFACE)
+        self.step = "Alt-Setting 0"
         try:
             dev.set_interface_altsetting(interface=P.INTERFACE, alternate_setting=0)
         except usb.core.USBError:
@@ -119,13 +151,29 @@ class UsbTransport:
         except Exception:
             pass
 
+    def _retry(self, what: str, ep: int, fn):
+        usb = self._usb
+        try:
+            return fn()
+        except usb.core.USBError as e:
+            if getattr(e, "errno", None) not in (5, 32):   # E/A-Fehler oder Stall
+                raise
+            try:
+                self.dev.clear_halt(ep)
+            except usb.core.USBError:
+                pass
+            try:
+                return fn()
+            except usb.core.USBError as e2:
+                raise P.ProtocolError(f"USB {what} (EP {ep:02x}): {e2} · {getattr(self, 'diag', '')}") from e2
+
     def write(self, data: bytes) -> None:
-        n = self.dev.write(P.EP_OUT, data, timeout=self.timeout)
+        n = self._retry("Senden", P.EP_OUT, lambda: self.dev.write(P.EP_OUT, data, timeout=self.timeout))
         if n != len(data):
             raise P.ProtocolError(f"nur {n} von {len(data)} Bytes gesendet")
 
     def read(self, size: int) -> bytes:
-        return bytes(self.dev.read(P.EP_IN, max(size, P.BULK_BUFFER), timeout=self.timeout))
+        return bytes(self._retry("Empfangen", P.EP_IN, lambda: self.dev.read(P.EP_IN, max(size, P.BULK_BUFFER), timeout=self.timeout)))
 
     def close(self) -> None:
         if self.dev is not None:

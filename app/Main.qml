@@ -961,6 +961,8 @@ Window {
                                 Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 90; horizontalAlignment: Text.AlignRight; elide: Text.ElideRight
                                     text: modelData[1] === undefined || modelData[1] === null ? "—" : String(modelData[1]); color: win.cInk; font.family: win.fontName; font.pixelSize: 13 }
                                 Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: win.cLine }
+                                // Antippen zeigt den vollen Text (z. B. lange USB-Fehlermeldungen)
+                                MouseArea { anchors.fill: parent; onClicked: if (modelData[1]) toast.show(modelData[0] + ": " + String(modelData[1])) }
                             }
                         }
                     }
@@ -1187,7 +1189,7 @@ Window {
             anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 14
             width: Math.min(tt.implicitWidth, 620) + 32; height: tt.height + 20; radius: 12; color: "#2a1416"; border.color: "#80e5484d"
             Text { id: tt; anchors.centerIn: parent; width: Math.min(implicitWidth, 620); wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; color: "#ffb3b5"; font.family: win.fontName; font.pixelSize: 13 }
-            Timer { id: tTimer; interval: 6000; onTriggered: toast.visible = false }
+            Timer { id: tTimer; interval: Math.max(6000, tt.text.length * 70); onTriggered: toast.visible = false }
             MouseArea { anchors.fill: parent; onClicked: toast.visible = false }
         }
 
