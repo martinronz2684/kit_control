@@ -73,6 +73,11 @@ rm -f /etc/systemd/system/kit-kiosk.service
 cp "$SRC/system/kitd.service" "$SRC/system/kit-app.service" "$SRC/system/kit-update.service" "$SRC/system/kit-pclink.service" /etc/systemd/system/
 systemctl daemon-reload 2>/dev/null || true
 systemctl enable kitd.service kit-app.service kit-pclink.service
+# ModemManager „probiert“ fremde USB-Geräte an und kann die Kit-Schnittstelle blockieren
+if systemctl list-unit-files ModemManager.service >/dev/null 2>&1; then
+  systemctl disable --now ModemManager.service 2>/dev/null || true
+  systemctl mask ModemManager.service 2>/dev/null || true
+fi
 systemctl set-default multi-user.target
 systemctl disable getty@tty1.service || true
 systemctl disable NetworkManager-wait-online.service 2>/dev/null || true

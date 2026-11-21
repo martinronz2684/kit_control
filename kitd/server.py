@@ -100,7 +100,11 @@ class KitWorker(threading.Thread):
                 from kitctl.client import UsbTransport
                 t = UsbTransport()
             kit = Kit(t)
-            ident = kit.connect()
+            try:
+                ident = kit.connect()
+            except Exception:
+                t.close()   # Interface freigeben, sonst ist es beim nächsten Versuch „busy“
+                raise
             self.kit = kit
             self._set(connected=True, message="", model=ident.model_name, firmware=ident.firmware,
                       protocol=ident.comm, uid=ident.uid.hex(), demo=self.demo)

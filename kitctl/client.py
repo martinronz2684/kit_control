@@ -15,8 +15,30 @@ class Transport(Protocol):
     def close(self) -> None: ...
 
 
+def _usb_holders(dev) -> list[str]:
+    """Welche Prozesse haben das USB-Gerät offen? (/proc/*/fd -> /dev/bus/usb/BBB/DDD)"""
+    import os
+    target = f"/dev/bus/usb/{dev.bus:03d}/{dev.address:03d}"
+    me, out = os.getpid(), []
+    for pid in os.listdir("/proc"):
+        if not pid.isdigit() or int(pid) == me:
+            continue
+        try:
+            for fd in os.listdir(f"/proc/{pid}/fd"):
+                if os.readlink(f"/proc/{pid}/fd/{fd}") == target:
+                    with open(f"/proc/{pid}/comm") as f:
+                        out.append(f"{f.read().strip()} (PID {pid})")
+                    break
+        except OSError:
+            continue
+    return out
+
+
 class UsbTransport:
-    """Bulk OUT 0x06 / bulk IN 0x85 on interface 0, like Central does."""
+    """Wie Central (usb4java/libusb, USBV_HandShake):
+    Gerät 03eb:8002 öffnen, Kernel-Treiber lösen, Interface 0 beanspruchen,
+    Alt-Setting 0 setzen, dann Bulk OUT 0x06 / Bulk IN 0x85 mit 2000 ms Timeout.
+    Bei Fehlern wird alles wieder freigegeben (sonst bleibt das Interface belegt: „Resource busy“)."""
 
     def __init__(self, timeout_ms: int = P.TIMEOUT_MS):
         try:
@@ -25,19 +47,77 @@ class UsbTransport:
         except ImportError as e:  # pragma: no cover
             raise SystemExit("pyusb fehlt: sudo apt install python3-usb") from e
         self._usb = usb
-        dev = usb.core.find(idVendor=P.VENDOR_ID, idProduct=P.PRODUCT_ID)
-        if dev is None:
-            raise SystemExit("Kein Kit gefunden (USB 03eb:8002). Kabel und Strom prüfen.")
-        self.dev = dev
         self.timeout = timeout_ms
         self._reattach = False
+        self.dev = None
+        last = None
+        for attempt in range(2):
+            dev = usb.core.find(idVendor=P.VENDOR_ID, idProduct=P.PRODUCT_ID)
+            if dev is None:
+                raise SystemExit("Kein Kit gefunden (USB 03eb:8002). Kabel und Strom prüfen.")
+            try:
+                self._open(dev)
+                self.dev = dev
+                break
+            except usb.core.USBError as e:
+                last = e
+                self._cleanup(dev)
+                if getattr(e, "errno", None) == 16 and attempt == 0:
+                    # Belegt: Gerät einmal zurücksetzen und neu suchen (wie ein Abziehen/Anstecken)
+                    try:
+                        dev.reset()
+                    except usb.core.USBError:
+                        pass
+                    import time
+                    time.sleep(1.5)
+                    continue
+                break
+        if self.dev is None:
+            if getattr(last, "errno", None) == 16:
+                who = _usb_holders(dev)
+                raise P.ProtocolError("USB-Schnittstelle des Kits ist belegt"
+                                      + (f" von {', '.join(who)}" if who else " (anderes Programm?)"))
+            raise P.ProtocolError(f"USB-Fehler beim Öffnen: {last}")
+        self._flush()
+
+    def _open(self, dev) -> None:
+        usb = self._usb
         try:
             if dev.is_kernel_driver_active(P.INTERFACE):
                 dev.detach_kernel_driver(P.INTERFACE)
                 self._reattach = True
-        except (NotImplementedError, usb.core.USBError):
+        except NotImplementedError:
             pass
         usb.util.claim_interface(dev, P.INTERFACE)
+        try:
+            dev.set_interface_altsetting(interface=P.INTERFACE, alternate_setting=0)
+        except usb.core.USBError:
+            pass   # manche Firmwares antworten mit STALL, obwohl es nur ein Alt-Setting gibt
+
+    def _flush(self) -> None:
+        """Alte Antworten im Puffer verwerfen (z. B. nach einem abgebrochenen Lauf)."""
+        for _ in range(4):
+            try:
+                self.dev.read(P.EP_IN, P.BULK_BUFFER, timeout=50)
+            except self._usb.core.USBError:
+                return
+
+    def _cleanup(self, dev) -> None:
+        u = self._usb.util
+        try:
+            u.release_interface(dev, P.INTERFACE)
+        except Exception:
+            pass
+        if self._reattach:
+            try:
+                dev.attach_kernel_driver(P.INTERFACE)
+            except Exception:
+                pass
+            self._reattach = False
+        try:
+            u.dispose_resources(dev)
+        except Exception:
+            pass
 
     def write(self, data: bytes) -> None:
         n = self.dev.write(P.EP_OUT, data, timeout=self.timeout)
@@ -48,13 +128,9 @@ class UsbTransport:
         return bytes(self.dev.read(P.EP_IN, max(size, P.BULK_BUFFER), timeout=self.timeout))
 
     def close(self) -> None:
-        u = self._usb.util
-        try:
-            u.release_interface(self.dev, P.INTERFACE)
-            if self._reattach:
-                self.dev.attach_kernel_driver(P.INTERFACE)
-        finally:
-            u.dispose_resources(self.dev)
+        if self.dev is not None:
+            self._cleanup(self.dev)
+            self.dev = None
 
 
 class Kit:
