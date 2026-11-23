@@ -248,6 +248,9 @@ class KitWorker(threading.Thread):
                 raise ValueError("Schichtdicke 0,05–0,3 mm")
             return P.cmd_make_layer(t)
         if name == "lamp":
+            # Central sendet die Lampenleistung nie direkt (nur als Teil der Druckdatei). Nicht mehr live senden.
+            raise ValueError("Lampenleistung wird nicht direkt gesetzt")
+        if name == "lamp_legacy":
             return P.cmd_lamp(c["which"], float(c["percent"]))
         if name == "target":
             t = float(c["celsius"])

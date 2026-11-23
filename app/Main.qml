@@ -629,35 +629,12 @@ Window {
                         }
                     }
                     Panel {
-                        width: parent.width; height: 230
+                        width: parent.width; height: 150
                         Column {
-                            anchors.fill: parent; anchors.margins: 12; spacing: 14
-                            Lbl { text: "Heizstrahler" }
-                            Repeater {
-                                model: [["Links", "left", 80], ["Rechts", "right", 80], ["Front", "front", 65]]
-                                Item {
-                                    id: lampRow
-                                    width: parent.width; height: 40
-                                    property int value: modelData[2]
-                                    Text { width: 54; anchors.verticalCenter: parent.verticalCenter; text: modelData[0]; color: win.cInk; font.family: win.fontName; font.pixelSize: 14 }
-                                    Item {
-                                        id: track
-                                        x: 60; width: parent.width - 108; height: 40
-                                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width; height: 6; radius: 3; color: "#1affffff" }
-                                        Rectangle { anchors.verticalCenter: parent.verticalCenter; width: parent.width * lampRow.value / 100; height: 6; radius: 3
-                                            color: win.cHeat }
-                                        Rectangle { width: 30; height: 30; radius: 15; anchors.verticalCenter: parent.verticalCenter; x: track.width * lampRow.value / 100 - 15; color: "#e6e9ee" }
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            function setX(mx) { lampRow.value = Math.round(Math.max(0, Math.min(1, mx / track.width)) * 100) }
-                                            onPressed: function (m) { setX(m.x) }
-                                            onPositionChanged: function (m) { setX(m.x) }
-                                            onReleased: win.send({ cmd: "lamp", which: modelData[1], percent: lampRow.value })
-                                        }
-                                    }
-                                    Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: lampRow.value + " %"; color: win.cInk; font.family: win.fontName; font.pixelSize: 14; font.weight: Font.DemiBold }
-                                }
-                            }
+                            anchors.fill: parent; anchors.margins: 12; spacing: 6
+                            Lbl { text: "So heizt der Kit" }
+                            Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 12
+                                text: "Die IR-Heizer regelt der Kit selbst auf den Sollwert des Pulverbetts, die Kammerheizung auf den Kammer-Sollwert. Eine eigene Leistungsvorgabe für die Heizstrahler gibt es wie in Central nicht." }
                         }
                     }
                 }
