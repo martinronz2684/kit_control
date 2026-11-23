@@ -32,7 +32,9 @@ Window {
     property real step: 1
     property real thick: 0.1
     property int jobH: 68
-    property int target: 145
+    property int target: 145          // Soll Kammer beim Vorheizen
+    property int targetSurf: 150      // Soll Pulverbett (Oberfläche) beim Vorheizen
+    property bool targetsLoaded: false
     property bool warm: false
     property var moved: ({ print: 0, reservoir: 0 })
     // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
@@ -59,6 +61,10 @@ Window {
     // Wie Central: Liegt der Druck-Sollwert der Oberfläche unter 130 °C, ist der Kit auf TPE eingestellt
     readonly property string kitMaterial: st.target_surface_print === undefined ? "" : (st.target_surface_print < 130 ? "TPE" : "PA12")
     onStChanged: {
+        if (!targetsLoaded && st.target_surface_warmup !== undefined) {
+            targetsLoaded = true
+            targetSurf = Math.round(st.target_surface_warmup); target = Math.round(st.target_chamber_warmup)
+        }
         if (!scDirty && st.scaling) scEdit = { x: st.scaling.x, y: st.scaling.y, z: st.scaling.z }
         if (!pDirty && st.target_surface_print !== undefined) pEdit = pKit()
     }
@@ -232,6 +238,24 @@ Window {
         Text { visible: !lv.parts || lv.parts.length === 0; anchors.centerIn: parent; width: parent.width - 20; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
             text: "Schichtdaten folgen"; color: win.cMut; font.family: win.fontName; font.pixelSize: 11 }
     }
+    // Temperaturring: Ist-Wert im Verhältnis zum Sollwert
+    component HeatRing: Canvas {
+        id: hr
+        property real value: 0
+        property real goal: 1
+        property real frac: Math.max(0, Math.min(1, value / Math.max(1, goal)))
+        onFracChanged: requestPaint()
+        onWidthChanged: requestPaint()
+        onPaint: {
+            var c = getContext("2d"); c.reset()
+            var r = width / 2 - 9, m = width / 2
+            c.lineWidth = 10; c.lineCap = "round"
+            c.strokeStyle = "#1affffff"; c.beginPath(); c.arc(m, m, r, 0, 2 * Math.PI); c.stroke()
+            var end = -Math.PI / 2 + 2 * Math.PI * frac
+            c.strokeStyle = "#ff7a45"; c.beginPath(); c.arc(m, m, r, -Math.PI / 2, end); c.stroke()
+            if (frac > 0.01) { c.fillStyle = "#ffffff"; c.beginPath(); c.arc(m + r * Math.cos(end), m + r * Math.sin(end), 3.5, 0, 2 * Math.PI); c.fill() }
+        }
+    }
     component Chip: Rectangle {
         id: ch
         property string text
@@ -363,7 +387,7 @@ Window {
                         Panel {
                             width: (parent.width - 8) / 2; height: 84
                             Column { x: 12; y: 10; spacing: 1
-                                Lbl { text: "Pulveroberfläche" }
+                                Lbl { text: "Pulverbett" }
                                 Val { text: Api.de(win.st.surface) + "°"; color: win.cHeat }
                                 Lbl { text: "Soll " + Api.de(win.st.printing ? win.st.target_surface_print : win.st.target_surface_warmup) + " °C" } }
                         }
@@ -546,40 +570,50 @@ Window {
                 opacity: win.page === "heat" ? 1 : 0; visible: opacity > 0
                 Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
-                Panel {
+                // Zwei Heizkreise wie im Kit: Pulverbett (Oberfläche, IR-Heizer + Pyrometer) und Kammer (Kammerheizung)
+                Column {
                     id: heatPanel
-                    width: parent.width * 0.55; height: parent.height
-                    Row {
-                        anchors.centerIn: parent; spacing: 14
-                        KButton { width: 60; height: 60; radius: 30; text: "−"; size: 26; anchors.verticalCenter: parent.verticalCenter
-                            onClicked: { win.target = Math.max(40, win.target - 5); if (win.warm) win.send({ cmd: "target", which: "chamber_warmup", celsius: win.target }) } }
-                        Item {
-                            width: 240; height: 240
-                            Canvas {
-                                id: ring
-                                anchors.fill: parent
-                                property real frac: Math.max(0, Math.min(1, (win.st.chamber || 0) / win.target))
-                                onFracChanged: requestPaint()
-                                onPaint: {
-                                    var c = getContext("2d"); c.reset()
-                                    c.lineWidth = 14; c.lineCap = "round"
-                                    c.strokeStyle = "#1affffff"; c.beginPath(); c.arc(120, 120, 110, 0, 2 * Math.PI); c.stroke()
-                                    var g = c.createLinearGradient(0, 0, 240, 240); g.addColorStop(0, "#ffb08f"); g.addColorStop(1, "#ff6a3d")
-                                    var end = -Math.PI / 2 + 2 * Math.PI * frac
-                                    c.lineWidth = 20; c.strokeStyle = "rgba(255,106,61,0.16)"; c.beginPath(); c.arc(120, 120, 110, -Math.PI / 2, end); c.stroke()
-                                    c.lineWidth = 14; c.strokeStyle = g; c.beginPath(); c.arc(120, 120, 110, -Math.PI / 2, end); c.stroke()
-                                    if (frac > 0.01) { c.fillStyle = "#ffffff"; c.beginPath(); c.arc(120 + 110 * Math.cos(end), 120 + 110 * Math.sin(end), 4, 0, 2 * Math.PI); c.fill() }
+                    width: parent.width * 0.58; height: parent.height; spacing: 8
+                    Repeater {
+                        model: [["Pulverbett (Oberfläche)", "surface", "surface_warmup", 180, "IR-Heizer · gemessen mit Pyrometer"],
+                                ["Kammer", "chamber", "chamber_warmup", 150, "Kammerheizung · Thermistoren"]]
+                        Panel {
+                            id: hc
+                            readonly property bool surf: modelData[1] === "surface"
+                            readonly property int goal: surf ? win.targetSurf : win.target
+                            function setGoal(v) {
+                                v = Math.max(20, Math.min(modelData[3], v))
+                                if (surf) win.targetSurf = v; else win.target = v
+                                if (win.warm) win.send({ cmd: "target", which: modelData[2], celsius: v })
+                            }
+                            width: parent.width; height: (parent.height - 8) / 2
+                            HeatRing {
+                                x: 14; width: parent.height - 28; height: width; anchors.verticalCenter: parent.verticalCenter
+                                value: win.st[modelData[1]] || 0; goal: hc.goal
+                                Column {
+                                    anchors.centerIn: parent
+                                    Text { anchors.horizontalCenter: parent.horizontalCenter; text: (win.st[modelData[1]] !== undefined ? Math.round(win.st[modelData[1]]) : "—") + "°"
+                                        color: win.cInk; font.family: win.fontName; font.pixelSize: 40; font.weight: Font.Light; font.letterSpacing: -1.5 }
+                                    Lbl { anchors.horizontalCenter: parent.horizontalCenter; text: "jetzt"; font.pixelSize: 11 }
                                 }
                             }
                             Column {
-                                anchors.centerIn: parent; spacing: 4
-                                Lbl { anchors.horizontalCenter: parent.horizontalCenter; text: "Kammer jetzt" }
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: Api.de(win.st.chamber) + "°"; color: win.cInk; font.family: win.fontName; font.pixelSize: 54; font.weight: Font.Light; font.letterSpacing: -2 }
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; text: "Soll " + win.target + " °C"; color: win.cHeat; font.family: win.fontName; font.pixelSize: 15; font.weight: Font.DemiBold }
+                                x: parent.height + 2; y: 14; width: parent.width - parent.height - 16; spacing: 4
+                                Text { text: modelData[0]; color: win.cInk; font.family: win.fontName; font.pixelSize: 16; font.weight: Font.Medium; width: parent.width; elide: Text.ElideRight }
+                                Lbl { text: modelData[4]; font.pixelSize: 11; width: parent.width }
+                                Item { width: 1; height: 6 }
+                                Row {
+                                    spacing: 8
+                                    KButton { width: 48; height: 48; text: "−"; size: 20; onClicked: hc.setGoal(hc.goal - 5) }
+                                    Column { width: parent.parent.width - 112; anchors.verticalCenter: parent.verticalCenter
+                                        Lbl { anchors.horizontalCenter: parent.horizontalCenter; text: "Soll Vorheizen"; font.pixelSize: 11 }
+                                        Text { anchors.horizontalCenter: parent.horizontalCenter; text: hc.goal + " °C"; color: win.cHeat; font.family: win.fontName; font.pixelSize: 24; font.weight: Font.Light } }
+                                    KButton { width: 48; height: 48; text: "+"; size: 20; onClicked: hc.setGoal(hc.goal + 5) }
+                                }
+                                Lbl { font.pixelSize: 11; width: parent.width; elide: Text.ElideRight
+                                    text: "Im Druck: " + (win.st[hc.surf ? "target_surface_print" : "target_chamber_print"] !== undefined ? Math.round(win.st[hc.surf ? "target_surface_print" : "target_chamber_print"]) + " °C" : "—") + " · max. " + modelData[3] + " °C" }
                             }
                         }
-                        KButton { width: 60; height: 60; radius: 30; text: "+"; size: 26; anchors.verticalCenter: parent.verticalCenter
-                            onClicked: { win.target = Math.min(180, win.target + 5); if (win.warm) win.send({ cmd: "target", which: "chamber_warmup", celsius: win.target }) } }
                     }
                 }
                 Column {
@@ -589,7 +623,8 @@ Window {
                         onClicked: {
                             var on = !win.warm
                             var go = function () { win.send({ cmd: "warmup", on: on }, function (ok) { if (ok) win.warm = on }) }
-                            if (on) win.send({ cmd: "target", which: "chamber_warmup", celsius: win.target }, function (ok) { if (ok) go() })
+                            if (on) win.send({ cmd: "target", which: "surface_warmup", celsius: win.targetSurf }, function (ok) {
+                                if (ok) win.send({ cmd: "target", which: "chamber_warmup", celsius: win.target }, function (ok2) { if (ok2) go() }) })
                             else go()
                         }
                     }
@@ -857,8 +892,8 @@ Window {
                         }
                         Item { width: 1; height: 2 }
                         Repeater {
-                            model: [["Aufwärmen · Pulveroberfläche", "sw", 180], ["Aufwärmen · Kammer", "cw", 150],
-                                    ["Druck · Pulveroberfläche", "sp", 180], ["Druck · Kammer", "cp", 150]]
+                            model: [["Aufwärmen · Pulverbett", "sw", 180], ["Aufwärmen · Kammer", "cw", 150],
+                                    ["Druck · Pulverbett", "sp", 180], ["Druck · Kammer", "cp", 150]]
                             Item {
                                 width: parent.width; height: 52
                                 Column { y: 6
