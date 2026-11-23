@@ -995,6 +995,9 @@ Window {
                                         Text { width: parent.width; wrapMode: Text.WordWrap; text: modelData.text; color: "#c9cfd8"; font.family: win.fontName; font.pixelSize: 12 } }
                                 }
                             }
+                            // Auf Wunsch ausgeblendete Warnungen (z. B. 81) – nur zur Info, nicht oben im Kopf
+                            Lbl { visible: (win.st.hidden_warnings || []).length > 0; width: msgCol.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 11
+                                text: "Ausgeblendet: " + (win.st.hidden_warnings || []).map(function (m) { return m.code + " " + m.title }).join(", ") }
                         }
                     }
                 }

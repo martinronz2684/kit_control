@@ -109,3 +109,27 @@ def test_kalibrierung_wie_central():
     assert abs(P.new_scaling_percent(1.0, 50, 49.5) - 1.0101) < 1e-3
     sc = P.ScalingParameters.parse(P.code(P.SIG_SCALINGPARAMETERS1) + struct.pack("<iii", 10125, 10000, 9950))
     assert (sc.x, sc.y, sc.z) == (1.0125, 1.0, 0.995)
+
+
+class HandshakeTests(unittest.TestCase):
+    def test_ohne_verbindungsbestaetigung_wenn_kit_antwortet(self):
+        # Kein COM_CONNECTION_ESTABLISHED, wenn der Kit schon auf Statusabfragen antwortet (sonst Referenzfahrt)
+        fake = FakeKit()
+        kit = Kit(fake)
+        kit.connect()
+        self.assertFalse(kit.handshake)
+        self.assertNotIn(P.code(P.COM_CONNECTION_ESTABLISHED), [d[:2] for d in fake.sent])
+
+    def test_bestaetigung_nur_als_rueckfall(self):
+        class Stumm(FakeKit):
+            ok = False
+            def write(self, data):
+                super().write(data)
+                c = P.code_of(data)
+                if c == P.COM_CONNECTION_ESTABLISHED:
+                    Stumm.ok = True
+                if c == P.COM_REQUESTGENERALPRINTERSTATE and not Stumm.ok:
+                    self._next = P.code(P.SIG_UNKNOWN_COMMAND)
+        kit = Kit(Stumm())
+        kit.connect()
+        self.assertTrue(kit.handshake)

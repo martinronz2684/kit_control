@@ -30,6 +30,7 @@ MOVE_SIGN = float(os.environ.get("KIT_MOVE_SIGN", "-1"))
 
 
 STATE_DIR = os.environ.get("KIT_STATE_DIR", "/var/lib/kitd")
+IGNORED_WARNINGS = {int(x) for x in os.environ.get("KIT_IGNORE_WARNINGS", "81").replace(" ", "").split(",") if x}
 
 
 class KitWorker(threading.Thread):
@@ -197,7 +198,12 @@ class KitWorker(threading.Thread):
             from kitctl.codes import describe
             for key, name in (("errors", "errors"), ("warnings", "warnings")):
                 try:
-                    out[key] = [describe(c) for c in self.kit.request(name).codes]
+                    codes = self.kit.request(name).codes
+                    if key == "warnings":
+                        # Auf Wunsch ausgeblendete Warnungen (Standard: 81 Beschichter-Referenzfahrt)
+                        out["hidden_warnings"] = [describe(c) for c in codes if c in IGNORED_WARNINGS]
+                        codes = [c for c in codes if c not in IGNORED_WARNINGS]
+                    out[key] = [describe(c) for c in codes]
                 except P.ProtocolError as e:
                     snap[name] = e
         errs = [f"{k}: {v}" for k, v in snap.items() if isinstance(v, Exception)]
