@@ -911,10 +911,7 @@ Window {
                                     onClicked: { var f = win.st.factory.live
                                         win.pEdit = { sw: Math.round(f.surface_warmup), cw: Math.round(f.chamber_warmup), sp: Math.round(f.surface_print), cp: Math.round(f.chamber_print), laser: Math.round(f.laser_speed) }
                                         win.pDirty = true; toast.show("Werkswerte vom " + win.st.factory.saved + " geladen – noch nicht gesendet") } } }
-                            KButton { width: parent.width; height: 44; size: 13; text: "Heizstrahler auf 100 %"; ok: !parPage.locked
-                                onClicked: win.ask("Heizstrahler auf 100 %?",
-                                    "Setzt links, rechts und vorne auf volle Leistung. Der Kit speichert das dauerhaft. Die Temperatur regelt er weiterhin selbst.",
-                                    function () { win.send({ cmd: "lamps_full" }, function (ok) { if (ok) toast.show("Heizstrahler auf 100 % gesetzt") }) }) }
+                            KButton { width: parent.width; height: 44; size: 13; text: "Heizstrahler (Experte) …"; ok: !parPage.locked; onClicked: lampOvl.visible = true }
                             Item { width: 1; height: Math.max(0, parent.height - 16 - 46 - 44 - 52 - 32) }
                             KButton {
                                 width: parent.width; kind: "pri"; text: "An Kit senden"; ok: !parPage.locked && win.pDirty
@@ -933,6 +930,42 @@ Window {
                                     })
                                 }
                             }
+                        }
+                    }
+                }
+
+                // Experten-Dialog: Heizstrahler-Leistung. Central stellt sie beim Kit nie ein, die Firmware speichert sie
+                // dauerhaft und meldet sie nicht zurück – angezeigt wird, was der Pi zuletzt gesendet hat.
+                Rectangle {
+                    id: lampOvl
+                    parent: root; anchors.fill: parent; color: "#cc000000"; visible: false; z: 20
+                    MouseArea { anchors.fill: parent }
+                    Panel {
+                        anchors.centerIn: parent; width: 560; height: 340; color: "#1b1b1f"
+                        Column {
+                            anchors.fill: parent; anchors.margins: 16; spacing: 10
+                            Text { text: "Heizstrahler (Experte)"; color: win.cInk; font.family: win.fontName; font.pixelSize: 20; font.weight: Font.Medium }
+                            Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 12
+                                text: "Wirkt sofort und bleibt im Kit gespeichert. Der Kit kann den Wert nicht zurückmelden – „original“ heißt: vom Pi nie verändert. Tipp: eine Lampe so einstellen, dass sie gleich hell leuchtet wie eine noch originale." }
+                            Repeater {
+                                model: [["Links", "left"], ["Rechts", "right"], ["Vorne", "front"]]
+                                Item {
+                                    width: parent.width; height: 52
+                                    readonly property var cur: win.st.lamps ? win.st.lamps[modelData[1]] : undefined
+                                    function sendPct(v) {
+                                        v = Math.max(10, Math.min(100, v))
+                                        win.send({ cmd: "lamp", which: modelData[1], percent: v, expert: true })
+                                    }
+                                    Text { y: 14; width: 80; text: modelData[0]; color: win.cInk; font.family: win.fontName; font.pixelSize: 16 }
+                                    KButton { x: 90; y: 2; width: 56; height: 48; size: 13; text: "−5"; onClicked: parent.sendPct((parent.cur === undefined ? 100 : parent.cur) - 5) }
+                                    KButton { x: 152; y: 2; width: 56; height: 48; size: 13; text: "−1"; onClicked: parent.sendPct((parent.cur === undefined ? 100 : parent.cur) - 1) }
+                                    Text { x: 214; width: 100; height: 52; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter
+                                        text: parent.cur === undefined ? "original" : parent.cur + " %"; color: win.cHeat; font.family: win.fontName; font.pixelSize: 20; font.weight: Font.Light }
+                                    KButton { x: 320; y: 2; width: 56; height: 48; size: 13; text: "+1"; onClicked: parent.sendPct((parent.cur === undefined ? 100 : parent.cur) + 1) }
+                                    KButton { x: 382; y: 2; width: 56; height: 48; size: 13; text: "+5"; onClicked: parent.sendPct((parent.cur === undefined ? 100 : parent.cur) + 5) }
+                                }
+                            }
+                            KButton { width: parent.width; height: 48; text: "Schließen"; onClicked: lampOvl.visible = false }
                         }
                     }
                 }

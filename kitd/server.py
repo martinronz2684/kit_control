@@ -110,10 +110,32 @@ class KitWorker(threading.Thread):
             self._set(connected=True, message="", model=ident.model_name, firmware=ident.firmware,
                       protocol=ident.comm, uid=ident.uid.hex(), demo=self.demo)
             self._read_scaling(backup=True)
+            self._set(lamps=self._lamps())
         except SystemExit as e:  # UsbTransport: no device
             self._set(connected=False, message=str(e))
         except Exception as e:
             self._set(connected=False, message=f"Verbindung fehlgeschlagen: {e}")
+
+    LAMP_FILE = "heizstrahler.json"
+
+    def _lamps(self) -> dict:
+        try:
+            with open(os.path.join(STATE_DIR, self.LAMP_FILE)) as f:
+                return json.load(f)
+        except (OSError, ValueError):
+            return {}
+
+    def _remember_lamp(self, which: str, pct: float):
+        """Die Firmware kann die Lampenleistung nicht zurückmelden – der Pi merkt sich, was er gesendet hat."""
+        d = self._lamps()
+        d[which] = round(pct)
+        try:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            with open(os.path.join(STATE_DIR, self.LAMP_FILE), "w") as f:
+                json.dump(d, f)
+        except OSError:
+            pass
+        self._set(lamps=d)
 
     def _read_scaling(self, backup=False):
         """Scaling vom Kit lesen; beim ersten Verbinden je Kit die Werkswerte sichern."""
@@ -210,6 +232,7 @@ class KitWorker(threading.Thread):
                     with self.usb:
                         for w in ("left", "right", "front"):
                             self.kit.command(P.cmd_lamp(w, 100), strict=True)
+                            self._remember_lamp(w, 100.0)
                     reply.put({"ok": True})
                     continue
                 payload = self._encode(cmd)
@@ -236,6 +259,8 @@ class KitWorker(threading.Thread):
                     raise
                 if cmd.get("cmd") == "scaling":
                     self._read_scaling()
+                if cmd.get("cmd") == "lamp":
+                    self._remember_lamp(cmd["which"], float(cmd["percent"]))
                 reply.put({"ok": True})
             except (P.ProtocolError, ValueError, KeyError) as e:
                 reply.put({"ok": False, "error": str(e)})
@@ -257,8 +282,14 @@ class KitWorker(threading.Thread):
                 raise ValueError("Schichtdicke 0,05–0,3 mm")
             return P.cmd_make_layer(t)
         if name == "lamp":
-            # Central stellt die Lampenleistung beim Kit nie ein. Frei einstellbar nicht mehr anbieten.
-            raise ValueError("Lampenleistung wird nicht direkt gesetzt")
+            # Central stellt die Lampenleistung beim Kit nie ein; die Firmware speichert sie dauerhaft
+            # und kann sie nicht zurückmelden. Nur bewusst aus dem Experten-Dialog (Werte merkt sich der Pi).
+            if not c.get("expert"):
+                raise ValueError("Lampenleistung nur im Experten-Dialog")
+            pct = float(c["percent"])
+            if not 10 <= pct <= 100:
+                raise ValueError("Heizstrahler 10–100 %")
+            return P.cmd_lamp(c["which"], pct)
         if name == "lamp_legacy":
             return P.cmd_lamp(c["which"], float(c["percent"]))
         if name == "target":
