@@ -911,7 +911,11 @@ Window {
                                     onClicked: { var f = win.st.factory.live
                                         win.pEdit = { sw: Math.round(f.surface_warmup), cw: Math.round(f.chamber_warmup), sp: Math.round(f.surface_print), cp: Math.round(f.chamber_print), laser: Math.round(f.laser_speed) }
                                         win.pDirty = true; toast.show("Werkswerte vom " + win.st.factory.saved + " geladen – noch nicht gesendet") } } }
-                            Item { width: 1; height: Math.max(0, parent.height - 16 - 46 - 52 - 24) }
+                            KButton { width: parent.width; height: 44; size: 13; text: "Heizstrahler auf 100 %"; ok: !parPage.locked
+                                onClicked: win.ask("Heizstrahler auf 100 %?",
+                                    "Setzt links, rechts und vorne auf volle Leistung. Der Kit speichert das dauerhaft. Die Temperatur regelt er weiterhin selbst.",
+                                    function () { win.send({ cmd: "lamps_full" }, function (ok) { if (ok) toast.show("Heizstrahler auf 100 % gesetzt") }) }) }
+                            Item { width: 1; height: Math.max(0, parent.height - 16 - 46 - 44 - 52 - 32) }
                             KButton {
                                 width: parent.width; kind: "pri"; text: "An Kit senden"; ok: !parPage.locked && win.pDirty
                                 onClicked: {
