@@ -259,8 +259,8 @@ class KitWorker(threading.Thread):
                         snap = self.snapshot()
                         why = [f"Zustand: {snap.get('state_name', '?')}"]
                         warn = [w.get("code") for w in snap.get("warnings", []) if isinstance(w, dict)]
-                        if 81 in warn or 82 in warn:
-                            why.append("Referenzfahrt beim Einschalten fehlgeschlagen (81/82) – zuerst System → Kalibrieren → Referenzfahrt")
+                        if 80 in warn or 82 in warn:
+                            why.append("Kit meldet Problem mit einer Plattform-Achse (80/82)")
                         raise P.ProtocolError(f"Kit führt die Bewegung nicht aus ({'; '.join(why)})") from e
                     raise
                 if cmd.get("cmd") == "scaling":

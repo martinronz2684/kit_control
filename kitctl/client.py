@@ -215,11 +215,10 @@ class Kit:
             raise P.ProtocolError(
                 f"Unerwartetes Gerät: Modell {ident.model}, Protokoll {ident.comm}, "
                 f"Firmware {ident.firmware} (erwartet Kit 2/4, Protokoll 4, Firmware 12)")
-        # Central schickt danach „Verbindung hergestellt“ – darauf fährt der Kit alle Achsen auf Referenz.
-        # Das wollen wir nicht bei jedem Start des Pi. Daher zuerst ohne: Antwortet der Kit normal auf eine
-        # Statusabfrage, ist er bereit. Nur wenn nicht, die Bestätigung wie Central nachschicken.
+        # Wie Central (USBV_HandShake): nach der Kennung „Verbindung hergestellt“ (5001) schicken.
+        # KIT_HANDSHAKE=auto würde es weglassen, solange der Kit auch so antwortet (nur zum Testen).
         import os
-        mode = os.environ.get("KIT_HANDSHAKE", "auto")
+        mode = os.environ.get("KIT_HANDSHAKE", "always")
         if mode != "always":
             try:
                 ans = self.transact(P.code(P.COM_REQUESTGENERALPRINTERSTATE), P.GeneralState.LENGTH)

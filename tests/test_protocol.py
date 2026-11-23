@@ -114,9 +114,12 @@ def test_kalibrierung_wie_central():
 class HandshakeTests(unittest.TestCase):
     def test_ohne_verbindungsbestaetigung_wenn_kit_antwortet(self):
         # Kein COM_CONNECTION_ESTABLISHED, wenn der Kit schon auf Statusabfragen antwortet (sonst Referenzfahrt)
+        import os
+        os.environ["KIT_HANDSHAKE"] = "auto"
         fake = FakeKit()
         kit = Kit(fake)
         kit.connect()
+        del os.environ["KIT_HANDSHAKE"]
         self.assertFalse(kit.handshake)
         self.assertNotIn(P.code(P.COM_CONNECTION_ESTABLISHED), [d[:2] for d in fake.sent])
 
@@ -130,6 +133,14 @@ class HandshakeTests(unittest.TestCase):
                     Stumm.ok = True
                 if c == P.COM_REQUESTGENERALPRINTERSTATE and not Stumm.ok:
                     self._next = P.code(P.SIG_UNKNOWN_COMMAND)
+        import os
+        os.environ["KIT_HANDSHAKE"] = "auto"
         kit = Kit(Stumm())
         kit.connect()
+        del os.environ["KIT_HANDSHAKE"]
         self.assertTrue(kit.handshake)
+
+    def test_standard_wie_central(self):
+        fake = FakeKit()
+        Kit(fake).connect()
+        self.assertIn(P.code(P.COM_CONNECTION_ESTABLISHED), [d[:2] for d in fake.sent])
