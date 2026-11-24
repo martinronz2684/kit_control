@@ -33,6 +33,54 @@ def volume(p: Part) -> float:
     return abs(float(np.einsum("ij,ij->i", t[:, 0], np.cross(t[:, 1], t[:, 2])).sum()) / 6.0)
 
 
+# ---------------------------------------------------------------- SLS-Ausrichtungsregeln
+TILT = 10.0          # Grad: große flache Teile leicht kippen (gegen Verzug / Curling)
+
+
+def quality(p: Part, rot) -> dict:
+    """Bewertet eine Lage nach SLS-Ausrichtungsregeln (kleiner = besser, 0 = ideal).
+      flat   große ebene Flächen waagerecht (Verzug/Curling)
+      jump   Querschnittssprünge von Schicht zu Schicht (thermische Spannung)
+      stair  flach ansteigende Flächen (Treppenstufen)
+      round  liegende Rundungen/Bohrungen (oval, Treppen) statt stehend
+      down   nach unten zeigende Flächen (rauer)
+      tall   Bauhöhe des Teils (Zeit, Wärme)
+    """
+    t = p.transform(p.simple(6000), rot)
+    n = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
+    a = np.linalg.norm(n, axis=1)
+    ok = a > 1e-12
+    t, n, a = t[ok], n[ok] / a[ok, None], a[ok] / 2
+    if not len(a):
+        return {"score": 0.0}
+    A = float(a.sum())
+    nz = n[:, 2]
+    # größte waagerechte Fläche auf einer Höhe (Platten, große Böden)
+    hor = np.abs(nz) > 0.985
+    flat = 0.0
+    if hor.any():
+        zc = np.round(t[hor, :, 2].mean(axis=1) / 0.5).astype(int)
+        u, inv = np.unique(zc, return_inverse=True)
+        flat = float(np.bincount(inv, a[hor]).max())
+    # flache Steigungen: 5°–40° zur Waagerechten -> sichtbare Treppen
+    stair = float(a[(np.abs(nz) > 0.77) & (np.abs(nz) <= 0.985)].sum())
+    # Rundungen: gekrümmte Flächen (Normale nicht achsparallel). Liegend = Normale hat z-Anteil.
+    curved = (np.abs(n) < 0.97).all(axis=1) | ((np.abs(nz) > 0.05) & (np.abs(nz) < 0.95))
+    lying = curved & (np.abs(nz) > 0.2) & (np.abs(nz) < 0.98)
+    rnd = float(a[lying].sum())
+    down = float(a[nz < -0.3].sum())
+    h = float(t[:, :, 2].max() - t[:, :, 2].min())
+    # Querschnitt je 1-mm-Schicht aus dem Volumen-Raster
+    vox, _ = _voxelize(t, 1.0)
+    lay = vox.sum(axis=(0, 1)).astype(float)
+    jump = float(np.abs(np.diff(lay)).max() / max(lay.max(), 1.0)) if len(lay) > 1 else 0.0
+    d = max(A, 1.0)
+    sc = (3.0 * max(0.0, flat - 150.0) / d + 1.5 * jump + 1.0 * stair / d + 1.0 * rnd / d
+          + 0.3 * down / d + 0.004 * h)
+    return {"score": float(sc), "flat": flat, "jump": jump, "stair": stair / d, "round": rnd / d,
+            "down": down / d, "height": h}
+
+
 def _voxelize(tris: np.ndarray, res: float):
     """Teil -> Belegung (nx, ny, nz) samt Lage der Zelle (0,0,0) in mm. Säulen von unten bis oben gefüllt."""
     pts = _samples(tris, res * 0.6)
@@ -86,10 +134,14 @@ class _Ctx:
         return self.cache[key]
 
 
-def _orientations(p: Part, allow: bool, ctx: _Ctx):
+def _orientations(p: Part, allow: bool, ctx: _Ctx, quality_w: float = 0.5):
+    """Erlaubte Lagen. quality_w 0 = nur Packdichte, 1 = nur die besten Lagen nach SLS-Regeln."""
     if not allow or getattr(p, "lock_orient", False):
         return [(p.rot_x, p.rot_y, p.rot_z)]
-    seen, out = set(), []
+    key = ("orients", id(p.mesh), tuple(p.scale), round(quality_w, 2))
+    if key in ctx.cache:
+        return ctx.cache[key]
+    seen, cand = set(), []
     for rx, ry in UPS:
         for rz in ZROT:
             sh = ctx.shape_of(p, (rx, ry, rz))
@@ -98,8 +150,24 @@ def _orientations(p: Part, allow: bool, ctx: _Ctx):
             sig = (sh[0].shape, hash(np.packbits(sh[0]).tobytes()))
             if sig not in seen:                  # symmetrische Lagen nur einmal prüfen
                 seen.add(sig)
-                out.append((rx, ry, rz))
-    return out
+                cand.append((rx, ry, rz))
+    if quality_w > 0 and cand:
+        q = {r: quality(p, r)["score"] for r in cand}
+        best = min(q.values())
+        # große flache Teile: zusätzlich leicht gekippte Varianten der besten Lagen
+        for r in sorted(cand, key=q.get)[:2]:
+            if quality(p, r).get("flat", 0) > 400:
+                for tr in ((r[0] + TILT, r[1], r[2]), (r[0], r[1] + TILT, r[2]),
+                           (r[0] + TILT, r[1] + TILT, r[2])):
+                    if ctx.shape_of(p, tr) is not None:
+                        q[tr] = quality(p, tr)["score"]
+                        cand.append(tr)
+        best = min(q.values())
+        span = max(max(q.values()) - best, 1e-9)
+        tol = span * (1.0 - quality_w) ** 2 + 1e-9      # 1.0 -> nur die beste, 0.5 -> beste Viertel
+        cand = sorted([r for r in cand if q[r] <= best + tol], key=q.get)
+    ctx.cache[key] = cand
+    return cand
 
 
 def _best(ctx: _Ctx, occF, shell, shape, cur_top):
@@ -134,7 +202,7 @@ def _shell_fn(occ_d):
     return shell
 
 
-def _run(ctx: _Ctx, occ0: np.ndarray, order, allow_rot, cancel):
+def _run(ctx: _Ctx, occ0: np.ndarray, order, allow_rot, cancel, quality_w=0.5):
     occ = occ0.copy()
     cur_top = int(np.nonzero(occ.any(axis=(0, 1)))[0].max() + 1) if occ.any() else 0
     plan = []
@@ -145,7 +213,7 @@ def _run(ctx: _Ctx, occ0: np.ndarray, order, allow_rot, cancel):
         occF = np.fft.rfftn(occ_d.astype(np.float32))
         shell = _shell_fn(occ_d)
         best = None
-        for rot in _orientations(p, allow_rot, ctx):
+        for rot in _orientations(p, allow_rot, ctx, quality_w):
             sh = ctx.shape_of(p, rot)
             if sh is None:
                 continue
@@ -160,6 +228,52 @@ def _run(ctx: _Ctx, occ0: np.ndarray, order, allow_rot, cancel):
         cur_top = max(cur_top, k + vox.shape[2])
         plan.append((p, rot, i, j, k, sh))
     return cur_top, occ, plan
+
+
+def _compact(ctx: _Ctx, occ0: np.ndarray, plan):
+    """Schwerkraft: jedes Teil so weit nach unten setzen wie frei ist (keine vermeidbaren Leerschichten)."""
+    plan = list(plan)
+    for _ in range(4):
+        moved = False
+        occ = occ0.copy()
+        for p, rot, i, j, k, sh in plan:
+            v = sh[0]
+            occ[i:i + v.shape[0], j:j + v.shape[1], k:k + v.shape[2]] |= v
+        for n in sorted(range(len(plan)), key=lambda m: plan[m][4]):
+            p, rot, i, j, k, sh = plan[n]
+            v = sh[0]
+            sx, sy, sz = v.shape
+            others = occ.copy()
+            others[i:i + sx, j:j + sy, k:k + sz] &= ~v
+            # Nachbarn im Teil-Fenster aufblasen (Mindestabstand), dann tiefste freie Höhe suchen
+            g = ctx.g
+            a0, a1 = max(0, i - g), min(ctx.nx, i + sx + g)
+            b0, b1 = max(0, j - g), min(ctx.ny, j + sy + g)
+            win = _dilate3(others[a0:a1, b0:b1, :], g)[i - a0:i - a0 + sx, j - b0:j - b0 + sy, :]
+            new_k = k
+            for kk in range(0, k):
+                if not (win[:, :, kk:kk + sz] & v).any():
+                    new_k = kk
+                    break
+            if new_k != k:
+                occ = others
+                occ[i:i + sx, j:j + sy, new_k:new_k + sz] |= v
+                plan[n] = (p, rot, i, j, new_k, sh)
+                moved = True
+        if not moved:
+            break
+    occ = occ0.copy()
+    for p, rot, i, j, k, sh in plan:
+        v = sh[0]
+        occ[i:i + v.shape[0], j:j + v.shape[1], k:k + v.shape[2]] |= v
+    top = int(np.nonzero(occ.any(axis=(0, 1)))[0].max() + 1) if occ.any() else 0
+    return top, occ, plan
+
+
+def _empty_layers(occ: np.ndarray) -> int:
+    a = occ.any(axis=(0, 1))
+    nz = np.nonzero(a)[0]
+    return int((~a[: nz.max() + 1]).sum()) if len(nz) else 0
 
 
 def _fixed_occ(ctx: _Ctx, parts) -> np.ndarray:
@@ -197,7 +311,8 @@ def _layer_spread(occ: np.ndarray) -> float:
 
 def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
               only=None, area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0,
-              time_budget: float = 8.0, progress=None, cancel=None, floor: float = 0.0) -> dict:
+              time_budget: float = 8.0, progress=None, cancel=None, floor: float = 0.0,
+              quality_w: float = 0.5) -> dict:
     """Packt die Teile (oder nur `only`) in den idealen Bereich. Liefert Kennzahlen."""
     if not scene.parts:
         return {"ok": True, "height": 0.0, "density": 0.0, "passes": 0}
@@ -235,15 +350,15 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
                 b = min(len(order) - 1, a + rng.randint(1, 3))
                 order[a], order[b] = order[b], order[a]
         k += 1
-        r = _run(ctx, occ0, order, allow_rotation, cancel)
+        r = _run(ctx, occ0, order, allow_rotation, cancel, quality_w)
         if cancel and cancel():
             break
         tried += 1
         if r:
-            top, occ, plan = r
+            top, occ, plan = _compact(ctx, occ0, r[2])
             key = (top, round(_layer_spread(occ), 2))
             if best is None or key < best[0]:
-                best = (key, plan)
+                best = (key, plan, _empty_layers(occ) * ctx.res)
         if progress:
             progress(min(0.99, max(k / (len(orders) + 1), (time.time() - t0) / max(time_budget, 0.1))))
         if len(movers) <= 1:
@@ -254,6 +369,7 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
         return {"ok": False, "height": 0.0, "density": 0.0, "passes": tried,
                 "error": "Teile passen nicht in den idealen Bereich – Abstand verringern oder Teile verkleinern"}
     _apply(ctx, best[1])
+    empty = best[2]
     if not fixed:                                # Anordnung mittig (gleichmäßigste Temperatur)
         lo = np.min([q.bbox()[0] for q in scene.parts], axis=0)
         hi = np.max([q.bbox()[1] for q in scene.parts], axis=0)
@@ -267,16 +383,17 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
     if progress:
         progress(1.0)
     return {"ok": bool(total_h <= height + 1e-6), "height": round(total_h, 1),
-            "density": round(float(dens) * 100, 1), "passes": tried}
+            "density": round(float(dens) * 100, 1), "passes": tried,
+            "empty_mm": round(float(empty), 1)}
 
 
 def fill(scene: Scene, part: Part, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
          area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0, limit: int = 300,
-         progress=None, cancel=None, floor: float = 0.0) -> int:
+         progress=None, cancel=None, floor: float = 0.0, quality_w: float = 0.5) -> int:
     """„Bauraum auffüllen“: Kopien von `part` hinzufügen, solange sie im Bereich Platz finden."""
     ctx = _Ctx(area, height, gap, wall, floor, res)
     occ = _fixed_occ(ctx, scene.parts)
-    orients = _orientations(part, allow_rotation, ctx)
+    orients = _orientations(part, allow_rotation, ctx, quality_w)
     added = 0
     while added < limit:
         if cancel and cancel():

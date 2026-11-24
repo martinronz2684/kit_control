@@ -127,6 +127,21 @@ class NestTest(unittest.TestCase):
         self.assertFalse(sc.collisions())
 
 
+class OrientTest(unittest.TestCase):
+    def test_flat_plate_stands_up_in_quality_mode(self):
+        from kitslice import packing
+        sc = Scene([Part("platte", box(70, 50, 3))])
+        packing.auto_pack(sc, time_budget=0.5, quality_w=1.0)
+        self.assertGreater(sc.parts[0].size()[2], 20)          # nicht flach liegend (Verzug)
+
+    def test_no_empty_layers(self):
+        from kitslice import packing
+        sc = Scene([Part(f"b{i}", box(30 + i * 3, 25, 10 + i * 4)) for i in range(7)])
+        r = packing.auto_pack(sc, time_budget=1.0)
+        self.assertEqual(r["empty_mm"], 0.0)
+        self.assertEqual(sc.problems(), [])
+
+
 class PackTest(unittest.TestCase):
     def test_auto_pack_and_fill(self):
         from kitslice import packing

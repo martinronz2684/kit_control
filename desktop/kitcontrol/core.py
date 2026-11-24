@@ -249,7 +249,7 @@ class AppCore:
         return self.scene.arrange_rows(gap) if mode == "rows" else self.scene.nest(gap)
 
     def auto_pack(self, gap=3.0, wall=2.0, rotate=True, only_selected=False, time_budget=8.0,
-                  progress=None, cancel=None, floor=0.0) -> dict:
+                  progress=None, cancel=None, quality=0.5) -> dict:
         """Intelligentes Auto-Anordnen (siehe kitslice.packing)."""
         from kitslice import packing
         if not self.scene.parts:
@@ -257,11 +257,11 @@ class AppCore:
         self._push()
         only = [self.scene.parts[self.selected]] if only_selected and 0 <= self.selected < len(self.scene.parts) else None
         r = packing.auto_pack(self.scene, gap, wall, rotate, only, time_budget=time_budget,
-                              progress=progress, cancel=cancel, floor=max(0.0, floor))
+                              progress=progress, cancel=cancel, quality_w=quality)
         self.last_pack = r
         return r
 
-    def fill(self, i: int, gap=3.0, wall=2.0, rotate=True, progress=None, cancel=None, floor=0.0) -> int:
+    def fill(self, i: int, gap=3.0, wall=2.0, rotate=True, progress=None, cancel=None, quality=0.5) -> int:
         from kitslice import packing
         if not self.scene.parts:
             return 0
@@ -270,7 +270,7 @@ class AppCore:
         self.selected = i
         self._push()
         return packing.fill(self.scene, self.scene.parts[i], gap, wall, rotate, progress=progress, cancel=cancel,
-                            floor=max(0.0, floor))
+                            quality_w=quality)
 
     def density(self) -> dict:
         from kitslice.packing import volume

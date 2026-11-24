@@ -238,18 +238,41 @@ Item {
         property bool rotate: true
         property bool onlySel: false
         property int budget: 8
+        property real quality: 0.5
         contentItem: ColumnLayout {
             spacing: 14
             Text { text: "Auto-Anordnen"; color: win.cInk; font.pixelSize: 18; font.weight: Font.DemiBold }
             Body {
                 Layout.fillWidth: true; color: win.cMut; font.pixelSize: 12
-                text: "Packt alle Teile möglichst niedrig und dicht in den idealen Druckbereich (90 × 90 × 110 mm) – auch übereinander. Jedes Teil darf in 24 Lagen gedreht werden; gesperrte Teile bleiben, wie sie sind."
+                text: "Packt alle Teile möglichst niedrig und dicht in den idealen Druckbereich (90 × 90 × 110 mm) – auch übereinander. Jedes Teil darf in 24 Lagen gedreht (große flache Teile auch leicht gekippt) werden; gesperrte Teile bleiben, wie sie sind."
             }
             GridLayout {
                 columns: 2; columnSpacing: 14; rowSpacing: 10
                 Layout.fillWidth: true
                 NumField { Layout.fillWidth: true; label: "Abstand zwischen Teilen"; unit: "mm"; value: String(packPop.gap); onCommitted: (v) => packPop.gap = Number(v.replace(",", ".")) }
                 NumField { Layout.fillWidth: true; label: "Abstand zum Rand"; unit: "mm"; value: String(packPop.wall); onCommitted: (v) => packPop.wall = Number(v.replace(",", ".")) }
+            }
+            ColumnLayout {
+                spacing: 6
+                Text { text: "Ausrichtung nach SLS-Regeln"; color: win.cMut; font.pixelSize: 12 }
+                RowLayout {
+                    spacing: 8
+                    Repeater {
+                        model: [[0.0, "Packdichte"], [0.5, "Ausgewogen"], [1.0, "Qualität"]]
+                        delegate: KButton {
+                            Layout.fillWidth: true
+                            text: modelData[1]
+                            kind: Math.abs(packPop.quality - modelData[0]) < 0.01 ? "pri" : "normal"
+                            onClicked: packPop.quality = modelData[0]
+                        }
+                    }
+                }
+                Body {
+                    Layout.fillWidth: true; color: win.cMut; font.pixelSize: 11
+                    text: packPop.quality > 0.9 ? "Jedes Teil in seiner besten Lage: große Flächen hochkant oder gekippt, Bohrungen stehend, wenig Treppenstufen, gleichmäßiger Querschnitt – kostet etwas Bauhöhe."
+                        : packPop.quality > 0.1 ? "Nur gute Lagen nach SLS-Regeln erlaubt, darunter die am dichtesten packende."
+                        : "Nur Bauhöhe und Dichte zählen, Ausrichtung egal."
+                }
             }
             ColumnLayout {
                 spacing: 6
@@ -279,7 +302,7 @@ Item {
                 Layout.topMargin: 6
                 KButton {
                     text: pg.cur ? "„" + pg.cur.name + "“ auffüllen" : "Mit Kopien auffüllen"; Layout.fillWidth: true; enabled: pg.parts.length > 0
-                    onClicked: { packPop.close(); backend.fillChamber(pg.sel, { gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate }) }
+                    onClicked: { packPop.close(); backend.fillChamber(pg.sel, { gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate, quality: packPop.quality }) }
                     ToolTip.visible: hovered; ToolTip.text: "Das ausgewählte (sonst das erste) Teil so oft kopieren, wie es in den idealen Bereich passt"
                 }
                 KButton {
@@ -295,7 +318,7 @@ Item {
                 KButton { text: "Abbrechen"; kind: "ghost"; onClicked: packPop.close() }
                 KButton {
                     text: "Anordnen"; kind: "pri"
-                    onClicked: { packPop.close(); backend.autoPack({ gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate, onlySelected: packPop.onlySel, time: packPop.budget }) }
+                    onClicked: { packPop.close(); backend.autoPack({ gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate, onlySelected: packPop.onlySel, time: packPop.budget, quality: packPop.quality }) }
                 }
             }
         }
