@@ -216,6 +216,7 @@ def _selftest_mouse(app, engine, backend, out):
         pt = screen_of(i)
         say(f"{view}: Teil 0 bei Bildpunkt {pt.x():.0f},{pt.y():.0f}; Position {x0:.1f},{y0:.1f},{z0:.1f}")
         backend.selected = -1
+        before = [(q.x, q.y, q.z_lift) for q in backend.core.scene.parts]
         send(QEvent.MouseButtonPress, pt, Qt.LeftButton)
         say(f"{view}: nach Klick ausgewählt = {backend.selected}")
         for k in range(1, 11):
@@ -223,9 +224,9 @@ def _selftest_mouse(app, engine, backend, out):
             app.processEvents()
         send(QEvent.MouseButtonRelease, QPointF(pt.x() + 60, pt.y() - 30), Qt.NoButton)
         app.processEvents()
-        p = backend.core.scene.parts[i]
-        moved = abs(p.x - x0) + abs(p.y - y0) + abs(p.z_lift - z0)
-        say(f"{view}: danach Position {p.x:.1f},{p.y:.1f},{p.z_lift:.1f} -> {'OK verschoben' if moved > 1 else 'FEHLER nicht verschoben'}")
+        after = [(q.x, q.y, q.z_lift) for q in backend.core.scene.parts]
+        ch = [(n, b, a) for n, (b, a) in enumerate(zip(before, after)) if sum(abs(u - v) for u, v in zip(b, a)) > 1]
+        say(f"{view}: verschoben: " + ("; ".join(f"Teil {n} {tuple(round(v, 1) for v in b)} -> {tuple(round(v, 1) for v in a)}" for n, b, a in ch) or "FEHLER nichts"))
         shot("maus-" + view)
         QTimer.singleShot(300, nxt)
 
