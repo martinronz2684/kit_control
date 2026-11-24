@@ -255,7 +255,7 @@ Item {
                         ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Vorne"; color: win.cMut; font.pixelSize: 12 } KField { id: lampF; onUserChanged: pp.apply(); Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.front) : "100" } }
                     }
 
-                    Text { visible: pp.err !== ""; text: "⚠ " + pp.err; color: "#ffb4b6"; font.pixelSize: 13; Layout.topMargin: 4 }
+                    Text { visible: pp.err !== ""; text: "⚠ " + pp.err; color: "#ffb4b6"; font.pixelSize: 13; Layout.topMargin: 4; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 
                     RowLayout {
                         Layout.topMargin: 8

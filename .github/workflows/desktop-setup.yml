@@ -44,6 +44,25 @@ jobs:
           # Meldungen als Anmerkungen ausgeben (auf der Run-Seite auch ohne Anmeldung lesbar)
           grep -v "^$" selftest.log | tail -40 | while IFS= read -r l; do echo "::warning title=Selbsttest::$l"; done
           exit $rc
+      - name: Bildschirmfotos aller Seiten (zur Kontrolle)
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+          KIT_UPDATE_REPO: invalid/none
+        run: |
+          cd desktop
+          timeout 120 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--screenshots', '../shots']; sys.exit(main())" || true
+          ls -la ../shots || true
+      - name: Bildschirmfotos ablegen (Release desktop-screens)
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view desktop-screens >/dev/null 2>&1 || \
+            gh release create desktop-screens --title "Kit Control – Bildschirmfotos (automatisch)" \
+              --notes "Vom Build erzeugte Bildschirmfotos aller Seiten zur Kontrolle des Layouts." --latest=false --prerelease
+          gh release upload desktop-screens shots/*.png --clobber || true
       - name: App bauen (PyInstaller)
         shell: bash
         run: |

@@ -29,7 +29,11 @@ def main() -> int:
         print("3D-Ansicht ohne Grafikkarte:", e, file=sys.stderr)
 
     selftest = "--selftest" in sys.argv
-    files = [a for a in sys.argv[1:] if not a.startswith("--")]
+    shots = None
+    if "--screenshots" in sys.argv:
+        shots = sys.argv[sys.argv.index("--screenshots") + 1]
+        os.environ["KIT_PROFILE_DIR"] = os.path.join(shots, "_profile")
+    files = [a for a in sys.argv[1:] if not a.startswith("--") and a != shots]
 
     app = QGuiApplication(sys.argv)
     app.setApplicationName("Kit Control")
@@ -55,6 +59,9 @@ def main() -> int:
     stls = [f for f in files if f.lower().endswith(".stl")]
     if stls:
         backend.addUrls(stls)
+    if shots:
+        _screenshots(app, engine, backend, shots)
+        return app.exec()
     if selftest:
         # Für die automatische Prüfung beim Bauen: Oberfläche laden, alle Seiten einmal zeigen, Fehler melden
         root = engine.rootObjects()[0]
@@ -80,6 +87,53 @@ def main() -> int:
         backend.check_update()
         backend.discover()
     return app.exec()
+
+
+def _screenshots(app, engine, backend, out):
+    """Für die Prüfung beim Bauen: Beispielteile laden, slicen und von jeder Seite ein Bild speichern."""
+    import numpy as np
+    from PySide6.QtCore import QTimer
+    from kitslice import stl
+    os.makedirs(out, exist_ok=True)
+
+    def box(w, d, h):
+        v = np.array([[x, y, z] for x in (0, w) for y in (0, d) for z in (0, h)], float)
+        f = [(0, 2, 3), (0, 3, 1), (4, 5, 7), (4, 7, 6), (0, 1, 5), (0, 5, 4),
+             (2, 6, 7), (2, 7, 3), (0, 4, 6), (0, 6, 2), (1, 3, 7), (1, 7, 5)]
+        return v[np.array(f)]
+    u, v = np.meshgrid(np.linspace(0, np.pi, 40), np.linspace(0, 2 * np.pi, 80))
+    P = np.stack([np.sin(u) * np.cos(v) * 12, np.sin(u) * np.sin(v) * 7, np.cos(u) * 5 + 5], -1)
+    a, b, c, d = P[:-1, :-1], P[1:, :-1], P[1:, 1:], P[:-1, 1:]
+    ell = np.concatenate([np.stack([a, b, c], -2).reshape(-1, 3, 3), np.stack([a, c, d], -2).reshape(-1, 3, 3)])
+    paths = []
+    for name, t in (("Halter", box(30, 20, 12)), ("Linse", ell)):
+        pth = os.path.join(out, name + ".stl")
+        stl.save_binary(t, pth)
+        paths.append(pth)
+    backend.addUrls(paths + paths)
+    backend.core.slice()
+    backend._slice_state = "done"
+    backend.sliceChanged.emit()
+    root = engine.rootObjects()[0]
+    root.setProperty("width", 1360)
+    root.setProperty("height", 860)
+    steps = list(range(5))
+    names = ["1-platzieren", "2-parameter", "3-vorschau", "4-pulver", "5-drucken"]
+
+    def shoot():
+        if not steps:
+            app.exit(0)
+            return
+        i = steps[0]
+        if root.property("page") != i:
+            root.setProperty("page", i)
+            QTimer.singleShot(900, shoot)
+            return
+        steps.pop(0)
+        img = root.grabWindow()
+        img.save(os.path.join(out, names[i] + ".png"))
+        QTimer.singleShot(100, shoot)
+    QTimer.singleShot(1500, shoot)
 
 
 def _selftest_slice() -> int:
