@@ -10,3 +10,13 @@ Nachgebaut nach dem Bytecode von sintratec-build-processor-1.2.0 und sintratec-c
 """
 
 __version__ = "0.1.0"
+
+# kitctl (Druckdatei-Format, Protokoll) liegt eine Ebene höher im Repo und wird mit dem Pi geteilt
+import os as _os
+import sys as _sys
+
+_root = _os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+try:
+    import kitctl as _k  # noqa: F401
+except ImportError:
+    _sys.path.insert(0, _root)

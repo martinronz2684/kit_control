@@ -6,7 +6,11 @@ import threading
 import unittest
 import urllib.request
 
+import sys
+
 import numpy as np
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "desktop"))
 
 os.environ.setdefault("KIT_STATE_DIR", tempfile.mkdtemp(prefix="kitd-test-"))
 os.environ["KIT_PROFILE_DIR"] = tempfile.mkdtemp(prefix="kit-prof-")

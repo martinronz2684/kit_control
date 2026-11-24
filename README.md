@@ -44,7 +44,7 @@ Läuft über NetworkManager; das Land ist auf DE gesetzt (`KIT_WIFI_COUNTRY`).
 |---|---|
 | `kitctl/` | Protokoll und USB (pyusb), Befehle und Antworten |
 | `kitd/` | Dienst: hält die USB-Verbindung, fragt jede Sekunde ab, nimmt Befehle an (Port 8080) |
-| `kitslice/` | Eigener Slicer für die PC-App (STL → Druckdatei wie Central), Pulverprofile, Verbindung zum Pi |
+| `desktop/` | PC-Seite (Kit Control Desktop). `desktop/kitslice/`: eigener Slicer (STL → Druckdatei wie Central), Pulverprofile, Verbindung zum Pi |
 | `app/` | Native Oberfläche (Qt Quick/QML), 800×450 gezeichnet, auf dem 5"-Display gedreht und skaliert |
 | `ui/` | Dieselbe Oberfläche als Webseite (später für Handy/PC im WLAN) |
 | `system/` | systemd-Dienste, App-Start (Qt eglfs), Startbildschirm, udev-Regel |
@@ -60,6 +60,7 @@ Läuft über NetworkManager; das Land ist auf DE gesetzt (`KIT_WIFI_COUNTRY`).
   Abschalten in `/etc/kit/kitd.env`: `KIT_NET_JOBS=0` (keine Jobs aus dem Netz), `KIT_NET_START=0` (nur übertragen).
 
 ## PC: Slicer (Vorstufe der Desktop-App)
+Im Ordner `desktop/`:
 ```bash
 python3 -m kitslice.cli profiles                                   # Vorlagen PA12/TPE und eigene Profile
 python3 -m kitslice.cli slice teil.stl --profile pa12 -o job.bin   # slicen wie Central
@@ -67,7 +68,7 @@ python3 -m kitslice.cli slice teil.stl --send 192.168.1.50 --start # slicen, zum
 python3 -m kitslice.cli discover                                   # Kit Control im Netz finden
 ```
 Braucht Python 3.9+ und numpy. Die Slicer-Regeln stammen aus dem Build-Processor von Central 1.2.0
-(Details in `kitslice/__init__.py`), der Funktionsabgleich mit Central steht in `docs/CENTRAL-FUNKTIONEN.md`.
+(Details in `desktop/kitslice/__init__.py`), der Funktionsabgleich mit Central steht in `docs/CENTRAL-FUNKTIONEN.md`.
 
 ## Noch offen
 - PC-Durchreichen (Pi meldet sich am PC als Kit) – nächster Baustein
