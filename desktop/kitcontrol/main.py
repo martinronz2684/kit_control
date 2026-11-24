@@ -231,13 +231,21 @@ def _selftest_mouse(app, engine, backend, out):
         QTimer.singleShot(300, nxt)
 
     def pack():
-        r = backend.core.auto_pack(3.0, 2.0, True, False, 6.0)
-        backend._parts_changed()
-        say(f"Anordnen: {r}")
-        v = vp()
-        if v:
-            v.setProperty("elev", 4); v.setProperty("yaw", 0)
-        QTimer.singleShot(1500, lambda: (shot("anordnen-vorne"), QTimer.singleShot(200, nxt)))
+        # wie in der App: über die Oberfläche (eigener Thread, Fortschritt, Meldung)
+        backend.message.connect(lambda m, k: say(f"Meldung ({k}): {m}"))
+        backend.autoPack({"gap": 1, "wall": 2, "rotate": True, "onlySelected": False, "time": 8, "quality": 0.5})
+
+        def wait():
+            if backend.property("packState") == "running":
+                QTimer.singleShot(300, wait)
+                return
+            say(f"Bauhöhe nach Anordnen: {max(p.bbox()[1][2] for p in backend.core.scene.parts):.1f} mm, "
+                f"Probleme: {backend.core.problems()[:3]}")
+            v = vp()
+            if v:
+                v.setProperty("elev", 4); v.setProperty("yaw", 0)
+            QTimer.singleShot(1500, lambda: (shot("anordnen-vorne"), QTimer.singleShot(200, nxt)))
+        QTimer.singleShot(500, wait)
 
     def iso():
         v = vp()

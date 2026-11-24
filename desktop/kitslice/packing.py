@@ -610,6 +610,9 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
                       progress, cancel, floor, 0.0)
         r["relaxed"] = True
         return r
+    if best is None and cancel and cancel():
+        return {"ok": False, "height": 0.0, "density": 0.0, "passes": tried,
+                "error": "Anordnen abgebrochen – Anordnung unverändert"}
     if best is None:
         return {"ok": False, "height": 0.0, "density": 0.0, "passes": tried,
                 "error": "Teile passen nicht in den idealen Bereich – Abstand verringern oder Teile verkleinern"}

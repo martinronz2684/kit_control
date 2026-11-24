@@ -131,7 +131,7 @@ Item {
                         spacing: 8
                         KButton { text: "Hinzufügen …"; Layout.fillWidth: true; onClicked: openStl.open() }
                         KButton {
-                            text: backend.packState === "running" ? "Ordnet an … " + Math.round(backend.packProgress * 100) + " %" : "Auto-Anordnen"
+                            text: backend.packState === "running" ? "Abbrechen (" + Math.round(backend.packProgress * 100) + " %)" : "Auto-Anordnen"
                             kind: "pri"; Layout.fillWidth: true
                             enabled: pg.parts.length > 0
                             onClicked: backend.packState === "running" ? backend.cancelPack() : packPop.open()
