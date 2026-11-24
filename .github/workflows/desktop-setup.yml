@@ -65,6 +65,11 @@ jobs:
         run: |
           $p = Start-Process -FilePath dist\KitControl\KitControl.exe -ArgumentList "--selftest" -PassThru -Wait
           if ($p.ExitCode -ne 0) { Write-Error "Selbsttest der gebauten App fehlgeschlagen ($($p.ExitCode))"; exit 1 }
+      - name: Gebaute App – Slicen auf mehreren Kernen
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath dist\KitControl\KitControl.exe -ArgumentList "--selftest-slice" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { Write-Error "Paralleles Slicen in der gebauten App fehlgeschlagen ($($p.ExitCode))"; exit 1 }
       - name: Inno Setup bereitstellen
         shell: pwsh
         run: |

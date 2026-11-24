@@ -15,6 +15,8 @@ def main() -> int:
     if here not in sys.path:
         sys.path.insert(0, here)
     os.environ.setdefault("QT_QUICK_CONTROLS_STYLE", "Basic")
+    if "--selftest-slice" in sys.argv:
+        return _selftest_slice()
 
     from PySide6.QtCore import QTimer, QUrl
     from PySide6.QtGui import QFont, QGuiApplication, QIcon
@@ -74,6 +76,23 @@ def main() -> int:
         backend.check_update()
         backend.discover()
     return app.exec()
+
+
+def _selftest_slice() -> int:
+    """Für die Prüfung beim Bauen: Slicen auf mehreren Kernen in der gebauten App."""
+    import numpy as np
+    from kitslice import profiles as PR
+    from kitslice.slicer import SliceSettings, slice_mesh
+    v = np.array([[x, y, z] for x in (-20, 20) for y in (-20, 20) for z in (0, 30)], float)
+    f = [(0, 2, 3), (0, 3, 1), (4, 5, 7), (4, 7, 6), (0, 1, 5), (0, 5, 4),
+         (2, 6, 7), (2, 7, 3), (0, 4, 6), (0, 6, 2), (1, 3, 7), (1, 7, 5)]
+    tris = v[np.array(f)]
+    s = SliceSettings.from_profile(PR.validate(PR.get("pa12")))
+    from kitslice import slicer
+    layers = slicer._slice_parallel(*slicer.index_mesh(tris), s, 300, 2, None, None)
+    ok = len(layers) == 300 and all(L is not None and len(L.hatches) for L in layers)
+    print("Selbsttest Slicen auf mehreren Kernen:", "ok" if ok else "FEHLER")
+    return 0 if ok else 1
 
 
 if __name__ == "__main__":
