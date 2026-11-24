@@ -117,6 +117,7 @@ class SliceSettings:
     core_every: int = 1                      # im Kern nur jede n-te Schraffurlinie (Abstand x n)
     shrink_pct: tuple = (0.0, 0.0, 0.0)      # Schwundausgleich X/Y/Z in %
     optimize_path: bool = False              # Inseln und Konturen nach kürzestem Weg sortieren
+    keep_thin: bool = True                   # dünne Wände nicht verlieren (Kontur mit kleinerem Versatz)
 
     @classmethod
     def from_profile(cls, p: dict) -> "SliceSettings":
@@ -137,6 +138,7 @@ class SliceSettings:
             core_every=max(1, int(round((p.get("core_spacing_um") or p["hatch_spacing_um"]) / p["hatch_spacing_um"]))),
             shrink_pct=tuple(float((p.get("shrink_pct") or {}).get(a, 0.0)) for a in "xyz"),
             optimize_path=bool(p.get("optimize_path", False)),
+            keep_thin=bool(p.get("keep_thin", True)),
         )
 
 
@@ -192,8 +194,8 @@ def build_layers(sections, s: SliceSettings, progress=None, cancel=None) -> list
             if s.draw_original_boundary:
                 contours += loops
             cur = loops
-            for _ in range(s.perimeters):               # Perimeter nacheinander, außen zuerst
-                cur = G.offset(cur, s.perimeter_offset_mm)
+            for pi in range(s.perimeters):              # Perimeter nacheinander, außen zuerst
+                cur = G.offset(cur, s.perimeter_offset_mm, keep_thin=(pi == 0 and s.keep_thin))
                 contours += cur
             infill = G.offset(loops, s.hatch_offset_mm)  # Füllversatz vom Originalrand
             ang = _angle(s, i, angles)

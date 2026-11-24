@@ -26,6 +26,7 @@ Item {
         q.shrink_pct = { x: n(shrinkX.text) || 0, y: n(shrinkY.text) || 0, z: n(shrinkZ.text) || 0 }
         q.contour_first = contourFirst.checked
         q.optimize_path = optPath.checked
+        q.keep_thin = keepThin.checked
         q.lamps = lampSwitch.checked ? { left: Number(lampL.text), right: Number(lampR.text), front: Number(lampF.text) } : null
         if (asNew || q.builtin) { q.base = q.id; delete q.id; q.builtin = false }
         err = backend.saveProfile(q)
@@ -196,6 +197,11 @@ Item {
                             spacing: 8
                             Switch { id: optPath; checked: pp.prof.optimize_path === true }
                             Text { text: "Laserwege optimieren"; color: win.cInk; font.pixelSize: 13 }
+                        }
+                        RowLayout {
+                            spacing: 8
+                            Switch { id: keepThin; checked: pp.prof.keep_thin !== false }
+                            Text { text: "Dünne Wände erhalten"; color: win.cInk; font.pixelSize: 13 }
                         }
                     }
 

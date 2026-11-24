@@ -124,11 +124,17 @@ def _intersect(p1, p2, p3, p4):
     return p1 + s * d1
 
 
-def offset(loops: list[np.ndarray], d: float) -> list[np.ndarray]:
-    """Alle (ausgerichteten) Polygone eines Querschnitts um d nach innen versetzen."""
+def offset(loops: list[np.ndarray], d: float, keep_thin: bool = False) -> list[np.ndarray]:
+    """Alle (ausgerichteten) Polygone eines Querschnitts um d nach innen versetzen.
+    keep_thin: dünne Wände, die beim vollen Versatz verschwinden würden, mit halbem Versatz und notfalls
+    auf der Originalkontur behalten (wie die „Edge“-Belichtung bei EOS) – sonst fehlen sie im Druck."""
     out = []
     for l in loops:
         q = offset_loop(l, d)
+        if q is None and keep_thin and d > 0:
+            q = offset_loop(l, d / 2)
+            if q is None and area(l) > 0:        # nur Außenränder, Löcher würden sonst zuwachsen
+                q = l.copy()
         if q is not None:
             out.append(q)
     return out

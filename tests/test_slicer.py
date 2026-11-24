@@ -141,6 +141,13 @@ class StrategyTest(unittest.TestCase):
             profiles.validate(dict(base, core_spacing_um=50))
 
 
+class ThinWallTest(unittest.TestCase):
+    def test_thin_wall_kept(self):
+        sc = Scene([Part("wand", box(30, 0.3, 2))])
+        _, m, _ = make_job(sc, profiles.validate(profiles.get("pa12")))
+        self.assertGreater(m["vectors"], 0)
+
+
 class ProfileTest(unittest.TestCase):
     def test_save_derive_validate(self):
         p = profiles.derive("pa12", "Mein PA12 schwarz")

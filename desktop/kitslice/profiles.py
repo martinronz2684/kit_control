@@ -86,6 +86,7 @@ def validate(p: dict) -> dict:
     # Erweiterte Strategien (fehlen = Verhalten von Central)
     q["contour_first"] = bool(q.get("contour_first", True))
     q["optimize_path"] = bool(q.get("optimize_path", False))
+    q["keep_thin"] = bool(q.get("keep_thin", True))
     st = q.get("hatch_angle_step_deg")
     q["hatch_angle_step_deg"] = None if st in (None, "", 0) else float(st)
     if q["hatch_angle_step_deg"] is not None and not 1 <= abs(q["hatch_angle_step_deg"]) <= 179:

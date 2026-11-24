@@ -151,6 +151,11 @@ Item {
                         spacing: 34
                         Stat { label: "Schicht"; value: k.printing ? (k.layer || 0) + (pr.job && pr.job.layers ? " / " + pr.job.layers : "") : "–" }
                         Stat { label: "Druckzeit"; value: k.printing ? win.fmtTime(k.elapsed_s) : "–" }
+                        Stat {
+                            label: "Restzeit (geschätzt)"
+                            value: k.printing && k.layer > 3 && pr.job && pr.job.layers ? win.fmtTime(k.elapsed_s / k.layer * Math.max(0, pr.job.layers - k.layer)) : "–"
+                            tint: win.cAcc
+                        }
                         Stat { label: "Job"; value: pr.job ? pr.job.name : "–" }
                     }
                 }
