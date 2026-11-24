@@ -9,6 +9,8 @@ Canvas {
     property real plate: 110
     property real idealXY: 90
     property real idealZ: 110
+    property real machineZ: 110
+    readonly property string bedFill: "#15212a"
     property real yaw: -32
     property real elev: 26
     property real zoom: 1.0
@@ -62,14 +64,29 @@ Canvas {
         // Bauplatte mit Raster
         var h = plate / 2
         var c0 = P(-h, -h, 0), c1 = P(h, -h, 0), c2 = P(h, h, 0), c3 = P(-h, h, 0)
-        g.fillStyle = "#11161b"
+        g.fillStyle = bedFill
         g.beginPath(); g.moveTo(c0[0], c0[1]); g.lineTo(c1[0], c1[1]); g.lineTo(c2[0], c2[1]); g.lineTo(c3[0], c3[1]); g.closePath(); g.fill()
-        g.strokeStyle = "#1e252c"; g.lineWidth = 1
+        g.strokeStyle = "#1f2f3a"; g.lineWidth = 1
         g.beginPath()
         for (var v = -h + 10; v < h; v += 10) { line(P(v, -h, 0), P(v, h, 0)); line(P(-h, v, 0), P(h, v, 0)) }
         g.stroke()
-        g.strokeStyle = "#34404a"; g.lineWidth = 1.4
+        g.strokeStyle = "#3b5566"; g.lineWidth = 1.4
         g.beginPath(); g.moveTo(c0[0], c0[1]); g.lineTo(c1[0], c1[1]); g.lineTo(c2[0], c2[1]); g.lineTo(c3[0], c3[1]); g.closePath(); g.stroke()
+
+        // Maschinengrenzen: hintere Wände leicht bläulich (Farbe des Betts), vordere nur als Kante
+        var mz = machineZ
+        var mb = [P(-h, -h, 0), P(h, -h, 0), P(h, h, 0), P(-h, h, 0), P(-h, -h, mz), P(h, -h, mz), P(h, h, mz), P(-h, h, mz)]
+        var walls = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
+        var mid = P(0, 0, mz / 2)[2]
+        for (var wi = 0; wi < 4; wi++) {
+            var W = walls[wi]
+            var wd = (mb[W[0]][2] + mb[W[1]][2] + mb[W[2]][2] + mb[W[3]][2]) / 4
+            if (wd <= mid) continue          // vordere Wand: nicht füllen
+            g.fillStyle = "rgba(38,62,78,0.30)"
+            g.beginPath(); g.moveTo(mb[W[0]][0], mb[W[0]][1])
+            for (var wk = 1; wk < 4; wk++) g.lineTo(mb[W[wk]][0], mb[W[wk]][1])
+            g.closePath(); g.fill()
+        }
 
         // Dreiecke aller Bauteile sammeln
         var tris = []
@@ -122,6 +139,13 @@ Canvas {
         g.stroke()
         g.fillStyle = "rgba(205,210,216,0.7)"; g.font = "11px sans-serif"
         g.fillText(idealXY + " × " + idealXY + " × " + idealZ + " mm", q[7][0] + 6, q[7][1] - 4)
+        // Kanten der Maschinengrenzen
+        g.strokeStyle = "rgba(80,130,160,0.65)"; g.lineWidth = 1.3
+        g.beginPath()
+        for (var me = 0; me < 4; me++) { line(mb[me], mb[(me + 1) % 4]); line(mb[me + 4], mb[(me + 1) % 4 + 4]); line(mb[me], mb[me + 4]) }
+        g.stroke()
+        g.fillStyle = "rgba(110,160,190,0.75)"
+        g.fillText("Bauraum " + plate + " × " + plate + " × " + machineZ + " mm", mb[4][0] + 6, mb[4][1] - 4)
     }
 
     function hit(mx, my) {

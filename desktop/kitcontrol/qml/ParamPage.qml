@@ -136,12 +136,11 @@ Item {
                         Text { text: "Schraffurwinkel je Schicht (reihum)"; color: win.cMut; font.pixelSize: 12 }
                         KField { id: angleField; Layout.fillWidth: true; text: (pp.prof.hatch_angles_deg || []).join(", ") }
                     }
-                    CheckBox {
+                    KCheck {
                         id: origBox
                         text: "Originalkontur zusätzlich lasern"
                         checked: pp.prof.draw_original_boundary === true
                         onToggled: pp.setv("draw_original_boundary", checked)
-                        contentItem: Text { text: origBox.text; color: win.cInk; font.pixelSize: 13; leftPadding: origBox.indicator.width + 8; verticalAlignment: Text.AlignVCenter }
                     }
 
                     Caption { text: "Strategien (leer/0 = wie Central)"; Layout.topMargin: 6 }

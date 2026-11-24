@@ -58,23 +58,30 @@ def hull(xy: np.ndarray) -> list:
 
 
 def decimate(tris: np.ndarray, max_tris: int) -> list:
-    """Netz für die Anzeige vereinfachen (Eckpunkte auf ein Raster zusammenlegen), bis höchstens max_tris."""
+    """Netz für die Anzeige vereinfachen: nahe Eckpunkte zusammenlegen (Mittelwert statt Rasterpunkt,
+    damit nichts „treppig“ aussieht), bis höchstens max_tris Dreiecke übrig sind."""
     t = tris
     if len(t) > max_tris:
-        size = float(np.max(t.reshape(-1, 3).max(axis=0) - t.reshape(-1, 3).min(axis=0))) or 1.0
-        cell = size / 400
-        for _ in range(12):
-            q = np.round(t.reshape(-1, 3) / cell).astype(np.int64)
+        pts = t.reshape(-1, 3)
+        size = float(np.max(pts.max(axis=0) - pts.min(axis=0))) or 1.0
+        cell = size / 1500
+        for _ in range(16):
+            q = np.floor(pts / cell).astype(np.int64)
             _, inv = np.unique(q, axis=0, return_inverse=True)
+            inv = inv.ravel()
             f = inv.reshape(-1, 3)
             keep = (f[:, 0] != f[:, 1]) & (f[:, 1] != f[:, 2]) & (f[:, 0] != f[:, 2])
             if keep.sum() <= max_tris:
-                t = (q.reshape(-1, 3, 3) * cell)[keep]
+                cnt = np.bincount(inv)
+                mean = np.zeros((len(cnt), 3))
+                np.add.at(mean, inv, pts)
+                mean /= cnt[:, None]
+                t = mean[f[keep]]
                 break
-            cell *= 1.5
+            cell *= 1.25
         else:
             t = t[:: len(t) // max_tris + 1]
-    return np.round(t.astype(np.float64), 2).ravel().tolist()
+    return np.round(t.astype(np.float64), 3).ravel().tolist()
 
 
 class AppCore:
@@ -238,8 +245,11 @@ class AppCore:
 
     def fill(self, i: int, gap=3.0, wall=2.0, rotate=True, progress=None, cancel=None) -> int:
         from kitslice import packing
-        if not 0 <= i < len(self.scene.parts):
+        if not self.scene.parts:
             return 0
+        if not 0 <= i < len(self.scene.parts):
+            i = 0                       # ohne Auswahl: das (erste) Teil auffüllen
+        self.selected = i
         self._push()
         return packing.fill(self.scene, self.scene.parts[i], gap, wall, rotate, progress=progress, cancel=cancel)
 
@@ -252,12 +262,14 @@ class AppCore:
         v = sum(volume(p) for p in self.scene.parts)
         return {"height": round(h, 1), "density": round(v / (IDEAL_XY * IDEAL_XY * max(h, 1e-6)) * 100, 1)}
 
-    def display_mesh(self, i: int, max_tris: int = 3000) -> list:
+    def display_mesh(self, i: int, max_tris: int = 0) -> list:
         """Vereinfachtes Netz eines Bauteils für die 3D-Ansicht (flach: x,y,z je Ecke, lokal zur Lage)."""
         if not 0 <= i < len(self.scene.parts):
             return []
         p = self.scene.parts[i]
-        key = ("mesh", id(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale))
+        if not max_tris:   # Gesamtbudget für flüssiges Drehen auf alle Teile verteilen
+            max_tris = int(max(1500, min(16000, 40000 / max(1, len(self.scene.parts)))))
+        key = ("mesh", id(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale), max_tris)
         if key not in self._outline_cache:
             self._outline_cache[key] = decimate(p._oriented(), max_tris)
         return self._outline_cache[key]

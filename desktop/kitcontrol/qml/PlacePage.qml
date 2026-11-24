@@ -162,18 +162,14 @@ Item {
                     RowLayout {
                         enabled: pg.cur !== null
                         spacing: 14
-                        CheckBox {
+                        KCheck {
                             id: lockPos
                             checked: pg.cur ? pg.cur.lock_pos : false
-                            onToggled: backend.setPart(pg.sel, "lock_pos", checked)
-                            contentItem: Text { text: "Position sperren"; color: win.cInk; font.pixelSize: 12; leftPadding: lockPos.indicator.width + 6; verticalAlignment: Text.AlignVCenter }
-                        }
-                        CheckBox {
+                            onToggled: backend.setPart(pg.sel, "lock_pos", checked); text: "Position sperren" }
+                        KCheck {
                             id: lockOri
                             checked: pg.cur ? pg.cur.lock_orient : false
-                            onToggled: backend.setPart(pg.sel, "lock_orient", checked)
-                            contentItem: Text { text: "Lage sperren"; color: win.cInk; font.pixelSize: 12; leftPadding: lockOri.indicator.width + 6; verticalAlignment: Text.AlignVCenter }
-                        }
+                            onToggled: backend.setPart(pg.sel, "lock_orient", checked); text: "Lage sperren" }
                     }
                     RowLayout {
                         enabled: pg.cur !== null
@@ -253,22 +249,18 @@ Item {
             }
             RowLayout {
                 spacing: 18
-                CheckBox {
-                    id: rotBox; checked: packPop.rotate; onToggled: packPop.rotate = checked
-                    contentItem: Text { text: "Teile drehen erlaubt"; color: win.cInk; font.pixelSize: 13; leftPadding: rotBox.indicator.width + 6; verticalAlignment: Text.AlignVCenter }
-                }
-                CheckBox {
-                    id: selBox; checked: packPop.onlySel; enabled: pg.cur !== null; onToggled: packPop.onlySel = checked
-                    contentItem: Text { text: "Nur ausgewähltes Teil"; color: win.cInk; font.pixelSize: 13; leftPadding: selBox.indicator.width + 6; verticalAlignment: Text.AlignVCenter; opacity: selBox.enabled ? 1 : 0.4 }
-                }
+                KCheck {
+                    id: rotBox; checked: packPop.rotate; onToggled: packPop.rotate = checked; text: "Teile drehen erlaubt" }
+                KCheck {
+                    id: selBox; checked: packPop.onlySel; enabled: pg.cur !== null; onToggled: packPop.onlySel = checked; text: "Nur ausgewähltes Teil" }
             }
             RowLayout {
                 spacing: 8
                 Layout.topMargin: 6
                 KButton {
-                    text: "Mit Kopien auffüllen"; Layout.fillWidth: true; enabled: pg.cur !== null
+                    text: pg.cur ? "„" + pg.cur.name + "“ auffüllen" : "Mit Kopien auffüllen"; Layout.fillWidth: true; enabled: pg.parts.length > 0
                     onClicked: { packPop.close(); backend.fillChamber(pg.sel, { gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate }) }
-                    ToolTip.visible: hovered; ToolTip.text: "Das ausgewählte Teil so oft kopieren, wie es in den idealen Bereich passt"
+                    ToolTip.visible: hovered; ToolTip.text: "Das ausgewählte (sonst das erste) Teil so oft kopieren, wie es in den idealen Bereich passt"
                 }
                 KButton {
                     text: "Flach"
