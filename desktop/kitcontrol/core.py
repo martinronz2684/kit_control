@@ -210,6 +210,7 @@ class AppCore:
             p = Part(src.name + " (Kopie)", src.mesh)
             for k in PART_KEYS:
                 setattr(p, k, copy.copy(getattr(src, k)))
+            p.lock_pos = False                  # eine Kopie liegt woanders – Positionssperre nicht mitkopieren
             self.scene.add(p)
             self.scene.nest(only=[p])
             self.selected = len(self.scene.parts) - 1
@@ -258,6 +259,14 @@ class AppCore:
                     best, bi = tmin, i
         return bi
 
+    def unlock_all(self) -> int:
+        n = sum(1 for p in self.scene.parts if p.lock_pos or p.lock_orient)
+        if n:
+            self._push()
+            for p in self.scene.parts:
+                p.lock_pos = p.lock_orient = False
+        return n
+
     def move_part(self, i: int, x: float, y: float, record: bool, z=None) -> None:
         """Ziehen mit der Maus: nur am Anfang einen Rückgängig-Schritt anlegen."""
         if not 0 <= i < len(self.scene.parts):
@@ -292,6 +301,7 @@ class AppCore:
         only = [self.scene.parts[self.selected]] if only_selected and 0 <= self.selected < len(self.scene.parts) else None
         r = packing.auto_pack(self.scene, gap, wall, rotate, only, time_budget=time_budget,
                               progress=progress, cancel=cancel, quality_w=quality)
+        r["locked"] = sum(1 for p in self.scene.parts if p.lock_pos)
         self.last_pack = r
         return r
 

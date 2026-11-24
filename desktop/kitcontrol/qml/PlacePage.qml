@@ -121,6 +121,13 @@ Item {
                             color: index === pg.sel ? "#16313c" : (ma.containsMouse ? "#181c21" : "transparent")
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
+                                Text {
+                                    visible: modelData.lock_pos || modelData.lock_orient
+                                    text: "🔒"
+                                    color: "#ffd59a"; font.pixelSize: 12
+                                    ToolTip.visible: lockMa.containsMouse; ToolTip.text: modelData.lock_pos ? "Position gesperrt – Auto-Anordnen bewegt dieses Teil nicht" : "Lage gesperrt – wird nicht gedreht"
+                                    MouseArea { id: lockMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                                }
                                 Text { text: modelData.name; color: win.cInk; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
                                 Text { text: modelData.size[0].toFixed(1) + " × " + modelData.size[1].toFixed(1) + " × " + modelData.size[2].toFixed(1); color: win.cMut; font.pixelSize: 11 }
                             }
@@ -251,6 +258,22 @@ Item {
             Body {
                 Layout.fillWidth: true; color: win.cMut; font.pixelSize: 12
                 text: "Packt alle Teile möglichst niedrig und dicht in den idealen Druckbereich (90 × 90 × 110 mm) – auch übereinander. SLS-Regeln gelten immer: Mindestabstand in alle Richtungen, Abstand zum Rand, nichts verhakt sich. Jedes Teil wird erst so tief wie möglich gepackt und dann in die beste Lage nach SLS-Regeln gedreht, wo das keine Bauhöhe kostet. Gesperrte Teile bleiben, wie sie sind."
+            }
+            Rectangle {
+                visible: backend.lockedCount > 0
+                Layout.fillWidth: true
+                implicitHeight: lockRow.implicitHeight + 16
+                radius: 8; color: "#2a2312"; border.color: "#5c4a22"
+                RowLayout {
+                    id: lockRow
+                    anchors.fill: parent; anchors.margins: 8
+                    spacing: 10
+                    Body {
+                        Layout.fillWidth: true; color: "#ffd59a"; font.pixelSize: 12
+                        text: backend.lockedCount + " Teile sind gesperrt (🔒) und werden nicht bewegt bzw. gedreht – das kann viel Bauhöhe kosten."
+                    }
+                    KButton { text: "Sperren aufheben"; onClicked: backend.unlockAll() }
+                }
             }
             GridLayout {
                 columns: 2; columnSpacing: 14; rowSpacing: 10

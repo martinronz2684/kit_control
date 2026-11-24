@@ -200,7 +200,8 @@ class Backend(QObject):
         def msg(r):
             if not r.get("ok"):
                 return r.get("error") or f"Angeordnet, aber höher als der ideale Bereich ({r.get('height')} mm)"
-            return f"Angeordnet: Bauhöhe {r['height']} mm, Packdichte {r['density']} %, leere Schichten {r.get('empty_mm', 0)} mm ({r['passes']} Durchläufe)" + (
+            lk = f" – {r['locked']} gesperrte Teile wurden nicht bewegt" if r.get("locked") else ""
+            return f"Angeordnet{lk}: Bauhöhe {r['height']} mm, Packdichte {r['density']} %, leere Schichten {r.get('empty_mm', 0)} mm ({r['passes']} Durchläufe)" + (
                 " – Ausrichtungsregeln gelockert, weil die Teile sonst nicht passen" if r.get("relaxed") else "")
         self._pack_job(fn, msg)
 
@@ -220,6 +221,16 @@ class Backend(QObject):
     @Slot(float, float, float, float, float, float, result=int)
     def pickPart(self, ax, ay, az, bx, by, bz):
         return self.core.pick((ax, ay, az), (bx, by, bz))
+
+    @Property(int, notify=partsChanged)
+    def lockedCount(self):
+        return sum(1 for p in self.core.scene.parts if p.lock_pos or p.lock_orient)
+
+    @Slot()
+    def unlockAll(self):
+        n = self.core.unlock_all()
+        self._parts_changed()
+        self.message.emit(f"Sperre bei {n} Teilen aufgehoben" if n else "Keine Teile gesperrt", "ok")
 
     @Slot(int, float, float, float)
     def movePart3(self, i, x, y, z):
