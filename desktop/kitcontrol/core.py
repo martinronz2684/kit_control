@@ -260,15 +260,28 @@ class AppCore:
         return bi
 
     def add_calibration_part(self) -> None:
-        """Kalibrierteil: Winkel 50 × 50 mm mit Turm 10 mm hoch – Soll X 50, Y 50, Z 10 mm."""
-        def box(x, y, z, w, d, h):
-            v = np.array([[x + a, y + b, z + c] for a in (0, w) for b in (0, d) for c in (0, h)], float)
-            f = [(0, 2, 3), (0, 3, 1), (4, 5, 7), (4, 7, 6), (0, 1, 5), (0, 5, 4),
-                 (2, 6, 7), (2, 7, 3), (0, 4, 6), (0, 6, 2), (1, 3, 7), (1, 7, 5)]
-            return v[np.array(f)]
-        mesh = np.concatenate([box(0, 0, 0, 50, 6, 4), box(0, 6, 0, 6, 44, 4), box(0, 0, 4, 6, 6, 6)])
+        """Kalibrierteil wie bei Sintratec: Rahmen 40 × 40 mm, innen 30 × 30 mm offen, 5 mm hoch;
+        oben auf dem hinteren Steg (Y-Seite) eine Nut 5 mm breit, 1 mm tief als Richtungsmarke.
+        Soll: X 40, Y 40, Z 5 mm (innen 30 mm)."""
+        def extrude(loops, rects, z0, z1):
+            """Geschlossener Körper: Seitenwände nur am Rand (loops, außen gegen, Löcher im Uhrzeigersinn),
+            Deckel/Boden aus Rechtecken – keine inneren Flächen (sonst Laserlinien mitten im Teil)."""
+            t = []
+            for loop in loops:
+                for (x0, y0), (x1, y1) in zip(loop, loop[1:] + loop[:1]):
+                    t += [[(x0, y0, z0), (x1, y1, z0), (x1, y1, z1)], [(x0, y0, z0), (x1, y1, z1), (x0, y0, z1)]]
+            for x0, y0, x1, y1 in rects:
+                t += [[(x0, y0, z1), (x1, y0, z1), (x1, y1, z1)], [(x0, y0, z1), (x1, y1, z1), (x0, y1, z1)],
+                      [(x0, y0, z0), (x1, y1, z0), (x1, y0, z0)], [(x0, y0, z0), (x0, y1, z0), (x1, y1, z0)]]
+            return np.array(t, float)
+        ring = [[(0, 0), (40, 0), (40, 40), (0, 40)], [(5, 5), (5, 35), (35, 35), (35, 5)]]
+        ring_rects = [(0, 0, 40, 5), (0, 5, 5, 35), (35, 5, 40, 35), (0, 35, 40, 40)]
+        c_loop = [[(0, 0), (40, 0), (40, 40), (22.5, 40), (22.5, 35), (35, 35), (35, 5), (5, 5), (5, 35),
+                   (17.5, 35), (17.5, 40), (0, 40)]]
+        c_rects = [(0, 0, 40, 5), (0, 5, 5, 35), (35, 5, 40, 35), (0, 35, 17.5, 40), (22.5, 35, 40, 40)]
+        mesh = np.concatenate([extrude(ring, ring_rects, 0, 4), extrude(c_loop, c_rects, 4, 5)])
         self._push()
-        p = Part("Kalibrierteil 50 × 50 × 10 mm", mesh)
+        p = Part("Kalibrierteil 40 × 40 × 5 mm", mesh)
         self.scene.add(p)
         self.scene.nest(only=[p])
         self.selected = len(self.scene.parts) - 1

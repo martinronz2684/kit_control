@@ -230,7 +230,7 @@ class Backend(QObject):
     def addCalibrationPart(self):
         self.core.add_calibration_part()
         self._parts_changed()
-        self.message.emit("Kalibrierteil hinzugefügt – drucken, X/Y-Länge und Höhe messen, unter „Pulver“ eintragen", "ok")
+        self.message.emit("Kalibrierteil hinzugefügt (40 × 40 × 5 mm, Nut hinten = Y) – drucken, außen messen, unter „Pulver“ eintragen", "ok")
 
     @Slot()
     def unlockAll(self):

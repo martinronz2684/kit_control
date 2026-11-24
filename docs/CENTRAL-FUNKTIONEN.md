@@ -84,7 +84,7 @@ Spalte „Pi“ = Touch-Oberfläche am Kit, „PC“ = Kit Control Desktop.
 | Kalibriermuster / Mittelpunkt anzeigen, beenden | ✅ | ✅ | PC: Seite „Pulver“ |
 | Achsen referenzieren | ✅ (nur nach Bestätigung) | ⬜ | Grundsatz: Pi stößt das nie selbst an |
 | Digitale Skalierung berechnen (Soll/Ist, ±5 %) und senden | ✅ | ✅ | PC zeigt die Werte im Kit und die gesicherten Werkswerte |
-| Kalibrierteil / Musterkarte (PDF) speichern | ⬜ | ✅ | PC: eigenes Kalibrierteil 50 × 50 × 10 mm |
+| Kalibrierteil / Musterkarte (PDF) speichern | ⬜ | ✅ | PC: Kalibrierteil 40 × 40 × 5 mm (innen 30 × 30, Nut hinten als Y-Marke) |
 
 ## 8. Verbindung, System
 | Funktion | Pi | PC | Anmerkung |

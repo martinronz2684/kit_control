@@ -43,7 +43,7 @@ Card {
             KButton { text: "Mitte"; Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: cc.ready; onClicked: backend.cmd({ cmd: "pattern", name: "center" }) }
             KButton { text: "Aus"; kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: cc.ready; onClicked: backend.cmd({ cmd: "exit_calibration" }) }
         }
-        Text { text: "Kalibrierteil messen (mm)"; color: win.cMut; font.pixelSize: 12; Layout.topMargin: 4 }
+        Text { text: "Kalibrierteil außen messen (mm) – Nut zeigt nach hinten (Y)"; color: win.cMut; font.pixelSize: 12; Layout.topMargin: 4 }
         GridLayout {
             Layout.fillWidth: true
             columns: 4; columnSpacing: 6; rowSpacing: 6
@@ -52,15 +52,15 @@ Card {
             Text { text: "Ist"; color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; Layout.preferredWidth: 1 }
             Text { text: "neu"; color: win.cMut; font.pixelSize: 11; Layout.preferredWidth: 70 }
             Text { text: "X"; color: win.cInk; font.pixelSize: 13 }
-            KField { id: sx; text: "50"; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+            KField { id: sx; text: "40"; Layout.fillWidth: true; Layout.preferredWidth: 1 }
             KField { id: ix; Layout.fillWidth: true; Layout.preferredWidth: 1; placeholderText: "gemessen" }
             Text { text: fmt(res[0]); color: win.cInk; font.pixelSize: 12; Layout.preferredWidth: 70 }
             Text { text: "Y"; color: win.cInk; font.pixelSize: 13 }
-            KField { id: sy; text: "50"; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+            KField { id: sy; text: "40"; Layout.fillWidth: true; Layout.preferredWidth: 1 }
             KField { id: iy; Layout.fillWidth: true; Layout.preferredWidth: 1; placeholderText: "gemessen" }
             Text { text: fmt(res[1]); color: win.cInk; font.pixelSize: 12; Layout.preferredWidth: 70 }
             Text { text: "Z"; color: win.cInk; font.pixelSize: 13 }
-            KField { id: sz; text: "10"; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+            KField { id: sz; text: "5"; Layout.fillWidth: true; Layout.preferredWidth: 1 }
             KField { id: iz; Layout.fillWidth: true; Layout.preferredWidth: 1; placeholderText: "gemessen" }
             Text { text: fmt(res[2]); color: win.cInk; font.pixelSize: 12; Layout.preferredWidth: 70 }
         }
