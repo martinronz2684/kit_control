@@ -95,6 +95,7 @@ Item {
                             delegate: KButton {
                                 Layout.fillWidth: true
                                 text: String(modelData).replace(".", ",") + " mm"
+                                leftPadding: 4; rightPadding: 4
                                 kind: pw.step === modelData ? "pri" : "normal"
                                 onClicked: pw.step = modelData
                             }
