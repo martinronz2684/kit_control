@@ -84,7 +84,7 @@ Item {
             contentHeight: rightCol.implicitHeight
             flickableDirection: Flickable.VerticalFlick
             boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.vertical: ScrollBar { policy: rightFlick.contentHeight > rightFlick.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
+            ScrollBar.vertical: ScrollBar { policy: rightFlick.contentHeight > rightFlick.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
         ColumnLayout {
             id: rightCol
             width: rightFlick.width - (rightFlick.contentHeight > rightFlick.height ? 10 : 0)
