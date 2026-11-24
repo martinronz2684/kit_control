@@ -194,7 +194,8 @@ class Backend(QObject):
 
         def fn(prog, cancel):
             return self.core.auto_pack(float(o.get("gap", 3)), float(o.get("wall", 2)), bool(o.get("rotate", True)),
-                                       bool(o.get("onlySelected", False)), float(o.get("time", 8)), prog, cancel)
+                                       bool(o.get("onlySelected", False)), float(o.get("time", 8)), prog, cancel,
+                                       floor=float(o.get("floor", 0)))
 
         def msg(r):
             if not r.get("ok"):
@@ -207,7 +208,8 @@ class Backend(QObject):
         o = dict(opts or {})
 
         def fn(prog, cancel):
-            return self.core.fill(i, float(o.get("gap", 3)), float(o.get("wall", 2)), bool(o.get("rotate", True)), prog, cancel)
+            return self.core.fill(i, float(o.get("gap", 3)), float(o.get("wall", 2)), bool(o.get("rotate", True)), prog, cancel,
+                                  floor=float(o.get("floor", 0)))
         self._pack_job(fn, lambda n: f"{n} Kopien hinzugefügt" if n else "Kein Platz für weitere Kopien")
 
     @Slot()

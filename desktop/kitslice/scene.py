@@ -302,98 +302,13 @@ class Scene:
 
     def nest(self, gap: float = 3.0, area: float = IDEAL_XY, height: float = IDEAL_Z,
              res: float = GRID, rotations=(0, 90, 180, 270), progress=None, only=None) -> bool:
-        """3D-Nesting über Höhenkarten (wie Central „Auto place“, ohne Physik-Engine).
-
-        Größte Teile zuerst. Für jede Drehung um Z und jede Rasterposition wird die Höhe bestimmt, auf der
-        das Teil mit `gap` Abstand auf den bereits platzierten liegt. Gewählt wird die Lage mit der
-        geringsten Gesamthöhe des Bauraums, dann die tiefste, dann die mittigste.
-        False, wenn ein Teil nicht in die Grundfläche passt oder über die Höhe hinausragt.
-        only: nur diese Teile platzieren, die übrigen bleiben liegen (z. B. nach „Hinzufügen“)."""
-        if not self.parts:
-            return True
-        n = int(round(area / res))
-        g = max(0, int(math.ceil(gap / res)))
-        H = np.full((n, n), -np.inf)
-        origin = -area / 2
-        movers = list(only) if only is not None else list(self.parts)
-        for q in self.parts:                     # liegen bleibende Teile in die Höhenkarte eintragen
-            if q in movers:
-                continue
-            prof = _profile(q.light(), res)
-            if prof is None:
-                continue
-            _, top, mx, my = prof
-            j0, i0 = int(round((mx - origin) / res)), int(round((my - origin) / res))
-            for r in range(top.shape[0]):
-                for c in range(top.shape[1]):
-                    ii, jj = i0 + r, j0 + c
-                    if 0 <= ii < n and 0 <= jj < n and np.isfinite(top[r, c]):
-                        H[ii, jj] = max(H[ii, jj], top[r, c])
-        ok = True
-        order = sorted(movers, key=lambda p: -float(np.prod(p.size())))
-        for idx, p in enumerate(order):
-            base_rot = p.rot_z
-            best = None
-            for rz in rotations:
-                p.rot_z = (base_rot + rz) % 360
-                p._cache = None
-                prof = _profile(p.transform(p.simple(6000)), res)
-                if prof is None:
-                    continue
-                bot, top, mx, my = prof
-                ph, pw = bot.shape
-                if ph > n or pw > n:
-                    continue
-                occ = np.isfinite(bot)
-                # Abstand seitlich: belegte Zellen des Bauraums um g Zellen „aufblasen“
-                Hd = _dilate(H, g)
-                rows, cols = np.nonzero(occ)
-                L = np.full((n - ph + 1, n - pw + 1), -np.inf)
-                for r, c in zip(rows, cols):
-                    np.maximum(L, Hd[r:r + n - ph + 1, c:c + n - pw + 1] - bot[r, c], out=L)
-                z = np.where(np.isfinite(L), L + gap, 0.0)
-                z = np.maximum(z, 0.0)
-                h = float(np.nanmax(top[occ]))
-                tops = z + h
-                cur = float(np.max(H[np.isfinite(H)])) if np.isfinite(H).any() else 0.0
-                total = np.maximum(tops, cur)
-                ii, jj = np.mgrid[0:n - ph + 1, 0:n - pw + 1]
-                # niedrigste Gesamthöhe, dann niedrigstes Teil, dann möglichst in eine Ecke (dicht packen)
-                score = np.round(total, 3) * 1e9 + np.round(tops, 3) * 1e6 + ii * n + jj
-                k = int(np.argmin(score))
-                i, j = divmod(k, score.shape[1])
-                cand = (float(score.flat[k]), p.rot_z, i, j, float(z[i, j]), bot, top, mx, my, h)
-                if best is None or cand[0] < best[0]:
-                    best = cand
-            if best is None:
-                p.rot_z = base_rot
-                p._cache = None
-                ok = False
-                continue
-            _, rz, i, j, z, bot, top, mx, my, h = best
-            p.rot_z = rz
-            p._cache = None
-            p.x = origin + j * res - mx
-            p.y = origin + i * res - my
-            p.z_lift = z
-            occ = np.isfinite(top)
-            sub = H[i:i + top.shape[0], j:j + top.shape[1]]
-            sub[occ] = np.maximum(sub[occ], z + top[occ])
-            if z + h > height + 1e-6:
-                ok = False
-            if progress:
-                progress((idx + 1) / len(order))
-        if only is not None:
-            return ok
-        # fertige Anordnung in die Mitte schieben
-        lo = np.min([q.bbox()[0] for q in self.parts], axis=0)
-        hi = np.max([q.bbox()[1] for q in self.parts], axis=0)
-        dx, dy = -(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2
-        for q in self.parts:
-            q.x += dx
-            q.y += dy
-        return ok
-
+        """Teile in den idealen Bereich packen (3D-Voxelraster, siehe kitslice.packing).
+        only: nur diese Teile platzieren (z. B. nach „Hinzufügen“), ohne sie zu drehen."""
+        from kitslice import packing
+        r = packing.auto_pack(self, gap=gap, wall=2.0, allow_rotation=only is None, only=only,
+                              area=area, height=height, time_budget=0.0 if only is not None else 2.0,
+                              progress=progress)
+        return bool(r.get("ok"))
 
 def _samples(tris: np.ndarray, step: float) -> np.ndarray:
     """Punkte auf allen Dreiecken im Abstand von höchstens etwa step (für die Rasterung)."""

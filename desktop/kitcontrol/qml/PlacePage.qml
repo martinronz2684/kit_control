@@ -235,6 +235,7 @@ Item {
         background: Rectangle { radius: 14; color: win.cPanel; border.color: win.cLine }
         property real gap: 3
         property real wall: 2
+        property real floorGap: 0
         property bool rotate: true
         property bool onlySel: false
         property int budget: 8
@@ -250,6 +251,7 @@ Item {
                 Layout.fillWidth: true
                 NumField { Layout.fillWidth: true; label: "Abstand zwischen Teilen"; unit: "mm"; value: String(packPop.gap); onCommitted: (v) => packPop.gap = Number(v.replace(",", ".")) }
                 NumField { Layout.fillWidth: true; label: "Abstand zum Rand"; unit: "mm"; value: String(packPop.wall); onCommitted: (v) => packPop.wall = Number(v.replace(",", ".")) }
+                NumField { Layout.fillWidth: true; label: "Abstand zur Bauplatte"; unit: "mm"; value: String(packPop.floorGap); onCommitted: (v) => packPop.floorGap = Number(v.replace(",", ".")) }
             }
             ColumnLayout {
                 spacing: 6
@@ -279,7 +281,7 @@ Item {
                 Layout.topMargin: 6
                 KButton {
                     text: pg.cur ? "„" + pg.cur.name + "“ auffüllen" : "Mit Kopien auffüllen"; Layout.fillWidth: true; enabled: pg.parts.length > 0
-                    onClicked: { packPop.close(); backend.fillChamber(pg.sel, { gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate }) }
+                    onClicked: { packPop.close(); backend.fillChamber(pg.sel, { gap: packPop.gap, wall: packPop.wall, floor: packPop.floorGap, rotate: packPop.rotate }) }
                     ToolTip.visible: hovered; ToolTip.text: "Das ausgewählte (sonst das erste) Teil so oft kopieren, wie es in den idealen Bereich passt"
                 }
                 KButton {
@@ -295,7 +297,7 @@ Item {
                 KButton { text: "Abbrechen"; kind: "ghost"; onClicked: packPop.close() }
                 KButton {
                     text: "Anordnen"; kind: "pri"
-                    onClicked: { packPop.close(); backend.autoPack({ gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate, onlySelected: packPop.onlySel, time: packPop.budget }) }
+                    onClicked: { packPop.close(); backend.autoPack({ gap: packPop.gap, wall: packPop.wall, floor: packPop.floorGap, rotate: packPop.rotate, onlySelected: packPop.onlySel, time: packPop.budget }) }
                 }
             }
         }

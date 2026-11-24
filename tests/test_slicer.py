@@ -105,7 +105,7 @@ class NestTest(unittest.TestCase):
         self.assertTrue(sc.nest())
         self.assertEqual(sc.problems(), [])
         self.assertEqual(sc.notes(), [])
-        self.assertGreater(max(p.z_lift for p in sc.parts), 0)          # übereinander gestapelt
+        self.assertLessEqual(max(p.bbox()[1][2] for p in sc.parts), 33.01)   # niedriger als gestapelt
         for p in sc.parts:
             lo, hi = p.bbox()
             self.assertGreaterEqual(lo[0], -45.01); self.assertLessEqual(hi[0], 45.01)
