@@ -83,6 +83,27 @@ def validate(p: dict) -> dict:
         q["lamps"] = {w: float(q["lamps"][w]) for w in ("left", "right", "front")}
         if not all(0 <= v <= 100 for v in q["lamps"].values()):
             raise ValueError("Heizstrahler 0–100 %")
+    # Erweiterte Strategien (fehlen = Verhalten von Central)
+    q["contour_first"] = bool(q.get("contour_first", True))
+    q["optimize_path"] = bool(q.get("optimize_path", False))
+    st = q.get("hatch_angle_step_deg")
+    q["hatch_angle_step_deg"] = None if st in (None, "", 0) else float(st)
+    if q["hatch_angle_step_deg"] is not None and not 1 <= abs(q["hatch_angle_step_deg"]) <= 179:
+        raise ValueError("Winkelschritt 1–179°")
+    q["island_mm"] = float(q.get("island_mm") or 0)
+    if q["island_mm"] and not 2 <= q["island_mm"] <= 50:
+        raise ValueError("Schachbrettfelder 2–50 mm (0 = aus)")
+    q["skin_layers"] = int(q.get("skin_layers") or 0)
+    if not 0 <= q["skin_layers"] <= 20:
+        raise ValueError("Hautschichten 0–20")
+    cs = q.get("core_spacing_um")
+    q["core_spacing_um"] = None if cs in (None, "", 0) else int(cs)
+    if q["core_spacing_um"] is not None and not q["hatch_spacing_um"] <= q["core_spacing_um"] <= 1000:
+        raise ValueError("Kern-Schraffurabstand muss ≥ Schraffur-Abstand und ≤ 1000 µm sein")
+    sh = q.get("shrink_pct") or {}
+    q["shrink_pct"] = {a: float(sh.get(a, 0) or 0) for a in "xyz"}
+    if not all(-5 <= v <= 5 for v in q["shrink_pct"].values()):
+        raise ValueError("Schwundausgleich höchstens ±5 %")
     q["draw_original_boundary"] = bool(q.get("draw_original_boundary", False))
     q["alternating_hatch"] = bool(q.get("alternating_hatch", True))
     return q

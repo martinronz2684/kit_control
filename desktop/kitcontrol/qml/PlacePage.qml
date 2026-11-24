@@ -19,89 +19,32 @@ Item {
             Layout.fillHeight: true
             clip: true
 
-            Canvas {
-                id: plate
+            Viewport3D {
+                id: view3d
                 anchors.fill: parent
-                anchors.margins: 18
-                property real k: Math.min(width, height) / (backend.plateMm * 1.1)
-                property real cx: width / 2
-                property real cy: height / 2
+                anchors.margins: 6
+                parts: pg.parts
+                sel: pg.sel
+                plate: backend.plateMm
+                idealXY: backend.ideal.xy
+                idealZ: backend.ideal.z
+                onPicked: (i) => backend.selected = i
+                onMoved: (i, x, y, first) => backend.movePart(i, x, y, first)
+            }
 
-                function hit(mx, my) {
-                    var x = (mx - cx) / k, y = (cy - my) / k
-                    for (var i = pg.parts.length - 1; i >= 0; i--) {
-                        var p = pg.parts[i], o = p.outline, inside = false
-                        for (var a = 0, b = o.length - 1; a < o.length; b = a++) {
-                            var ya = o[a][1] + p.y, yb = o[b][1] + p.y
-                            var xa = o[a][0] + p.x, xb = o[b][0] + p.x
-                            if ((ya > y) !== (yb > y) && x < (xb - xa) * (y - ya) / (yb - ya) + xa) inside = !inside
-                        }
-                        if (inside) return i
-                    }
-                    return -1
+            // Ansichten
+            Row {
+                anchors.top: parent.top; anchors.left: parent.left; anchors.margins: 14
+                spacing: 6
+                Repeater {
+                    model: [["iso", "3D"], ["top", "Oben"], ["front", "Vorne"], ["right", "Rechts"]]
+                    delegate: KButton { text: modelData[1]; kind: "ghost"; implicitHeight: 32; onClicked: view3d.setView(modelData[0]) }
                 }
-
-                onPaint: {
-                    var g = getContext("2d")
-                    g.reset()
-                    var half = backend.plateMm / 2 * k
-                    // Platte
-                    g.fillStyle = "#0f1317"
-                    g.fillRect(cx - half, cy - half, 2 * half, 2 * half)
-                    g.strokeStyle = "#1b2026"; g.lineWidth = 1
-                    for (var v = -50; v <= 50; v += 10) {
-                        g.beginPath(); g.moveTo(cx + v * k, cy - half); g.lineTo(cx + v * k, cy + half); g.stroke()
-                        g.beginPath(); g.moveTo(cx - half, cy + v * k); g.lineTo(cx + half, cy + v * k); g.stroke()
-                    }
-                    g.strokeStyle = "#2c3640"; g.lineWidth = 1.5
-                    g.strokeRect(cx - half, cy - half, 2 * half, 2 * half)
-                    // Mittelkreuz
-                    g.strokeStyle = "#2a3b44"; g.lineWidth = 1
-                    g.beginPath(); g.moveTo(cx - 8, cy); g.lineTo(cx + 8, cy); g.moveTo(cx, cy - 8); g.lineTo(cx, cy + 8); g.stroke()
-                    // Bauteile
-                    for (var i = 0; i < pg.parts.length; i++) {
-                        var p = pg.parts[i], o = p.outline
-                        if (o.length < 3) continue
-                        g.beginPath()
-                        for (var j = 0; j < o.length; j++) {
-                            var X = cx + (o[j][0] + p.x) * k, Y = cy - (o[j][1] + p.y) * k
-                            if (j === 0) g.moveTo(X, Y); else g.lineTo(X, Y)
-                        }
-                        g.closePath()
-                        g.fillStyle = i === pg.sel ? "rgba(38,148,184,0.55)" : "rgba(38,148,184,0.25)"
-                        g.fill()
-                        g.strokeStyle = i === pg.sel ? "#7fd3ee" : "#2694b8"
-                        g.lineWidth = i === pg.sel ? 2 : 1.2
-                        g.stroke()
-                    }
-                    // Maßstab
-                    g.fillStyle = "#59606b"; g.font = "11px sans-serif"
-                    g.fillText(backend.plateMm + " × " + backend.plateMm + " mm", cx - half, cy + half + 14)
-                }
-                onWidthChanged: requestPaint()
-                onHeightChanged: requestPaint()
-                Connections { target: backend; function onPartsChanged() { plate.requestPaint() } }
-
-                MouseArea {
-                    anchors.fill: parent
-                    property int idx: -1
-                    property real sx; property real sy; property real px; property real py
-                    property bool first: true
-                    cursorShape: idx >= 0 && pressed ? Qt.ClosedHandCursor : Qt.ArrowCursor
-                    onPressed: (m) => {
-                        idx = plate.hit(m.x, m.y)
-                        backend.selected = idx
-                        if (idx >= 0) { sx = m.x; sy = m.y; px = pg.parts[idx].x; py = pg.parts[idx].y; first = true }
-                    }
-                    onPositionChanged: (m) => {
-                        if (idx < 0 || !pressed) return
-                        var dx = (m.x - sx) / plate.k, dy = (sy - m.y) / plate.k
-                        if (first && Math.abs(dx) + Math.abs(dy) < 0.3) return
-                        backend.movePart(idx, Math.round((px + dx) * 10) / 10, Math.round((py + dy) * 10) / 10, first)
-                        first = false
-                    }
-                    onReleased: idx = -1
-                }
+            }
+            Text {
+                anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.margins: 14
+                text: "Bauteil ziehen: verschieben · daneben ziehen: drehen · rechte Maustaste: schieben · Mausrad: zoomen"
+                color: "#59606b"; font.pixelSize: 11
             }
 
             // Leerer Bauraum
@@ -167,7 +110,8 @@ Item {
                     RowLayout {
                         spacing: 8
                         KButton { text: "Hinzufügen …"; kind: "pri"; Layout.fillWidth: true; onClicked: openStl.open() }
-                        KButton { text: "Anordnen"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: backend.arrange() }
+                        KButton { text: "3D-Nesting"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: backend.arrange("nest"); ToolTip.visible: hovered; ToolTip.text: "Alle Teile dicht im idealen Bereich packen, auch übereinander" }
+                        KButton { text: "Flach"; implicitWidth: 64; enabled: pg.parts.length > 0; onClicked: backend.arrange("rows"); ToolTip.visible: hovered; ToolTip.text: "Alle Teile nebeneinander auf die Platte legen" }
                     }
                 }
             }
@@ -190,6 +134,12 @@ Item {
                         NumField { Layout.fillWidth: true; label: "Skalierung"; unit: "%"; value: pg.cur ? String(pg.cur.scale_pct) : ""; onCommitted: (v) => backend.setPart(pg.sel, "scale_pct", v) }
                         NumField { Layout.fillWidth: true; label: "Kippen (Rollen)"; unit: "°"; value: pg.cur ? String(pg.cur.rot_x) : ""; onCommitted: (v) => backend.setPart(pg.sel, "rot_x", v) }
                         NumField { Layout.fillWidth: true; label: "Kippen (Nicken)"; unit: "°"; value: pg.cur ? String(pg.cur.rot_y) : ""; onCommitted: (v) => backend.setPart(pg.sel, "rot_y", v) }
+                        NumField { Layout.fillWidth: true; label: "Höhe über Platte"; unit: "mm"; value: pg.cur ? pg.cur.z.toFixed(1) : ""; onCommitted: (v) => backend.setPart(pg.sel, "z_lift", v) }
+                        Text {
+                            Layout.fillWidth: true; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 8
+                            text: pg.cur ? pg.cur.size[0].toFixed(1) + " × " + pg.cur.size[1].toFixed(1) + " × " + pg.cur.size[2].toFixed(1) + " mm" : ""
+                            color: win.cMut; font.pixelSize: 12
+                        }
                     }
                     RowLayout {
                         enabled: pg.cur !== null
@@ -204,6 +154,15 @@ Item {
                         KButton { text: "Entfernen"; kind: "ghost"; Layout.fillWidth: true; onClicked: backend.removePart(pg.sel) }
                     }
                     Item { Layout.fillHeight: true }
+                    Repeater {
+                        model: backend.notes
+                        delegate: Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: nt.implicitHeight + 16
+                            radius: 8; color: "#2a2312"; border.color: "#5c4a22"
+                            Body { id: nt; anchors.fill: parent; anchors.margins: 8; text: "ⓘ " + modelData; color: "#ffd59a"; font.pixelSize: 12 }
+                        }
+                    }
                     Repeater {
                         model: pg.problems
                         delegate: Rectangle {

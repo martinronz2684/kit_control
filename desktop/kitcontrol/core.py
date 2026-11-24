@@ -57,6 +57,26 @@ def hull(xy: np.ndarray) -> list:
     return [[float(a), float(b)] for a, b in lo[:-1] + up[:-1]]
 
 
+def decimate(tris: np.ndarray, max_tris: int) -> list:
+    """Netz für die Anzeige vereinfachen (Eckpunkte auf ein Raster zusammenlegen), bis höchstens max_tris."""
+    t = tris
+    if len(t) > max_tris:
+        size = float(np.max(t.reshape(-1, 3).max(axis=0) - t.reshape(-1, 3).min(axis=0))) or 1.0
+        cell = size / 400
+        for _ in range(12):
+            q = np.round(t.reshape(-1, 3) / cell).astype(np.int64)
+            _, inv = np.unique(q, axis=0, return_inverse=True)
+            f = inv.reshape(-1, 3)
+            keep = (f[:, 0] != f[:, 1]) & (f[:, 1] != f[:, 2]) & (f[:, 0] != f[:, 2])
+            if keep.sum() <= max_tris:
+                t = (q.reshape(-1, 3, 3) * cell)[keep]
+                break
+            cell *= 1.5
+        else:
+            t = t[:: len(t) // max_tris + 1]
+    return np.round(t.astype(np.float64), 2).ravel().tolist()
+
+
 class AppCore:
     def __init__(self):
         self.scene = Scene()
@@ -139,7 +159,7 @@ class AppCore:
             self._push()
             for p in new:
                 self.scene.add(p)
-            self.scene.arrange()
+            self.scene.nest(only=new)
             self.selected = len(self.scene.parts) - 1
         return errs
 
@@ -163,7 +183,7 @@ class AppCore:
             for k in PART_KEYS:
                 setattr(p, k, copy.copy(getattr(src, k)))
             self.scene.add(p)
-            self.scene.arrange()
+            self.scene.nest(only=[p])
             self.selected = len(self.scene.parts) - 1
 
     def set_part(self, i: int, key: str, value) -> None:
@@ -193,11 +213,22 @@ class AppCore:
             self._push()
             self.scene.parts[i].lay_flat()
 
-    def arrange(self) -> bool:
+    def arrange(self, mode: str = "nest", gap: float = 3.0) -> bool:
+        """mode: nest = 3D-Nesting im idealen Bereich, rows = nebeneinander auf der Platte."""
         if not self.scene.parts:
             return True
         self._push()
-        return self.scene.arrange()
+        return self.scene.arrange_rows(gap) if mode == "rows" else self.scene.nest(gap)
+
+    def display_mesh(self, i: int, max_tris: int = 3000) -> list:
+        """Vereinfachtes Netz eines Bauteils für die 3D-Ansicht (flach: x,y,z je Ecke, lokal zur Lage)."""
+        if not 0 <= i < len(self.scene.parts):
+            return []
+        p = self.scene.parts[i]
+        key = ("mesh", id(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale))
+        if key not in self._outline_cache:
+            self._outline_cache[key] = decimate(p._oriented(), max_tris)
+        return self._outline_cache[key]
 
     def parts_info(self) -> list[dict]:
         out = []
@@ -210,6 +241,8 @@ class AppCore:
                     t = t[:: len(t) // 60000 + 1]
                 self._outline_cache[key] = hull(t[:, :2])
             out.append({
+                "mesh_key": f"{id(p.mesh)}:{p.rot_x}:{p.rot_y}:{p.rot_z}:{p.scale[0]}",
+                "z": round(float(p.z_lift), 2),
                 "index": i, "name": p.name, "x": round(float(p.x), 2), "y": round(float(p.y), 2),
                 "rot_x": float(p.rot_x), "rot_y": float(p.rot_y), "rot_z": float(p.rot_z),
                 "scale_pct": round(float(p.scale[0]) * 100, 1),
@@ -220,6 +253,9 @@ class AppCore:
 
     def problems(self) -> list[str]:
         return self.scene.problems()
+
+    def notes(self) -> list[str]:
+        return self.scene.notes()
 
     # -- Projekt ---------------------------------------------------------------
     def save_project(self, path: str) -> None:

@@ -18,6 +18,14 @@ Item {
         q.hatch_angles_deg = angleField.text.split(/[;,]/).map(function(s) { return Number(s.trim()) }).filter(function(n) { return !isNaN(n) })
         q.laser_speed_mm_s = laserField.text.trim() === "" ? null : Number(laserField.text.replace(",", "."))
         q.contour_speed_mm_s = contourField.text.trim() === "" ? null : Number(contourField.text.replace(",", "."))
+        function n(t) { var v = String(t).trim().replace(",", "."); return v === "" ? null : Number(v) }
+        q.hatch_angle_step_deg = n(stepField.text)
+        q.island_mm = n(islandField.text) || 0
+        q.skin_layers = n(skinField.text) || 0
+        q.core_spacing_um = n(coreField.text)
+        q.shrink_pct = { x: n(shrinkX.text) || 0, y: n(shrinkY.text) || 0, z: n(shrinkZ.text) || 0 }
+        q.contour_first = contourFirst.checked
+        q.optimize_path = optPath.checked
         q.lamps = lampSwitch.checked ? { left: Number(lampL.text), right: Number(lampR.text), front: Number(lampF.text) } : null
         if (asNew || q.builtin) { q.base = q.id; delete q.id; q.builtin = false }
         err = backend.saveProfile(q)
@@ -34,7 +42,10 @@ Item {
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 14
                 spacing: 8
-                Caption { text: "Pulverprofile" }
+                RowLayout {
+                    Caption { text: "Materialien"; Layout.fillWidth: true }
+                    KButton { text: "+ Neues Material"; kind: "pri"; implicitHeight: 32; onClicked: backend.newProfile("Neues Material") }
+                }
                 ListView {
                     Layout.fillWidth: true; Layout.fillHeight: true
                     clip: true; spacing: 6
@@ -56,7 +67,7 @@ Item {
                                 }
                             }
                             Text {
-                                text: modelData.layer_um + " µm · Schraffur " + modelData.hatch_spacing_um + " µm · Kontur " + modelData.perimeter_offset_um + " µm"
+                                text: (modelData.base ? "auf Basis " + modelData.base.toUpperCase() + " · " : "") + modelData.layer_um + " µm · Schraffur " + modelData.hatch_spacing_um + " µm · Kontur " + modelData.perimeter_offset_um + " µm"
                                 color: win.cMut; font.pixelSize: 11
                             }
                         }
@@ -130,6 +141,62 @@ Item {
                         checked: pp.prof.draw_original_boundary === true
                         onToggled: pp.setv("draw_original_boundary", checked)
                         contentItem: Text { text: origBox.text; color: win.cInk; font.pixelSize: 13; leftPadding: origBox.indicator.width + 8; verticalAlignment: Text.AlignVCenter }
+                    }
+
+                    Caption { text: "Strategien (leer/0 = wie Central)"; Layout.topMargin: 6 }
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 3; columnSpacing: 14; rowSpacing: 12
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Winkelschritt je Schicht"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: stepField; Layout.fillWidth: true; placeholderText: "Liste oben (z. B. 67)"; text: pp.prof.hatch_angle_step_deg ? String(pp.prof.hatch_angle_step_deg) : "" }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Schachbrett-Felder (mm)"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: islandField; Layout.fillWidth: true; placeholderText: "aus (z. B. 5)"; text: pp.prof.island_mm ? String(pp.prof.island_mm) : "" }
+                        }
+                        Item { Layout.fillWidth: true }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Hautschichten oben/unten"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: skinField; Layout.fillWidth: true; placeholderText: "aus (z. B. 3)"; text: pp.prof.skin_layers ? String(pp.prof.skin_layers) : "" }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Schraffur-Abstand im Kern (µm)"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: coreField; Layout.fillWidth: true; placeholderText: "wie oben (z. B. 240)"; text: pp.prof.core_spacing_um ? String(pp.prof.core_spacing_um) : "" }
+                        }
+                        Item { Layout.fillWidth: true }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Schwundausgleich X (%)"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: shrinkX; Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.x) : "0" }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Schwundausgleich Y (%)"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: shrinkY; Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.y) : "0" }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Schwundausgleich Z (%)"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: shrinkZ; Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.z) : "0" }
+                        }
+                    }
+                    RowLayout {
+                        spacing: 24
+                        RowLayout {
+                            spacing: 8
+                            Switch { id: contourFirst; checked: pp.prof.contour_first !== false }
+                            Text { text: "Kontur vor Füllung"; color: win.cInk; font.pixelSize: 13 }
+                        }
+                        RowLayout {
+                            spacing: 8
+                            Switch { id: optPath; checked: pp.prof.optimize_path === true }
+                            Text { text: "Laserwege optimieren"; color: win.cInk; font.pixelSize: 13 }
+                        }
                     }
 
                     Caption { text: "Temperaturen (am Kit vor dem Druck eingestellt)"; Layout.topMargin: 6 }

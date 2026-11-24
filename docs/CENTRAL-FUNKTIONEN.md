@@ -10,12 +10,12 @@ Spalte „Pi“ = Touch-Oberfläche am Kit, „PC“ = Kit Control Desktop.
 |---|---|---|---|
 | STL importieren, auch per Drag & Drop | – | 🟡 | `desktop/kitslice/stl.py` (binär + ASCII) |
 | Mehrere Bauteile, Kopieren, Löschen, Alles auswählen | – | ⬜ | |
-| Verschieben, Drehen (Gieren/Nicken/Rollen), Skalieren | – | 🟡 | `desktop/kitslice/scene.py` |
+| Verschieben, Drehen (Gieren/Nicken/Rollen), Skalieren, Höhe über Platte | – | ✅ | 3D-Ansicht, drehbar |
 | Position zurücksetzen | – | ⬜ | |
 | Rückgängig / Wiederholen | – | ⬜ | |
-| Automatisch platzieren (Central: 3D-Packung mit Physik-Engine, auch übereinander) | – | 🟡 | zunächst 2D-Reihen (`Scene.arrange`), 3D-Packung später |
+| Automatisch platzieren (Central: 3D-Packung mit Physik-Engine, auch übereinander) | – | ✅ | 3D-Nesting über Höhenkarten im idealen Bereich 90 × 90 × 110 mm, 4 Drehungen; „Flach“ legt alles nebeneinander |
 | „Smart rotate“ (günstige Lage berechnen) | – | 🟡 | `Part.lay_flat` (größte Fläche nach unten) |
-| Warnungen: außerhalb Bauraum, Überlappung | – | 🟡 | `Scene.problems` |
+| Warnungen: außerhalb Bauraum, Überlappung, außerhalb idealem Bereich | – | ✅ | idealer Bereich als hellgrauer Korb |
 | Bauraum 110 mm (max. 130 mm), Ursprung Mitte | – | ✅ | aus `PrinterSpecKit` |
 | Druckjob speichern/öffnen (.stec), STL exportieren | – | ⬜ | eigenes Projektformat (Bauteile + Lage + Profil) |
 
@@ -23,10 +23,21 @@ Spalte „Pi“ = Touch-Oberfläche am Kit, „PC“ = Kit Control Desktop.
 | Funktion | Pi | PC | Anmerkung |
 |---|---|---|---|
 | Vorlagen Sintratec PA12 / Sintratec TPE | ✅ | ✅ | Werte 1:1 aus `KitPA12CB_Z100`, `KitTPE_Z100` |
+| Neues Material direkt in der Liste anlegen | – | ✅ | |
 | Custom: Schichthöhe, Anzahl Perimeter, Perimeter-Versatz, Schraffur-Versatz, Schraffur-Abstand | – | ✅ | `desktop/kitslice/profiles.py`, **speicherbar**, Import/Export (JSON) |
 | Zusätzlich: Temperaturen, Lasergeschwindigkeit, Heizstrahler im Profil | ✅ | ✅ | neu – der Pi stellt sie vor dem Druckstart ein |
 | Warnung beim Wechsel PA12 → TPE (Dichtungen) | ⬜ | ⬜ | |
 | Vorschau anzeigen | – | 🟡 | |
+
+## Erweiterungen (nicht in Central)
+| Funktion | Pi | PC | Anmerkung |
+|---|---|---|---|
+| Haut/Kern (Kern lockerer schraffiert) | – | ✅ | Profiloption |
+| Schachbrett-/Inselschraffur | – | ✅ | Profiloption |
+| Winkelschritt je Schicht (z. B. 67°) | – | ✅ | Profiloption |
+| Kontur vor/nach Füllung, mehrere Perimeter | – | ✅ | Profiloption |
+| Schwundausgleich X/Y/Z je Material | – | ✅ | Profiloption |
+| Laserwege optimieren (Inseln/Konturen nach kürzestem Weg) | – | ✅ | Profiloption |
 
 ## 3. Vorschau
 | Funktion | Pi | PC | Anmerkung |

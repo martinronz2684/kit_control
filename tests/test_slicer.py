@@ -99,6 +99,48 @@ class SlicerTest(unittest.TestCase):
         self.assertEqual(stl.load(f).shape, (12, 3, 3))
 
 
+class NestTest(unittest.TestCase):
+    def test_nest_stacks_and_stays_in_ideal_area(self):
+        sc = Scene([Part(f"b{i}", box(40, 30, 15)) for i in range(6)])
+        self.assertTrue(sc.nest())
+        self.assertEqual(sc.problems(), [])
+        self.assertEqual(sc.notes(), [])
+        self.assertGreater(max(p.z_lift for p in sc.parts), 0)          # übereinander gestapelt
+        for p in sc.parts:
+            lo, hi = p.bbox()
+            self.assertGreaterEqual(lo[0], -45.01); self.assertLessEqual(hi[0], 45.01)
+
+    def test_nest_only_new_keeps_old(self):
+        a = Part("a", box(30, 30, 10))
+        sc = Scene([a])
+        a.x, a.y = 10.0, 10.0
+        b = Part("b", box(30, 30, 10))
+        sc.add(b)
+        sc.nest(only=[b])
+        self.assertEqual((a.x, a.y), (10.0, 10.0))
+        self.assertEqual(sc.problems(), [])
+
+    def test_collision_columns(self):
+        sc = Scene([Part("a", box(20, 20, 10)), Part("b", box(20, 20, 10))])
+        self.assertTrue(sc.collisions())
+        sc.parts[1].z_lift = 11
+        self.assertFalse(sc.collisions())
+
+
+class StrategyTest(unittest.TestCase):
+    def test_strategies_run_and_change_output(self):
+        base = profiles.validate(profiles.get("pa12"))
+        sc = Scene([Part("b", box(20, 20, 2))])
+        d0, m0, _ = make_job(sc, base)
+        d1, m1, L = make_job(sc, profiles.validate(dict(base, skin_layers=3, core_spacing_um=360, island_mm=5,
+                                                         hatch_angle_step_deg=67, optimize_path=True,
+                                                         contour_first=False, shrink_pct={"x": 1, "y": 1, "z": 0})))
+        self.assertNotEqual(d0, d1)
+        self.assertAlmostEqual(m1["bbox"][2] - m1["bbox"][0], (20 * 1.01) - 0.4, places=1)
+        with self.assertRaises(ValueError):
+            profiles.validate(dict(base, core_spacing_um=50))
+
+
 class ProfileTest(unittest.TestCase):
     def test_save_derive_validate(self):
         p = profiles.derive("pa12", "Mein PA12 schwarz")

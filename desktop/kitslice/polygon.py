@@ -134,17 +134,9 @@ def offset(loops: list[np.ndarray], d: float) -> list[np.ndarray]:
     return out
 
 
-def hatch(loops: list[np.ndarray], spacing: float, angle: float, alternating: bool = True,
-          min_len: float = 0.0) -> list[tuple[float, float, float, float]]:
-    """Schraffur wie HatcherLegacy in Central.
-
-    Polygone um -angle drehen, mit den Geraden y = k * spacing schneiden (festes Raster durch den
-    Ursprung), Schnittpunkte je Gerade nach x sortieren und paarweise verbinden. Die Geraden werden von
-    oben (größtes k) nach unten abgearbeitet; die erste Linie läuft von rechts nach links, danach im
-    Zickzack. Ergebnis: Strecken (x0, y0, x1, y1) im Druckkoordinatensystem.
-    """
-    if not loops:
-        return []
+def _rows(loops, spacing, angle):
+    """Schnittpunkte der Rastergeraden y = k * spacing im um -angle gedrehten System.
+    Liefert [(k, xs sortiert), …] von oben nach unten."""
     c, s = math.cos(-angle), math.sin(-angle)
     xs, ys, xe, ye = [], [], [], []
     for l in loops:
@@ -166,26 +158,146 @@ def hatch(loops: list[np.ndarray], spacing: float, angle: float, alternating: bo
     xx = x0[rep] + (yy - y0[rep]) * (x1[rep] - x0[rep]) / (y1[rep] - y0[rep])
     order = np.lexsort((xx, k))
     k, xx = k[order], xx[order]
-    # Geraden von oben nach unten
     bounds = np.flatnonzero(np.diff(k)) + 1
     starts = np.concatenate([[0], bounds])
     ends = np.concatenate([bounds, [len(k)]])
+    return [(int(k[a]), xx[a:b]) for a, b in zip(starts[::-1], ends[::-1])]
+
+
+def hatch(loops: list[np.ndarray], spacing: float, angle: float, alternating: bool = True,
+          min_len: float = 0.0, island: float = 0.0, core=None, core_every: int = 1,
+          parity: int = 0) -> list[tuple[float, float, float, float]]:
+    """Schraffur wie HatcherLegacy in Central, mit optionalen Erweiterungen.
+
+    Polygone um -angle drehen, mit den Geraden y = k * spacing schneiden (festes Raster durch den
+    Ursprung), Schnittpunkte je Gerade nach x sortieren und paarweise verbinden. Die Geraden werden von
+    oben (größtes k) nach unten abgearbeitet; die erste Linie läuft von rechts nach links, danach im
+    Zickzack. Ergebnis: Strecken (x0, y0, x1, y1) im Druckkoordinatensystem.
+
+    island > 0: Schachbrett aus Quadraten dieser Größe; nur Felder mit (ix + iy) % 2 == parity werden
+      in dieser Richtung schraffiert (die anderen Felder mit angle + 90°, siehe hatch_islands).
+    core: Funktion (N, 2)-Weltpunkte -> bool „liegt im Kern“; dort bleibt nur jede core_every-te Linie.
+    """
+    if not loops:
+        return []
     cb, sb = math.cos(angle), math.sin(angle)
-    segs = []
-    forward = False                                         # erste Linie absteigend in x
-    for a, b in zip(starts[::-1], ends[::-1]):
-        n = b - a
-        if n % 2:          # offener Querschnitt – Central überspringt die Linie ebenfalls
+    pieces = []                                  # (Feld, k, xa, xb)
+    for k, row in _rows(loops, spacing, angle):
+        if len(row) % 2:                         # offener Querschnitt – Central überspringt die Linie
             continue
-        y = float(k[a] * spacing)
-        row = xx[a:b]
-        pairs = [(row[i], row[i + 1]) for i in range(0, n, 2)]
-        if not forward:
-            pairs = [(q, p) for p, q in reversed(pairs)]
-        for p, q in pairs:
-            if abs(q - p) < min_len:
-                continue
-            segs.append((p * cb - y * sb, p * sb + y * cb, q * cb - y * sb, q * sb + y * cb))
-        if alternating:
-            forward = not forward
+        y = k * spacing
+        for i in range(0, len(row), 2):
+            xa, xb = float(row[i]), float(row[i + 1])
+            spans = [(xa, xb)]
+            if core is not None and core_every > 1 and k % core_every:
+                spans = _skin_only(spans, y, cb, sb, core)
+            if island > 0:
+                iy = math.floor(y / island)
+                cut = []
+                for a, b in spans:
+                    ix0, ix1 = math.floor(a / island), math.floor(b / island)
+                    for ix in range(ix0, ix1 + 1):
+                        if (ix + iy) % 2 != parity:
+                            continue
+                        pa, pb = max(a, ix * island), min(b, (ix + 1) * island)
+                        if pb > pa:
+                            cut.append((pa, pb, (iy, ix)))
+                spans3 = cut
+            else:
+                spans3 = [(a, b, (0, 0)) for a, b in spans]
+            for a, b, cell in spans3:
+                if b - a >= min_len:
+                    pieces.append((cell, k, a, b))
+    if not pieces:
+        return []
+    # nach Feldern gruppieren (Felder zeilenweise von oben), in jedem Feld Linien von oben im Zickzack
+    cells = {}
+    for cell, k, a, b in pieces:
+        cells.setdefault(cell, []).append((k, a, b))
+    segs = []
+    for cell in sorted(cells, key=lambda c: (-c[0], c[1])):
+        rows = {}
+        for k, a, b in cells[cell]:
+            rows.setdefault(k, []).append((a, b))
+        forward = False
+        for k in sorted(rows, reverse=True):
+            y = k * spacing
+            pairs = sorted(rows[k])
+            pairs = pairs if forward else [(q, p) for p, q in reversed(pairs)]
+            for p, q in pairs:
+                segs.append((p * cb - y * sb, p * sb + y * cb, q * cb - y * sb, q * sb + y * cb))
+            if alternating:
+                forward = not forward
     return segs
+
+
+def _skin_only(spans, y, cb, sb, core, step: float = 0.25, min_run: float = 1.0):
+    """Teile einer Linie, die NICHT im Kern liegen (Haut), in Schritten von step mm bestimmt."""
+    out = []
+    for a, b in spans:
+        n = max(2, int((b - a) / step) + 1)
+        xs = np.linspace(a, b, n)
+        pts = np.stack([xs * cb - y * sb, xs * sb + y * cb], axis=1)
+        inner = core(pts)
+        if not inner.any():
+            out.append((a, b))
+            continue
+        skin = ~inner
+        edges = np.flatnonzero(np.diff(skin.astype(np.int8)))
+        bounds = np.concatenate([[0], edges + 1, [n]])
+        for i0, i1 in zip(bounds[:-1], bounds[1:]):
+            # sehr kurze Hautstücke am Rand sind Rasterfehler – weglassen
+            if skin[i0] and xs[min(i1, n - 1)] - xs[i0] >= min_run:
+                out.append((xs[i0], xs[min(i1, n - 1)]))
+    return out
+
+
+def hatch_islands(loops, spacing, angle, island, **kw):
+    """Schachbrett: Felder abwechselnd mit angle und angle + 90° schraffieren."""
+    a = hatch(loops, spacing, angle, island=island, parity=0, **kw)
+    b = hatch(loops, spacing, angle + math.pi / 2, island=island, parity=0, **kw)
+    return a + b
+
+
+class Raster:
+    """Querschnitt als Bitmaske (für Haut/Kern): Gerade-Ungerade-Füllung auf einem Raster."""
+
+    def __init__(self, loops, res: float = 0.25, half: float = 70.0):
+        self.res, self.half = res, half
+        n = int(2 * half / res)
+        self.mask = np.zeros((n, n), dtype=bool)
+        for k, row in _rows(loops, res, 0.0):
+            iy = int(round(k + half / res))
+            if not 0 <= iy < n or len(row) % 2:
+                continue
+            for i in range(0, len(row), 2):
+                a = int(math.ceil((row[i] + half) / res))
+                b = int(math.floor((row[i + 1] + half) / res))
+                if b >= a:
+                    self.mask[iy, max(0, a):min(n, b + 1)] = True
+
+    def contains(self, pts: np.ndarray) -> np.ndarray:
+        ix = np.round((pts[:, 0] + self.half) / self.res).astype(int)
+        iy = np.round((pts[:, 1] + self.half) / self.res).astype(int)
+        n = self.mask.shape[0]
+        ok = (ix >= 0) & (ix < n) & (iy >= 0) & (iy < n)
+        out = np.zeros(len(pts), dtype=bool)
+        out[ok] = self.mask[iy[ok], ix[ok]]
+        return out
+
+
+def groups(loops: list[np.ndarray]) -> list[list[np.ndarray]]:
+    """Ausgerichtete Polygone in Inseln aufteilen: je Außenrand (gegen Uhrzeigersinn) mit seinen Löchern."""
+    outers = [l for l in loops if area(l) > 0]
+    holes = [l for l in loops if area(l) < 0]
+    res = [[o] for o in outers]
+    for h in holes:
+        best, ba = None, None
+        for gi, o in enumerate(outers):
+            if _inside(h[0], o):
+                a = area(o)
+                if ba is None or a < ba:
+                    best, ba = gi, a
+        if best is not None:
+            res[best].append(h)
+    return res

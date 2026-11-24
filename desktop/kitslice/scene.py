@@ -8,9 +8,13 @@ import numpy as np
 
 from kitslice import stl
 
-# Kit: bevorzugter Bauraum 110 mm, maximal 130 mm (PrinterSpecKit), Ursprung in der Mitte
+# Kit: bevorzugter Bauraum 110 mm, maximal 130 mm (PrinterSpecKit), Ursprung in der Mitte.
+# Idealer Druckbereich (gleichmäßigste Temperatur): 90 x 90 x 110 mm.
 PREFERRED_MM = 110.0
 MAX_MM = 130.0
+IDEAL_XY = 90.0
+IDEAL_Z = 110.0
+GRID = 1.0           # Raster für Nesting und Kollisionsprüfung (mm)
 
 
 @dataclass
@@ -94,25 +98,53 @@ class Scene:
         return np.concatenate([p.placed() for p in self.parts])
 
     def problems(self) -> list[str]:
-        """Bauteile außerhalb des Bauraums oder überlappend (Querschnitte werden verschmolzen)."""
+        """Harte Fehler: außerhalb des Bauraums (110 mm) oder Bauteile durchdringen sich."""
         msgs = []
         h = self.size_mm / 2
-        boxes = []
         for p in self.parts:
             lo, hi = p.bbox()
             if lo[0] < -h - 1e-6 or lo[1] < -h - 1e-6 or hi[0] > h + 1e-6 or hi[1] > h + 1e-6:
                 msgs.append(f"{p.name}: liegt außerhalb des Bauraums ({self.size_mm:g} mm)")
             if hi[2] > MAX_MM:
                 msgs.append(f"{p.name}: höher als {MAX_MM:g} mm")
-            boxes.append((p.name, lo, hi))
-        for i in range(len(boxes)):
-            for j in range(i + 1, len(boxes)):
-                a, b = boxes[i], boxes[j]
-                if all(a[1][k] < b[2][k] and b[1][k] < a[2][k] for k in range(3)):
-                    msgs.append(f"{a[0]} und {b[0]} überlappen")
+        for a, b in self.collisions():
+            msgs.append(f"{a} und {b} überlappen")
         return msgs
 
+    def notes(self) -> list[str]:
+        """Hinweise: außerhalb des idealen Druckbereichs 90 x 90 x 110 mm."""
+        out = []
+        hx = IDEAL_XY / 2
+        for p in self.parts:
+            lo, hi = p.bbox()
+            if lo[0] < -hx - 1e-6 or lo[1] < -hx - 1e-6 or hi[0] > hx + 1e-6 or hi[1] > hx + 1e-6 or hi[2] > IDEAL_Z + 1e-6:
+                out.append(f"{p.name}: außerhalb des idealen Druckbereichs ({IDEAL_XY:g} × {IDEAL_XY:g} × {IDEAL_Z:g} mm)")
+        return out
+
+    def collisions(self, tol: float = 0.05) -> list[tuple[str, str]]:
+        """Paare, deren Säulen (je Rasterzelle unterste bis oberste Fläche) sich in der Höhe überschneiden."""
+        out = []
+        boxes = [p.bbox() for p in self.parts]
+        cols = {}
+        for i in range(len(self.parts)):
+            for j in range(i + 1, len(self.parts)):
+                a, b = boxes[i], boxes[j]
+                if not all(a[0][k] < b[1][k] - tol and b[0][k] < a[1][k] - tol for k in range(3)):
+                    continue
+                for k in (i, j):
+                    if k not in cols:
+                        cols[k] = _columns(self.parts[k].placed(), GRID / 2)
+                ca, cb = cols[i], cols[j]
+                common = set(ca) & set(cb)
+                if any(max(ca[c][0], cb[c][0]) < min(ca[c][1], cb[c][1]) - tol for c in common):
+                    out.append((self.parts[i].name, self.parts[j].name))
+        return out
+
     def arrange(self, gap: float = 3.0) -> bool:
+        """Standard: 3D-Nesting im idealen Druckbereich."""
+        return self.nest(gap)
+
+    def arrange_rows(self, gap: float = 3.0) -> bool:
         """Grundflächen in Reihen anordnen (größte zuerst), Gesamtbild in der Mitte. False, wenn es nicht passt."""
         if not self.parts:
             return True
@@ -136,4 +168,175 @@ class Scene:
             for p, px, w, d in r:
                 p.x = px + w / 2 - rw / 2
                 p.y = -(ry + d / 2 - total_h / 2)
+                p.z_lift = 0.0
         return ok
+
+    def nest(self, gap: float = 3.0, area: float = IDEAL_XY, height: float = IDEAL_Z,
+             res: float = GRID, rotations=(0, 90, 180, 270), progress=None, only=None) -> bool:
+        """3D-Nesting über Höhenkarten (wie Central „Auto place“, ohne Physik-Engine).
+
+        Größte Teile zuerst. Für jede Drehung um Z und jede Rasterposition wird die Höhe bestimmt, auf der
+        das Teil mit `gap` Abstand auf den bereits platzierten liegt. Gewählt wird die Lage mit der
+        geringsten Gesamthöhe des Bauraums, dann die tiefste, dann die mittigste.
+        False, wenn ein Teil nicht in die Grundfläche passt oder über die Höhe hinausragt.
+        only: nur diese Teile platzieren, die übrigen bleiben liegen (z. B. nach „Hinzufügen“)."""
+        if not self.parts:
+            return True
+        n = int(round(area / res))
+        g = max(0, int(math.ceil(gap / res)))
+        H = np.full((n, n), -np.inf)
+        origin = -area / 2
+        movers = list(only) if only is not None else list(self.parts)
+        for q in self.parts:                     # liegen bleibende Teile in die Höhenkarte eintragen
+            if q in movers:
+                continue
+            prof = _profile(q.placed(), res)
+            if prof is None:
+                continue
+            _, top, mx, my = prof
+            j0, i0 = int(round((mx - origin) / res)), int(round((my - origin) / res))
+            for r in range(top.shape[0]):
+                for c in range(top.shape[1]):
+                    ii, jj = i0 + r, j0 + c
+                    if 0 <= ii < n and 0 <= jj < n and np.isfinite(top[r, c]):
+                        H[ii, jj] = max(H[ii, jj], top[r, c])
+        ok = True
+        order = sorted(movers, key=lambda p: -float(np.prod(p.size())))
+        for idx, p in enumerate(order):
+            base_rot = p.rot_z
+            best = None
+            for rz in rotations:
+                p.rot_z = (base_rot + rz) % 360
+                p._cache = None
+                prof = _profile(p._oriented(), res)
+                if prof is None:
+                    continue
+                bot, top, mx, my = prof
+                ph, pw = bot.shape
+                if ph > n or pw > n:
+                    continue
+                occ = np.isfinite(bot)
+                # Abstand seitlich: belegte Zellen des Bauraums um g Zellen „aufblasen“
+                Hd = _dilate(H, g)
+                rows, cols = np.nonzero(occ)
+                L = np.full((n - ph + 1, n - pw + 1), -np.inf)
+                for r, c in zip(rows, cols):
+                    np.maximum(L, Hd[r:r + n - ph + 1, c:c + n - pw + 1] - bot[r, c], out=L)
+                z = np.where(np.isfinite(L), L + gap, 0.0)
+                z = np.maximum(z, 0.0)
+                h = float(np.nanmax(top[occ]))
+                tops = z + h
+                cur = float(np.max(H[np.isfinite(H)])) if np.isfinite(H).any() else 0.0
+                total = np.maximum(tops, cur)
+                ii, jj = np.mgrid[0:n - ph + 1, 0:n - pw + 1]
+                # niedrigste Gesamthöhe, dann niedrigstes Teil, dann möglichst in eine Ecke (dicht packen)
+                score = np.round(total, 3) * 1e9 + np.round(tops, 3) * 1e6 + ii * n + jj
+                k = int(np.argmin(score))
+                i, j = divmod(k, score.shape[1])
+                cand = (float(score.flat[k]), p.rot_z, i, j, float(z[i, j]), bot, top, mx, my, h)
+                if best is None or cand[0] < best[0]:
+                    best = cand
+            if best is None:
+                p.rot_z = base_rot
+                p._cache = None
+                ok = False
+                continue
+            _, rz, i, j, z, bot, top, mx, my, h = best
+            p.rot_z = rz
+            p._cache = None
+            p.x = origin + j * res - mx
+            p.y = origin + i * res - my
+            p.z_lift = z
+            occ = np.isfinite(top)
+            sub = H[i:i + top.shape[0], j:j + top.shape[1]]
+            sub[occ] = np.maximum(sub[occ], z + top[occ])
+            if z + h > height + 1e-6:
+                ok = False
+            if progress:
+                progress((idx + 1) / len(order))
+        if only is not None:
+            return ok
+        # fertige Anordnung in die Mitte schieben
+        lo = np.min([q.bbox()[0] for q in self.parts], axis=0)
+        hi = np.max([q.bbox()[1] for q in self.parts], axis=0)
+        dx, dy = -(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2
+        for q in self.parts:
+            q.x += dx
+            q.y += dy
+        return ok
+
+
+def _samples(tris: np.ndarray, step: float) -> np.ndarray:
+    """Punkte auf allen Dreiecken im Abstand von höchstens etwa step (für die Rasterung)."""
+    e = np.maximum.reduce([np.linalg.norm(tris[:, 1] - tris[:, 0], axis=1),
+                           np.linalg.norm(tris[:, 2] - tris[:, 1], axis=1),
+                           np.linalg.norm(tris[:, 0] - tris[:, 2], axis=1)])
+    k = np.clip(np.ceil(e / step).astype(int), 1, 96)
+    out = [tris.reshape(-1, 3)]
+    for kk in np.unique(k):
+        sel = tris[k == kk]
+        if kk == 1:
+            continue
+        a, b = np.meshgrid(np.arange(kk + 1), np.arange(kk + 1))
+        m = a + b <= kk
+        w1, w2 = a[m] / kk, b[m] / kk
+        w0 = 1 - w1 - w2
+        pts = (sel[:, None, 0] * w0[None, :, None] + sel[:, None, 1] * w1[None, :, None]
+               + sel[:, None, 2] * w2[None, :, None])
+        out.append(pts.reshape(-1, 3))
+    return np.concatenate(out)
+
+
+def _profile(tris: np.ndarray, res: float):
+    """Unterste und oberste Fläche je Rasterzelle (NaN = leer) samt Lage der Zelle (0, 0) in mm."""
+    pts = _samples(tris, res * 0.7)
+    mx, my = float(pts[:, 0].min()), float(pts[:, 1].min())
+    ix = np.floor((pts[:, 0] - mx) / res - 1e-6).clip(0).astype(int)
+    iy = np.floor((pts[:, 1] - my) / res - 1e-6).clip(0).astype(int)
+    w, h = ix.max() + 1, iy.max() + 1
+    bot = np.full((h, w), np.inf)
+    top = np.full((h, w), -np.inf)
+    np.minimum.at(bot, (iy, ix), pts[:, 2])
+    np.maximum.at(top, (iy, ix), pts[:, 2])
+    empty = ~np.isfinite(bot)
+    # Innenflächen ohne Treffer (sehr große Dreiecke) füllen: Zeile für Zeile zwischen erstem und letztem Treffer
+    for r in range(h):
+        hit = np.flatnonzero(~empty[r])
+        if len(hit) > 1:
+            gaps = np.flatnonzero(empty[r, hit[0]:hit[-1]]) + hit[0]
+            if len(gaps):
+                bot[r, gaps] = np.interp(gaps, hit, bot[r, hit])
+                top[r, gaps] = np.interp(gaps, hit, top[r, hit])
+    if not np.isfinite(bot).any():
+        return None
+    return bot, np.where(np.isfinite(top), top, np.nan), mx, my
+
+
+def _dilate(H: np.ndarray, g: int) -> np.ndarray:
+    """Maximum über die Nachbarschaft (Quadrat mit Radius g) – seitlicher Abstand beim Nesting."""
+    if g <= 0:
+        return H
+    out = H.copy()
+    n0, n1 = H.shape
+    for dy in range(-g, g + 1):
+        for dx in range(-g, g + 1):
+            if dx * dx + dy * dy > g * g + g:
+                continue
+            ys, yd = (slice(dy, n0), slice(0, n0 - dy)) if dy >= 0 else (slice(0, n0 + dy), slice(-dy, n0))
+            xs, xd = (slice(dx, n1), slice(0, n1 - dx)) if dx >= 0 else (slice(0, n1 + dx), slice(-dx, n1))
+            np.maximum(out[yd, xd], H[ys, xs], out=out[yd, xd])
+    return out
+
+
+def _columns(tris: np.ndarray, res: float) -> dict:
+    """{(ix, iy): (z_unten, z_oben)} im globalen Raster – für die Kollisionsprüfung."""
+    pts = _samples(tris, res * 0.7)
+    ix = np.floor(pts[:, 0] / res).astype(np.int64)
+    iy = np.floor(pts[:, 1] / res).astype(np.int64)
+    key = ix * 100003 + iy
+    order = np.argsort(key)
+    key, z = key[order], pts[order, 2]
+    uniq, start = np.unique(key, return_index=True)
+    lo = np.minimum.reduceat(z, start)
+    hi = np.maximum.reduceat(z, start)
+    return dict(zip(uniq.tolist(), zip(lo.tolist(), hi.tolist())))

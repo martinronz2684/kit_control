@@ -67,6 +67,19 @@ class Backend(QObject):
     def problems(self):
         return self.core.problems()
 
+    @Property("QVariant", notify=partsChanged)
+    def notes(self):
+        return self.core.notes()
+
+    @Slot(int, result="QVariant")
+    def partMesh(self, i):
+        return self.core.display_mesh(i)
+
+    @Property("QVariant", constant=True)
+    def ideal(self):
+        from kitslice.scene import IDEAL_XY, IDEAL_Z
+        return {"xy": IDEAL_XY, "z": IDEAL_Z}
+
     @Property(bool, notify=partsChanged)
     def canUndo(self):
         return bool(self.core.undo_stack)
@@ -131,10 +144,11 @@ class Backend(QObject):
     def layFlat(self, i):
         self.core.lay_flat(i); self._parts_changed()
 
-    @Slot()
-    def arrange(self):
-        if not self.core.arrange():
-            self.message.emit("Nicht alle Bauteile passen nebeneinander in den Bauraum", "error")
+    @Slot(str)
+    def arrange(self, mode):
+        if not self.core.arrange(mode or "nest"):
+            self.message.emit("Nicht alle Bauteile passen in den idealen Druckbereich" if mode != "rows"
+                              else "Nicht alle Bauteile passen nebeneinander auf die Platte", "error")
         self._parts_changed()
 
     @Slot()
@@ -215,6 +229,22 @@ class Backend(QObject):
         self._parts_changed()
         self.message.emit("Profil gespeichert", "ok")
         return ""
+
+    @Slot(str)
+    def newProfile(self, name):
+        """Neues Material in der Liste: Kopie des gewählten Profils, sofort gespeichert und ausgewählt."""
+        try:
+            base = self.core.profile_id
+            names = {p["name"] for p in PR.listing()}
+            name = (name or "Neues Material").strip()
+            n, k = name, 2
+            while n in names:
+                n, k = f"{name} {k}", k + 1
+            self.core.save_profile(PR.derive(base, n))
+        except (ValueError, KeyError) as e:
+            self.message.emit(str(e), "error")
+        self.profilesChanged.emit()
+        self._parts_changed()
 
     @Slot(str)
     def deleteProfile(self, pid):

@@ -18,7 +18,7 @@ def make_job(scene: Scene, profile: dict, progress=None, cancel=None):
     s = SliceSettings.from_profile(profile)
     t0 = time.time()
     layers = slice_mesh(scene.merged(), s, progress, cancel)
-    data = pjob.build_central([(l.contours, l.hatches) for l in layers], s.layer_mm)
+    data = pjob.build_central([(l.contours, l.hatches, l.contour_first) for l in layers], s.layer_mm)
     if progress:
         progress(1.0)
     idx = pjob.index(data)

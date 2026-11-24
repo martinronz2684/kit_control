@@ -102,13 +102,15 @@ def layer(data: bytes, idx: dict, n: int, max_segments: int = 6000) -> dict:
 
 
 # -- Erzeugen ---------------------------------------------------------------------
-def build_central(layers, layer_mm: float, max_empty: int = 20) -> bytes:
+def build_central(layers, layer_mm: float, max_empty: int = 20, contour_first=True) -> bytes:
     """Wie PrintJobKit.writeOut. layers: je Schicht (Konturen, Schraffur); Konturen sind geschlossene
     Polygone [(x, y), ...] in mm, Schraffur Strecken (x0, y0, x1, y1). Konturen vor Füllung."""
     um = lambda v: int(round(v * 1000))
     out = bytearray(HEADER)
     written = empty = 0
-    for contours, hatches in layers:
+    for item in layers:
+        contours, hatches = item[0], item[1]
+        cfirst = item[2] if len(item) > 2 else contour_first
         if not contours and not hatches:
             empty += 1
             if empty > max_empty:
@@ -117,16 +119,26 @@ def build_central(layers, layer_mm: float, max_empty: int = 20) -> bytes:
             empty = 0
         out += struct.pack("<Hii", MAKELAYER, um((written + 1) * layer_mm), written)
         written += 1
-        if contours:
-            out += struct.pack("<H", CONTOUR)
-            for poly in contours:
-                out += struct.pack("<Hii", JUMP, um(poly[0][0]), um(poly[0][1]))
-                for x, y in list(poly[1:]) + [poly[0]]:
-                    out += struct.pack("<Hii", GO, um(x), um(y))
-        if hatches:
-            out += struct.pack("<H", INFILL)
-            for x0, y0, x1, y1 in hatches:
-                out += struct.pack("<HiiHii", JUMP, um(x0), um(y0), GO, um(x1), um(y1))
+
+        def put_contours():
+            nonlocal out
+            if contours:
+                out += struct.pack("<H", CONTOUR)
+                for poly in contours:
+                    out += struct.pack("<Hii", JUMP, um(poly[0][0]), um(poly[0][1]))
+                    for x, y in list(poly[1:]) + [poly[0]]:
+                        out += struct.pack("<Hii", GO, um(x), um(y))
+
+        def put_hatches():
+            nonlocal out
+            if hatches:
+                out += struct.pack("<H", INFILL)
+                for x0, y0, x1, y1 in hatches:
+                    out += struct.pack("<HiiHii", JUMP, um(x0), um(y0), GO, um(x1), um(y1))
+        if cfirst:
+            put_contours(); put_hatches()
+        else:
+            put_hatches(); put_contours()
     return bytes(out)
 
 
