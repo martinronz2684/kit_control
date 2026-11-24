@@ -162,6 +162,20 @@ class StrategyTest(unittest.TestCase):
             profiles.validate(dict(base, core_spacing_um=50))
 
 
+class OffsetRobustTest(unittest.TestCase):
+    def test_offset_never_leaves_shape(self):
+        rng = np.random.default_rng(3)
+        for _ in range(2000):
+            n = int(rng.integers(5, 40))
+            t = np.sort(rng.random(n)) * 2 * np.pi
+            r = 2 + rng.random(n) * 3
+            poly = G.orient([np.stack([np.cos(t) * r, np.sin(t) * r], 1)])[0]
+            q = G.offset_loop(poly, 0.2)
+            if q is not None:
+                self.assertTrue(np.isfinite(q).all())
+                self.assertLessEqual(np.abs(q).max(), np.abs(poly).max() + 0.8 + 1e-6)
+
+
 class BigMeshTest(unittest.TestCase):
     def test_many_vertices_closed_contours(self):
         # > 46341 Eckpunkte: Kantenschlüssel passen nicht mehr in int32 (früher zerfielen die Konturen)

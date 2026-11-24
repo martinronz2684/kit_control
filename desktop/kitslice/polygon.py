@@ -113,6 +113,7 @@ def offset_loop(p: np.ndarray, d: float, miter: float = 4.0):
     if d == 0:
         return p.copy()
     p = p.copy()
+    p0 = p.copy()
     a0 = area(p)
     # schnelle Absage: viel zu dünn für den Versatz (2·Fläche/Umfang ~ Inkreisradius)
     if d > 0 and a0 > 0 and 2 * a0 / max(perimeter(p), 1e-12) < d * 0.95:
@@ -141,8 +142,10 @@ def offset_loop(p: np.ndarray, d: float, miter: float = 4.0):
             if used[i] or used[j] or used[(i - 1) % n] or used[(j + 1) % n]:
                 continue
             mid = _intersect(p[i - 1], p[i], p[j], p[(j + 1) % n])
-            if mid is None or not np.isfinite(mid).all():
-                mid = (p[i] + p[j]) / 2
+            centre = (p[i] + p[j]) / 2
+            # fast parallele Nachbarkanten schneiden sich weit weg – das ergäbe einen Strich durch die Schicht
+            if mid is None or not np.isfinite(mid).all() or np.hypot(*(mid - centre)) > max(2 * d, lens.max()):
+                mid = centre
             newpt[i] = mid
             drop.append(j)
             used[i] = used[j] = True
@@ -154,6 +157,10 @@ def offset_loop(p: np.ndarray, d: float, miter: float = 4.0):
     a1 = area(q)
     if a1 == 0 or (a1 > 0) != (a0 > 0) or abs(a1) < 1e-6:
         return None
+    # Sicherheitsnetz: der Versatz darf den Hüllquader nicht um mehr als den Versatz (plus Gehrung) verlassen
+    lo, hi = p0.min(axis=0) - 4 * abs(d) - 1e-6, p0.max(axis=0) + 4 * abs(d) + 1e-6
+    if (q < lo).any() or (q > hi).any():
+        q = np.clip(q, lo, hi)
     return q
 
 
