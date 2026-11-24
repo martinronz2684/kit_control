@@ -13,6 +13,7 @@ import base64
 import json
 import socket
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -71,6 +72,19 @@ class Pi:
             for line in r:
                 if line.startswith(b"data: "):
                     yield json.loads(line[6:])
+
+    def cmd(self, cmd: dict) -> dict:
+        """Bedienbefehl (wie am Display). Der Pi erlaubt das aus dem Netz nur mit KIT_REMOTE=1."""
+        req = urllib.request.Request(self.base + "/api/cmd", data=json.dumps(cmd).encode(),
+                                     headers={"Content-Type": "application/json"}, method="POST")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            try:
+                return json.loads(e.read())
+            except ValueError:
+                return {"ok": False, "error": f"HTTP {e.code}"}
 
     def send_job(self, data: bytes, name: str, profile: dict | None = None, start: bool = False) -> dict:
         """Druckdatei zum Pi. start=True: gleich drucken, falls der Kit bereit ist.

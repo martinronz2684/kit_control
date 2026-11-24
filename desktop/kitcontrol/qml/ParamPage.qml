@@ -1,0 +1,193 @@
+import QtQuick
+import QtQuick.Controls
+import QtQuick.Layouts
+
+Item {
+    id: pp
+    property var prof: backend.profile
+    property var ed: JSON.parse(JSON.stringify(prof))
+    property bool ro: prof.builtin === true
+    property string err: ""
+    onProfChanged: { ed = JSON.parse(JSON.stringify(prof)); err = ""; nameField.text = prof.builtin ? prof.name + " (eigen)" : prof.name }
+
+    function setv(key, v) { ed[key] = v }
+    function setTemp(key, v) { if (!ed.temps) ed.temps = {}; ed.temps[key] = Number(String(v).replace(",", ".")) }
+    function save(asNew) {
+        var q = JSON.parse(JSON.stringify(ed))
+        q.name = nameField.text
+        q.hatch_angles_deg = angleField.text.split(/[;,]/).map(function(s) { return Number(s.trim()) }).filter(function(n) { return !isNaN(n) })
+        q.laser_speed_mm_s = laserField.text.trim() === "" ? null : Number(laserField.text.replace(",", "."))
+        q.contour_speed_mm_s = contourField.text.trim() === "" ? null : Number(contourField.text.replace(",", "."))
+        q.lamps = lampSwitch.checked ? { left: Number(lampL.text), right: Number(lampR.text), front: Number(lampF.text) } : null
+        if (asNew || q.builtin) { q.base = q.id; delete q.id; q.builtin = false }
+        err = backend.saveProfile(q)
+    }
+
+    RowLayout {
+        anchors.fill: parent
+        spacing: 18
+
+        // Profilliste
+        Card {
+            Layout.preferredWidth: 300
+            Layout.fillHeight: true
+            ColumnLayout {
+                anchors.fill: parent; anchors.margins: 14
+                spacing: 8
+                Caption { text: "Pulverprofile" }
+                ListView {
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    clip: true; spacing: 6
+                    model: backend.profiles
+                    delegate: Rectangle {
+                        width: ListView.view.width
+                        height: 62; radius: 10
+                        color: modelData.id === backend.profileId ? "#16313c" : (pm.containsMouse ? "#181c21" : "#15181c")
+                        border.color: modelData.id === backend.profileId ? win.cAcc : win.cLine
+                        ColumnLayout {
+                            anchors.fill: parent; anchors.margins: 10
+                            spacing: 2
+                            RowLayout {
+                                Text { text: modelData.name; color: win.cInk; font.pixelSize: 14; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
+                                Rectangle {
+                                    visible: modelData.builtin === true
+                                    radius: 6; color: "#1d2228"; implicitWidth: vt.implicitWidth + 12; implicitHeight: 18
+                                    Text { id: vt; anchors.centerIn: parent; text: "Vorlage"; color: win.cMut; font.pixelSize: 10 }
+                                }
+                            }
+                            Text {
+                                text: modelData.layer_um + " µm · Schraffur " + modelData.hatch_spacing_um + " µm · Kontur " + modelData.perimeter_offset_um + " µm"
+                                color: win.cMut; font.pixelSize: 11
+                            }
+                        }
+                        MouseArea { id: pm; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: backend.selectProfile(modelData.id) }
+                    }
+                }
+                RowLayout {
+                    spacing: 8
+                    KButton { text: "Importieren"; kind: "ghost"; Layout.fillWidth: true; onClicked: importProfile.open() }
+                    KButton { text: "Exportieren"; kind: "ghost"; Layout.fillWidth: true; onClicked: exportProfile.open() }
+                }
+                KButton { text: "Profilordner öffnen"; kind: "ghost"; Layout.fillWidth: true; onClicked: backend.openFolder("profiles") }
+            }
+        }
+
+        // Editor
+        Card {
+            Layout.fillWidth: true
+            Layout.fillHeight: true
+            Flickable {
+                anchors.fill: parent; anchors.margins: 20
+                contentHeight: edCol.implicitHeight
+                clip: true
+                ScrollBar.vertical: ScrollBar {}
+                ColumnLayout {
+                    id: edCol
+                    width: parent.width - 12
+                    spacing: 16
+
+                    RowLayout {
+                        spacing: 12
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 4
+                            Text { text: "Name"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: nameField; Layout.fillWidth: true; Component.onCompleted: text = pp.prof.builtin ? pp.prof.name + " (eigen)" : pp.prof.name }
+                        }
+                    }
+                    Rectangle {
+                        visible: pp.ro
+                        Layout.fillWidth: true
+                        implicitHeight: roText.implicitHeight + 20
+                        radius: 10; color: "#16252c"; border.color: "#1f4757"
+                        Body {
+                            id: roText; anchors.fill: parent; anchors.margins: 10
+                            text: "Vorlage aus Sintratec Central – Werte unverändert übernommen. Zum Anpassen als eigenes Profil speichern; die Felder lassen sich dafür bearbeiten."
+                            color: "#a9d7e7"; font.pixelSize: 12
+                        }
+                    }
+
+                    Caption { text: "Slicer (wie Central „Print Parameters“)" }
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 3; columnSpacing: 14; rowSpacing: 12
+                        NumField { Layout.fillWidth: true; label: "Schichthöhe"; unit: "µm"; value: String(pp.prof.layer_um); onCommitted: (v) => pp.setv("layer_um", Number(v)) }
+                        NumField { Layout.fillWidth: true; label: "Anzahl Perimeter"; unit: ""; value: String(pp.prof.perimeters); onCommitted: (v) => pp.setv("perimeters", Number(v)) }
+                        NumField { Layout.fillWidth: true; label: "Perimeter-Versatz"; unit: "µm"; value: String(pp.prof.perimeter_offset_um); onCommitted: (v) => pp.setv("perimeter_offset_um", Number(v)) }
+                        NumField { Layout.fillWidth: true; label: "Schraffur-Versatz"; unit: "µm"; value: String(pp.prof.hatch_offset_um); onCommitted: (v) => pp.setv("hatch_offset_um", Number(v)) }
+                        NumField { Layout.fillWidth: true; label: "Schraffur-Abstand"; unit: "µm"; value: String(pp.prof.hatch_spacing_um); onCommitted: (v) => pp.setv("hatch_spacing_um", Number(v)) }
+                        NumField { Layout.fillWidth: true; label: "Mindestvektorlänge"; unit: "µm"; value: String(pp.prof.min_vector_um); onCommitted: (v) => pp.setv("min_vector_um", Number(v)) }
+                    }
+                    ColumnLayout {
+                        Layout.fillWidth: true
+                        spacing: 4
+                        Text { text: "Schraffurwinkel je Schicht (reihum)"; color: win.cMut; font.pixelSize: 12 }
+                        KField { id: angleField; Layout.fillWidth: true; text: (pp.prof.hatch_angles_deg || []).join(", ") }
+                    }
+                    CheckBox {
+                        id: origBox
+                        text: "Originalkontur zusätzlich lasern"
+                        checked: pp.prof.draw_original_boundary === true
+                        onToggled: pp.setv("draw_original_boundary", checked)
+                        contentItem: Text { text: origBox.text; color: win.cInk; font.pixelSize: 13; leftPadding: origBox.indicator.width + 8; verticalAlignment: Text.AlignVCenter }
+                    }
+
+                    Caption { text: "Temperaturen (am Kit vor dem Druck eingestellt)"; Layout.topMargin: 6 }
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 4; columnSpacing: 14; rowSpacing: 12
+                        NumField { Layout.fillWidth: true; label: "Oberfläche Aufheizen"; unit: "°C"; value: pp.prof.temps ? String(pp.prof.temps.surface_warmup) : ""; onCommitted: (v) => pp.setTemp("surface_warmup", v) }
+                        NumField { Layout.fillWidth: true; label: "Kammer Aufheizen"; unit: "°C"; value: pp.prof.temps ? String(pp.prof.temps.chamber_warmup) : ""; onCommitted: (v) => pp.setTemp("chamber_warmup", v) }
+                        NumField { Layout.fillWidth: true; label: "Oberfläche Druck"; unit: "°C"; value: pp.prof.temps ? String(pp.prof.temps.surface_print) : ""; onCommitted: (v) => pp.setTemp("surface_print", v) }
+                        NumField { Layout.fillWidth: true; label: "Kammer Druck"; unit: "°C"; value: pp.prof.temps ? String(pp.prof.temps.chamber_print) : ""; onCommitted: (v) => pp.setTemp("chamber_print", v) }
+                    }
+
+                    Caption { text: "Laser (leer = Wert am Kit lassen)"; Layout.topMargin: 6 }
+                    GridLayout {
+                        Layout.fillWidth: true
+                        columns: 2; columnSpacing: 14; rowSpacing: 12
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Geschwindigkeit Füllung"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: laserField; Layout.fillWidth: true; placeholderText: "unverändert"; text: pp.prof.laser_speed_mm_s === null || pp.prof.laser_speed_mm_s === undefined ? "" : String(pp.prof.laser_speed_mm_s) }
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 4
+                            Text { text: "Geschwindigkeit Kontur"; color: win.cMut; font.pixelSize: 12 }
+                            KField { id: contourField; Layout.fillWidth: true; placeholderText: "unverändert"; text: pp.prof.contour_speed_mm_s === null || pp.prof.contour_speed_mm_s === undefined ? "" : String(pp.prof.contour_speed_mm_s) }
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.topMargin: 6
+                        Caption { text: "Heizstrahler"; Layout.fillWidth: true }
+                        Switch { id: lampSwitch; checked: pp.prof.lamps !== null && pp.prof.lamps !== undefined }
+                    }
+                    GridLayout {
+                        visible: lampSwitch.checked
+                        Layout.fillWidth: true
+                        columns: 3; columnSpacing: 14
+                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Links"; color: win.cMut; font.pixelSize: 12 } KField { id: lampL; Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.left) : "80" } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Rechts"; color: win.cMut; font.pixelSize: 12 } KField { id: lampR; Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.right) : "100" } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Vorne"; color: win.cMut; font.pixelSize: 12 } KField { id: lampF; Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.front) : "100" } }
+                    }
+
+                    Text { visible: pp.err !== ""; text: "⚠ " + pp.err; color: "#ffb4b6"; font.pixelSize: 13; Layout.topMargin: 4 }
+
+                    RowLayout {
+                        Layout.topMargin: 8
+                        spacing: 10
+                        KButton { visible: !pp.ro; text: "Speichern"; kind: "pri"; onClicked: pp.save(false) }
+                        KButton { text: "Als neues Profil speichern"; kind: pp.ro ? "pri" : "normal"; onClicked: pp.save(true) }
+                        Item { Layout.fillWidth: true }
+                        KButton {
+                            visible: !pp.ro
+                            text: "Löschen"; kind: "ghost"
+                            onClicked: confirm.ask("Profil „" + pp.prof.name + "“ löschen?", function() { backend.deleteProfile(pp.prof.id) })
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

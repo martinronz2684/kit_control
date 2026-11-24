@@ -1,0 +1,88 @@
+name: Kit Control Desktop – Setup bauen
+# Baut die PC-App (PySide6 + Slicer) mit PyInstaller und daraus KitControl-Setup.exe (Inno Setup).
+# Ablage am Release "desktop-setup" zusammen mit version.txt – die App fragt beim Start dort nach Updates.
+on:
+  push:
+    branches: [main]
+    paths: ["desktop/**", "kitctl/**", ".github/workflows/desktop-setup.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pakete
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r desktop/requirements.txt pyinstaller
+      - name: Version setzen
+        shell: bash
+        run: |
+          echo "VER=1.0.$GITHUB_RUN_NUMBER" >> $GITHUB_ENV
+          echo "__version__ = \"1.0.$GITHUB_RUN_NUMBER\"" > desktop/kitcontrol/version.py
+      - name: Tests (Slicer, Pi-Schnittstelle)
+        run: python -m unittest tests.test_slicer -v
+      - name: Oberfläche prüfen (alle Seiten laden, ohne Bildschirm)
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+          KIT_UPDATE_REPO: invalid/none
+        run: |
+          cd desktop
+          python -c "import sys; from kitcontrol.main import main; sys.argv += ['--selftest']; sys.exit(main())"
+      - name: App bauen (PyInstaller)
+        shell: bash
+        run: |
+          cd desktop
+          pyinstaller --noconfirm --windowed --name KitControl \
+            --icon setup/kitcontrol.ico \
+            --paths . --paths .. \
+            --add-data "kitcontrol/qml;kitcontrol/qml" \
+            --add-data "kitcontrol/assets;kitcontrol/assets" \
+            --hidden-import kitctl.pjob \
+            --exclude-module tkinter \
+            --exclude-module PySide6.Qt3DCore --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtMultimedia \
+            --distpath ../dist --workpath ../build \
+            KitControl.pyw
+      - name: Gebaute App starten (Selbsttest)
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $p = Start-Process -FilePath dist\KitControl\KitControl.exe -ArgumentList "--selftest" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { Write-Error "Selbsttest der gebauten App fehlgeschlagen ($($p.ExitCode))"; exit 1 }
+      - name: Inno Setup bereitstellen
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Setup bauen
+        shell: pwsh
+        run: |
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVer=$env:VER" desktop\setup\KitControl.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Set-Content -Path dist\version.txt -Value $env:VER -NoNewline
+          Get-Item dist\KitControl-Setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KitControl-Setup
+          path: |
+            dist/KitControl-Setup.exe
+            dist/version.txt
+      - name: Am Release "desktop-setup" ablegen
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view desktop-setup >/dev/null 2>&1 || \
+            gh release create desktop-setup --title "Kit Control für Windows" \
+              --notes "KitControl-Setup.exe herunterladen und ausführen. Kit Control prüft danach bei jedem Start, ob es eine neue Version gibt." --latest
+          gh release upload desktop-setup dist/KitControl-Setup.exe dist/version.txt --clobber
