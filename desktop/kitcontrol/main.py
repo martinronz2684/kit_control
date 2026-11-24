@@ -190,6 +190,19 @@ def _screenshots(app, engine, backend, out):
     QTimer.singleShot(1500, shoot)
 
 
+def _qml_int(obj, expr, default=0):
+    """Enum-Eigenschaft über QML auslesen (PySide kann manche Enums nicht direkt umwandeln)."""
+    try:
+        from PySide6.QtQml import QQmlEngine, QQmlExpression
+        ctx = QQmlEngine.contextForObject(obj)
+        if ctx is None:
+            return default
+        v, err = QQmlExpression(ctx, obj, expr).evaluate()
+        return int(v) if v is not None else default
+    except Exception:
+        return default
+
+
 def _layout_check(root, where: str) -> list:
     """Sucht Darstellungsfehler: Texte, die sich überlappen (z. B. Schrift über einer Taste), Texte, die über
     ihren Platz hinausragen, ohne gekürzt zu werden, und Elemente außerhalb des Fensters."""
@@ -209,13 +222,13 @@ def _layout_check(root, where: str) -> list:
             t = (it.property("text") or "").strip()
             if t and it.width() > 1 and it.height() > 1:
                 cr = it.property("contentWidth") or 0
-                elide = it.property("elide") or 0
-                wrap = it.property("wrapMode") or 0
+                elide = bool(it.property("truncated"))
+                wrap = (it.property("lineCount") or 1) > 1
                 if not elide and not wrap and cr > it.width() + 2:
                     out.append(f"{where}: Text ragt über seinen Platz: „{t[:40]}“ ({cr:.0f} > {it.width():.0f} px)")
                 # tatsächlich bemalte Fläche (nicht die ganze Breite eines linksbündigen Felds)
                 cw = min(cr, it.width()) if cr else it.width()
-                al = int(it.property("horizontalAlignment") or 1)
+                al = _qml_int(it, "effectiveHorizontalAlignment", 1)
                 x0 = r.x() + (it.width() - cw if al == 2 else (it.width() - cw) / 2 if al == 4 else 0)
                 tr = QRectF(x0, r.y(), cw, min(r.height(), (it.property("contentHeight") or r.height()))).intersected(clip)
                 if tr.width() > 1 and tr.height() > 1:
