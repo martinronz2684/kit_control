@@ -200,7 +200,7 @@ Item {
                         enabled: pg.cur !== null
                         spacing: 8
                         KButton { text: "Duplizieren"; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.duplicatePart(pg.sel) }
-                        KButton { text: "Entfernen"; kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.preferredWidth: 1; onClicked: backend.removePart(pg.sel) }
+                        KButton { text: "Entfernen"; kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.removePart(pg.sel) }
                     }
                     Repeater {
                         model: backend.notes
