@@ -250,35 +250,13 @@ Item {
             Text { text: "Auto-Anordnen"; color: win.cInk; font.pixelSize: 18; font.weight: Font.DemiBold }
             Body {
                 Layout.fillWidth: true; color: win.cMut; font.pixelSize: 12
-                text: "Packt alle Teile möglichst niedrig und dicht in den idealen Druckbereich (90 × 90 × 110 mm) – auch übereinander. Jedes Teil darf in 24 Lagen gedreht (große flache Teile auch leicht gekippt) werden; gesperrte Teile bleiben, wie sie sind."
+                text: "Packt alle Teile möglichst niedrig und dicht in den idealen Druckbereich (90 × 90 × 110 mm) – auch übereinander. SLS-Regeln gelten immer: Mindestabstand in alle Richtungen, Abstand zum Rand, nichts verhakt sich. Jedes Teil wird erst so tief wie möglich gepackt und dann in die beste Lage nach SLS-Regeln gedreht, wo das keine Bauhöhe kostet. Gesperrte Teile bleiben, wie sie sind."
             }
             GridLayout {
                 columns: 2; columnSpacing: 14; rowSpacing: 10
                 Layout.fillWidth: true
                 NumField { Layout.fillWidth: true; label: "Abstand zwischen Teilen"; unit: "mm"; value: String(packPop.gap); onCommitted: (v) => packPop.gap = Number(v.replace(",", ".")) }
                 NumField { Layout.fillWidth: true; label: "Abstand zum Rand"; unit: "mm"; value: String(packPop.wall); onCommitted: (v) => packPop.wall = Number(v.replace(",", ".")) }
-            }
-            ColumnLayout {
-                spacing: 6
-                Text { text: "Ausrichtung nach SLS-Regeln"; color: win.cMut; font.pixelSize: 12 }
-                RowLayout {
-                    spacing: 8
-                    Repeater {
-                        model: [[0.0, "Packdichte"], [0.5, "Ausgewogen"], [1.0, "Qualität"]]
-                        delegate: KButton {
-                            Layout.fillWidth: true
-                            text: modelData[1]
-                            kind: Math.abs(packPop.quality - modelData[0]) < 0.01 ? "pri" : "normal"
-                            onClicked: packPop.quality = modelData[0]
-                        }
-                    }
-                }
-                Body {
-                    Layout.fillWidth: true; color: win.cMut; font.pixelSize: 11
-                    text: packPop.quality > 0.9 ? "Jedes Teil in seiner besten Lage: große Flächen hochkant oder gekippt, Bohrungen stehend, wenig Treppenstufen, gleichmäßiger Querschnitt – kostet etwas Bauhöhe."
-                        : packPop.quality > 0.1 ? "Erst so niedrig wie möglich packen, dann jedes Teil in eine bessere Lage nach SLS-Regeln drehen, wo das keine Bauhöhe kostet."
-                        : "Nur Bauhöhe und Dichte zählen, Ausrichtung egal."
-                }
             }
             ColumnLayout {
                 spacing: 6
