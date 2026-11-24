@@ -34,7 +34,7 @@ jobs:
         shell: pwsh
         run: |
           $ver = "1.0.$env:GITHUB_RUN_NUMBER"
-          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DVer=$ver" central\setup\KitControlCentral.iss
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVer=$ver" central\setup\KitControlCentral.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
           Get-Item dist\KitControl-Central-Setup.exe
       - uses: actions/upload-artifact@v4

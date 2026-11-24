@@ -1,17 +1,17 @@
 ; Setup für Sintratec Central: Drucken über den Kit Control (Pi) per WLAN oder USB-Netzwerk.
 ; Tauscht nur die USB-Bibliothek usb4java-1.2.0.jar in Central aus und sichert das Original.
 ; Deinstallieren (Windows: Einstellungen > Apps) stellt das Original wieder her.
-; Bauen: ISCC.exe /DVer=1.0.0 KitControlCentral.iss  (die neue usb4java-1.2.0.jar liegt in ..\)
+; Bauen: ISCC.exe /DAppVer=1.0.0 KitControlCentral.iss  (die neue usb4java-1.2.0.jar liegt in ..\)
 
-#ifndef Ver
-  #define Ver "1.0.0"
+#ifndef AppVer
+  #define AppVer "1.0.0"
 #endif
 #define Jar "usb4java-1.2.0.jar"
 
 [Setup]
 AppId={{6E2B6F3A-6C1D-4E59-9C1B-2F4B7A0D5C11}
 AppName=Kit Control für Sintratec Central
-AppVersion={#Ver}
+AppVersion={#AppVer}
 AppPublisher=Kit Control
 DefaultDirName={localappdata}\KitControl\Central
 DisableDirPage=yes
@@ -23,12 +23,23 @@ SetupIconFile=kitcontrol.ico
 UninstallDisplayIcon={app}\kitcontrol.ico
 UninstallDisplayName=Kit Control für Sintratec Central
 WizardStyle=modern
+WizardImageFile=wizard-100.bmp,wizard-150.bmp,wizard-200.bmp
+WizardSmallImageFile=small-100.bmp,small-150.bmp,small-200.bmp
+WizardImageStretch=no
+WizardImageBackColor=$110E0C
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=no
 
 [Languages]
 Name: "de"; MessagesFile: "compiler:Languages\German.isl"
+
+[Messages]
+de.WelcomeLabel1=Kit Control für Sintratec Central
+de.WelcomeLabel2=Damit druckt Central über den Kit Control am Pi – per WLAN oder USB-Kabel.%n%nDas Setup tauscht in Central nur die USB-Bibliothek aus und sichert das Original. Deinstallieren stellt es wieder her.%n%nBitte Sintratec Central vorher schließen.
+de.FinishedHeadingLabel=Fertig
+de.FinishedLabelNoIcons=Central sucht den Kit jetzt über den Pi. Kit per USB am Pi anschließen, Central starten und wie gewohnt verbinden.%n%nRückgängig: Windows-Einstellungen > Apps > Kit Control für Sintratec Central.
+de.FinishedLabel=Central sucht den Kit jetzt über den Pi. Kit per USB am Pi anschließen, Central starten und wie gewohnt verbinden.%n%nRückgängig: Windows-Einstellungen > Apps > Kit Control für Sintratec Central.
 
 [Files]
 Source: "..\{#Jar}"; DestDir: "{app}"; Flags: ignoreversion
