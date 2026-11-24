@@ -85,7 +85,15 @@ Item {
                     anchors.fill: parent; anchors.margins: 14
                     spacing: 10
                     RowLayout {
-                        Caption { text: "Bauteile (" + pg.parts.length + ")"; Layout.fillWidth: true }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 1
+                            Caption { text: "Bauteile (" + pg.parts.length + ")" }
+                            Text {
+                                visible: pg.parts.length > 0
+                                text: "Bauhöhe " + backend.density.height.toFixed(1) + " mm · Packdichte " + backend.density.density.toFixed(1) + " %"
+                                color: win.cAcc; font.pixelSize: 11
+                            }
+                        }
                         KButton { text: "↶"; kind: "ghost"; implicitWidth: 38; enabled: backend.canUndo; onClicked: backend.undo(); ToolTip.visible: hovered; ToolTip.text: "Rückgängig" }
                         KButton { text: "↷"; kind: "ghost"; implicitWidth: 38; enabled: backend.canRedo; onClicked: backend.redo(); ToolTip.visible: hovered; ToolTip.text: "Wiederholen" }
                     }
@@ -109,9 +117,13 @@ Item {
                     }
                     RowLayout {
                         spacing: 8
-                        KButton { text: "Hinzufügen …"; kind: "pri"; Layout.fillWidth: true; onClicked: openStl.open() }
-                        KButton { text: "3D-Nesting"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: backend.arrange("nest"); ToolTip.visible: hovered; ToolTip.text: "Alle Teile dicht im idealen Bereich packen, auch übereinander" }
-                        KButton { text: "Flach"; implicitWidth: 64; enabled: pg.parts.length > 0; onClicked: backend.arrange("rows"); ToolTip.visible: hovered; ToolTip.text: "Alle Teile nebeneinander auf die Platte legen" }
+                        KButton { text: "Hinzufügen …"; Layout.fillWidth: true; onClicked: openStl.open() }
+                        KButton {
+                            text: backend.packState === "running" ? "Ordnet an … " + Math.round(backend.packProgress * 100) + " %" : "Auto-Anordnen"
+                            kind: "pri"; Layout.fillWidth: true
+                            enabled: pg.parts.length > 0
+                            onClicked: backend.packState === "running" ? backend.cancelPack() : packPop.open()
+                        }
                     }
                 }
             }
@@ -149,6 +161,22 @@ Item {
                     }
                     RowLayout {
                         enabled: pg.cur !== null
+                        spacing: 14
+                        CheckBox {
+                            id: lockPos
+                            checked: pg.cur ? pg.cur.lock_pos : false
+                            onToggled: backend.setPart(pg.sel, "lock_pos", checked)
+                            contentItem: Text { text: "Position sperren"; color: win.cInk; font.pixelSize: 12; leftPadding: lockPos.indicator.width + 6; verticalAlignment: Text.AlignVCenter }
+                        }
+                        CheckBox {
+                            id: lockOri
+                            checked: pg.cur ? pg.cur.lock_orient : false
+                            onToggled: backend.setPart(pg.sel, "lock_orient", checked)
+                            contentItem: Text { text: "Lage sperren"; color: win.cInk; font.pixelSize: 12; leftPadding: lockOri.indicator.width + 6; verticalAlignment: Text.AlignVCenter }
+                        }
+                    }
+                    RowLayout {
+                        enabled: pg.cur !== null
                         spacing: 8
                         KButton { text: "Duplizieren"; Layout.fillWidth: true; onClicked: backend.duplicatePart(pg.sel) }
                         KButton { text: "Entfernen"; kind: "ghost"; Layout.fillWidth: true; onClicked: backend.removePart(pg.sel) }
@@ -177,6 +205,80 @@ Item {
                         KButton { text: "Alles entfernen"; kind: "ghost"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: confirm.ask("Alle Bauteile aus dem Bauraum entfernen?", function() { backend.clearParts() }) }
                         KButton { text: "STL exportieren"; kind: "ghost"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: exportStl.open() }
                     }
+                }
+            }
+        }
+    }
+
+    Popup {
+        id: packPop
+        anchors.centerIn: parent
+        width: 440
+        modal: true
+        padding: 22
+        background: Rectangle { radius: 14; color: win.cPanel; border.color: win.cLine }
+        property real gap: 3
+        property real wall: 2
+        property bool rotate: true
+        property bool onlySel: false
+        property int budget: 8
+        contentItem: ColumnLayout {
+            spacing: 14
+            Text { text: "Auto-Anordnen"; color: win.cInk; font.pixelSize: 18; font.weight: Font.DemiBold }
+            Body {
+                Layout.fillWidth: true; color: win.cMut; font.pixelSize: 12
+                text: "Packt alle Teile möglichst niedrig und dicht in den idealen Druckbereich (90 × 90 × 110 mm) – auch übereinander. Jedes Teil darf in 24 Lagen gedreht werden; gesperrte Teile bleiben, wie sie sind."
+            }
+            GridLayout {
+                columns: 2; columnSpacing: 14; rowSpacing: 10
+                Layout.fillWidth: true
+                NumField { Layout.fillWidth: true; label: "Abstand zwischen Teilen"; unit: "mm"; value: String(packPop.gap); onCommitted: (v) => packPop.gap = Number(v.replace(",", ".")) }
+                NumField { Layout.fillWidth: true; label: "Abstand zum Rand"; unit: "mm"; value: String(packPop.wall); onCommitted: (v) => packPop.wall = Number(v.replace(",", ".")) }
+            }
+            ColumnLayout {
+                spacing: 6
+                Text { text: "Gründlichkeit"; color: win.cMut; font.pixelSize: 12 }
+                RowLayout {
+                    spacing: 8
+                    Repeater {
+                        model: [[3, "Schnell"], [8, "Gründlich"], [25, "Sehr gründlich"]]
+                        delegate: KButton {
+                            Layout.fillWidth: true
+                            text: modelData[1]
+                            kind: packPop.budget === modelData[0] ? "pri" : "normal"
+                            onClicked: packPop.budget = modelData[0]
+                        }
+                    }
+                }
+            }
+            RowLayout {
+                spacing: 18
+                CheckBox {
+                    id: rotBox; checked: packPop.rotate; onToggled: packPop.rotate = checked
+                    contentItem: Text { text: "Teile drehen erlaubt"; color: win.cInk; font.pixelSize: 13; leftPadding: rotBox.indicator.width + 6; verticalAlignment: Text.AlignVCenter }
+                }
+                CheckBox {
+                    id: selBox; checked: packPop.onlySel; enabled: pg.cur !== null; onToggled: packPop.onlySel = checked
+                    contentItem: Text { text: "Nur ausgewähltes Teil"; color: win.cInk; font.pixelSize: 13; leftPadding: selBox.indicator.width + 6; verticalAlignment: Text.AlignVCenter; opacity: selBox.enabled ? 1 : 0.4 }
+                }
+            }
+            RowLayout {
+                spacing: 8
+                Layout.topMargin: 6
+                KButton {
+                    text: "Mit Kopien auffüllen"; Layout.fillWidth: true; enabled: pg.cur !== null
+                    onClicked: { packPop.close(); backend.fillChamber(pg.sel, { gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate }) }
+                    ToolTip.visible: hovered; ToolTip.text: "Das ausgewählte Teil so oft kopieren, wie es in den idealen Bereich passt"
+                }
+                KButton { text: "Flach"; onClicked: { packPop.close(); backend.arrange("rows") }; ToolTip.visible: hovered; ToolTip.text: "Alles nebeneinander auf die Platte legen" }
+            }
+            RowLayout {
+                spacing: 8
+                Item { Layout.fillWidth: true }
+                KButton { text: "Abbrechen"; kind: "ghost"; onClicked: packPop.close() }
+                KButton {
+                    text: "Anordnen"; kind: "pri"
+                    onClicked: { packPop.close(); backend.autoPack({ gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate, onlySelected: packPop.onlySel, time: packPop.budget }) }
                 }
             }
         }

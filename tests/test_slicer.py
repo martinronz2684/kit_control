@@ -127,6 +127,27 @@ class NestTest(unittest.TestCase):
         self.assertFalse(sc.collisions())
 
 
+class PackTest(unittest.TestCase):
+    def test_auto_pack_and_fill(self):
+        from kitslice import packing
+        sc = Scene([Part(f"b{i}", box(40, 30, 15)) for i in range(4)] + [Part("stab", box(70, 8, 8))])
+        r = packing.auto_pack(sc, time_budget=1)
+        self.assertTrue(r["ok"])
+        self.assertEqual(sc.problems(), [])
+        self.assertLessEqual(r["height"], 40)
+        n = packing.fill(sc, sc.parts[-1], limit=5)
+        self.assertEqual(n, 5)
+        self.assertEqual(sc.problems(), [])
+
+    def test_locked_part_stays(self):
+        from kitslice import packing
+        a = Part("a", box(20, 20, 10), x=5.0, y=5.0, lock_pos=True)
+        sc = Scene([a, Part("b", box(20, 20, 10))])
+        packing.auto_pack(sc, time_budget=0.5)
+        self.assertEqual((a.x, a.y, a.z_lift), (5.0, 5.0, 0.0))
+        self.assertEqual(sc.problems(), [])
+
+
 class StrategyTest(unittest.TestCase):
     def test_strategies_run_and_change_output(self):
         base = profiles.validate(profiles.get("pa12"))

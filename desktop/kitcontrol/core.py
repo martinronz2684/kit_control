@@ -21,7 +21,7 @@ from kitslice.job import make_job
 from kitslice.net import Pi, discover
 from kitslice.scene import PREFERRED_MM, Part, Scene
 
-PART_KEYS = ("x", "y", "rot_x", "rot_y", "rot_z", "scale", "z_lift")
+PART_KEYS = ("x", "y", "rot_x", "rot_y", "rot_z", "scale", "z_lift", "lock_pos", "lock_orient")
 
 
 def data_dir() -> str:
@@ -91,6 +91,7 @@ class AppCore:
             self.profile_id = "pa12"
         self.job = None            # (bytes, meta, layers)
         self.slice_error = ""
+        self.last_pack = None
         self._outline_cache = {}
 
     # -- Einstellungen ---------------------------------------------------------
@@ -191,7 +192,9 @@ class AppCore:
             return
         p = self.scene.parts[i]
         self._push()
-        if key == "scale_pct":
+        if key in ("lock_pos", "lock_orient"):
+            setattr(p, key, bool(value))
+        elif key == "scale_pct":
             f = max(1.0, min(1000.0, float(value))) / 100.0
             p.scale = (f, f, f)
         else:
@@ -219,6 +222,35 @@ class AppCore:
             return True
         self._push()
         return self.scene.arrange_rows(gap) if mode == "rows" else self.scene.nest(gap)
+
+    def auto_pack(self, gap=3.0, wall=2.0, rotate=True, only_selected=False, time_budget=8.0,
+                  progress=None, cancel=None) -> dict:
+        """Intelligentes Auto-Anordnen (siehe kitslice.packing)."""
+        from kitslice import packing
+        if not self.scene.parts:
+            return {"ok": True, "height": 0, "density": 0, "passes": 0}
+        self._push()
+        only = [self.scene.parts[self.selected]] if only_selected and 0 <= self.selected < len(self.scene.parts) else None
+        r = packing.auto_pack(self.scene, gap, wall, rotate, only, time_budget=time_budget,
+                              progress=progress, cancel=cancel)
+        self.last_pack = r
+        return r
+
+    def fill(self, i: int, gap=3.0, wall=2.0, rotate=True, progress=None, cancel=None) -> int:
+        from kitslice import packing
+        if not 0 <= i < len(self.scene.parts):
+            return 0
+        self._push()
+        return packing.fill(self.scene, self.scene.parts[i], gap, wall, rotate, progress=progress, cancel=cancel)
+
+    def density(self) -> dict:
+        from kitslice.packing import volume
+        from kitslice.scene import IDEAL_XY
+        if not self.scene.parts:
+            return {"height": 0.0, "density": 0.0}
+        h = float(max(p.bbox()[1][2] for p in self.scene.parts))
+        v = sum(volume(p) for p in self.scene.parts)
+        return {"height": round(h, 1), "density": round(v / (IDEAL_XY * IDEAL_XY * max(h, 1e-6)) * 100, 1)}
 
     def display_mesh(self, i: int, max_tris: int = 3000) -> list:
         """Vereinfachtes Netz eines Bauteils für die 3D-Ansicht (flach: x,y,z je Ecke, lokal zur Lage)."""
@@ -248,6 +280,7 @@ class AppCore:
                 "scale_pct": round(float(p.scale[0]) * 100, 1),
                 "size": [round(float(sx), 2), round(float(sy), 2), round(float(sz), 2)], "outline": self._outline_cache[key],
                 "triangles": int(len(p.mesh)),
+                "lock_pos": bool(p.lock_pos), "lock_orient": bool(p.lock_orient),
             })
         return out
 

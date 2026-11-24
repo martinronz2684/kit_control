@@ -17,7 +17,7 @@ IDEAL_Z = 110.0
 GRID = 1.0           # Raster für Nesting und Kollisionsprüfung (mm)
 
 
-@dataclass
+@dataclass(eq=False)
 class Part:
     name: str
     mesh: np.ndarray                         # Original-Dreiecke (n, 3, 3)
@@ -28,6 +28,8 @@ class Part:
     rot_y: float = 0.0
     scale: tuple = (1.0, 1.0, 1.0)
     z_lift: float = 0.0                      # Abstand zur Bauplatte (mm)
+    lock_pos: bool = False                   # beim Auto-Anordnen liegen lassen
+    lock_orient: bool = False                # beim Auto-Anordnen nicht drehen
     _cache: tuple = field(default=None, repr=False, compare=False)
 
     @classmethod

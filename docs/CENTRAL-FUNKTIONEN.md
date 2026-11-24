@@ -32,6 +32,10 @@ Spalte „Pi“ = Touch-Oberfläche am Kit, „PC“ = Kit Control Desktop.
 ## Erweiterungen (nicht in Central)
 | Funktion | Pi | PC | Anmerkung |
 |---|---|---|---|
+| Intelligentes Auto-Anordnen (24 Lagen je Teil, mehrere Durchläufe, Packdichte, Teile sperren, nur ausgewählte) | – | ✅ | angelehnt an PreForm 3D-Packing |
+| Bauraum mit Kopien auffüllen | – | ✅ | |
+| Dünne Wände erhalten | – | ✅ | wie EOS „Edge“ |
+| Geschätzte Restzeit beim Druck | – | ✅ | aus Druckzeit je Schicht |
 | Haut/Kern (Kern lockerer schraffiert) | – | ✅ | Profiloption |
 | Schachbrett-/Inselschraffur | – | ✅ | Profiloption |
 | Winkelschritt je Schicht (z. B. 67°) | – | ✅ | Profiloption |

@@ -130,10 +130,71 @@ class Backend(QObject):
     @Slot(int, str, "QVariant")
     def setPart(self, i, key, value):
         try:
-            self.core.set_part(i, key, float(value))
+            self.core.set_part(i, key, value if key.startswith("lock_") else float(value))
         except (TypeError, ValueError):
             return
         self._parts_changed()
+
+    packChanged = Signal()
+
+    @Property(str, notify=packChanged)
+    def packState(self):
+        return getattr(self, "_pack_state", "idle")
+
+    @Property(float, notify=packChanged)
+    def packProgress(self):
+        return getattr(self, "_pack_progress", 0.0)
+
+    @Property("QVariant", notify=partsChanged)
+    def density(self):
+        return self.core.density()
+
+    def _pack_job(self, fn, done_msg):
+        if getattr(self, "_pack_state", "idle") == "running":
+            return
+        self._pack_state, self._pack_progress, self._pack_cancel = "running", 0.0, False
+        self.packChanged.emit()
+
+        def prog(f):
+            self._pack_progress = f
+            self.packChanged.emit()
+
+        def run():
+            try:
+                res = fn(prog, lambda: self._pack_cancel)
+                self.message.emit(done_msg(res), "ok" if res is not False else "error")
+            except Exception as e:
+                self.message.emit(f"Anordnen fehlgeschlagen: {e}", "error")
+            self._pack_state = "idle"
+            self.packChanged.emit()
+            self._parts_changed()
+        threading.Thread(target=run, daemon=True, name="pack").start()
+
+    @Slot("QVariant")
+    def autoPack(self, opts):
+        o = dict(opts or {})
+
+        def fn(prog, cancel):
+            return self.core.auto_pack(float(o.get("gap", 3)), float(o.get("wall", 2)), bool(o.get("rotate", True)),
+                                       bool(o.get("onlySelected", False)), float(o.get("time", 8)), prog, cancel)
+
+        def msg(r):
+            if not r.get("ok"):
+                return r.get("error") or f"Angeordnet, aber höher als der ideale Bereich ({r.get('height')} mm)"
+            return f"Angeordnet: Bauhöhe {r['height']} mm, Packdichte {r['density']} % ({r['passes']} Durchläufe)"
+        self._pack_job(fn, msg)
+
+    @Slot(int, "QVariant")
+    def fillChamber(self, i, opts):
+        o = dict(opts or {})
+
+        def fn(prog, cancel):
+            return self.core.fill(i, float(o.get("gap", 3)), float(o.get("wall", 2)), bool(o.get("rotate", True)), prog, cancel)
+        self._pack_job(fn, lambda n: f"{n} Kopien hinzugefügt" if n else "Kein Platz für weitere Kopien")
+
+    @Slot()
+    def cancelPack(self):
+        self._pack_cancel = True
 
     @Slot(int, float, float, bool)
     def movePart(self, i, x, y, record):
