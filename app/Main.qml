@@ -775,7 +775,7 @@ Window {
                                 text: "Fährt Bauplattform, Vorrat und Beschichter auf ihre Ausgangsposition – wie „Home all axes“ in Central." }
                             KButton { width: parent.width; height: 46; text: "Referenzfahrt starten"; ok: !calPage.locked
                                 onClicked: win.ask("Referenzfahrt?", "Alle Achsen fahren auf ihre Ausgangsposition. Bauraum frei?", function () {
-                                    win.send({ cmd: "pattern", name: "home" }, function (ok) { if (ok) win.moved = { print: 0, reservoir: 0 } }) }) }
+                                    win.send({ cmd: "pattern", name: "home", confirmed: true }, function (ok) { if (ok) win.moved = { print: 0, reservoir: 0 } }) }) }
                         }
                     }
                 }

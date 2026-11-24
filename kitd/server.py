@@ -318,6 +318,9 @@ class KitWorker(threading.Thread):
         if name == "pattern":
             if c.get("name") not in P.PATTERNS:
                 raise ValueError("unbekanntes Muster")
+            if c["name"] == "home" and c.get("confirmed") is not True:
+                # Grundsatz: Der Pi stößt die Referenzfahrt nie selbst an – nur nach Bestätigung am Bildschirm
+                raise ValueError("Referenzfahrt nur nach Bestätigung am Bildschirm")
             return P.cmd_test_pattern(c["name"])
         if name == "scaling":
             return P.cmd_scaling(*(P.scaling_factor(float(c[k])) for k in "xyz"))

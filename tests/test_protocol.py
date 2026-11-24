@@ -144,3 +144,18 @@ class HandshakeTests(unittest.TestCase):
         fake = FakeKit()
         Kit(fake).connect()
         self.assertIn(P.code(P.COM_CONNECTION_ESTABLISHED), [d[:2] for d in fake.sent])
+
+
+class ReferenzfahrtTests(unittest.TestCase):
+    def test_pi_stoesst_referenzfahrt_nie_selbst_an(self):
+        # Nur mit ausdrücklicher Bestätigung vom Bildschirm; sonst abgelehnt
+        import kitd.server as S
+        w = S.KitWorker.__new__(S.KitWorker)
+        w.snapshot = lambda: {"printing": False}
+        with self.assertRaises(ValueError):
+            w._encode({"cmd": "pattern", "name": "home"})
+        self.assertEqual(w._encode({"cmd": "pattern", "name": "home", "confirmed": True})[-1], 4)
+        # Verbindungsaufbau schickt keine Referenzfahrt
+        fake = FakeKit()
+        Kit(fake).connect()
+        self.assertNotIn(P.code(P.COM_TESTPATTERN), [d[:2] for d in fake.sent])
