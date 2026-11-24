@@ -154,6 +154,10 @@ def _screenshots(app, engine, backend, out):
             uniq = list(dict.fromkeys(found))
             with open(os.path.join(out, "layout.txt"), "w", encoding="utf-8") as f:
                 f.write("\n".join(uniq) or "keine Darstellungsfehler gefunden")
+            try:
+                sys.stdout.reconfigure(encoding="utf-8")
+            except Exception:
+                pass
             for t in uniq:
                 print("LAYOUT " + t, flush=True)
             print(f"LAYOUT {len(uniq)} Auffälligkeiten", flush=True)
@@ -173,7 +177,11 @@ def _screenshots(app, engine, backend, out):
             return
         checks.pop(0)
         where = f"{w}×{h} {names[pg]}" + (" Anordnen-Fenster" if pop else "")
-        found.extend(_layout_check(root, where))
+        top = None
+        if pop and popup is not None:
+            ci = popup.property("contentItem")
+            top = ci.parentItem() if ci is not None and ci.parentItem() is not None else ci
+        found.extend(_layout_check(root, where, top))
         if w == 1100:
             root.grabWindow().save(os.path.join(out, f"klein-{names[pg]}{'-fenster' if pop else ''}.png"))
         if popup is not None and pop:
@@ -203,7 +211,7 @@ def _qml_int(obj, expr, default=0):
         return default
 
 
-def _layout_check(root, where: str) -> list:
+def _layout_check(root, where: str, only=None) -> list:
     """Sucht Darstellungsfehler: Texte, die sich überlappen (z. B. Schrift über einer Taste), Texte, die über
     ihren Platz hinausragen, ohne gekürzt zu werden, und Elemente außerhalb des Fensters."""
     from PySide6.QtCore import QRectF
@@ -229,7 +237,9 @@ def _layout_check(root, where: str) -> list:
                 # tatsächlich bemalte Fläche (nicht die ganze Breite eines linksbündigen Felds)
                 cw = min(cr, it.width()) if cr else it.width()
                 al = _qml_int(it, "effectiveHorizontalAlignment", 1)
-                x0 = r.x() + (it.width() - cw if al == 2 else (it.width() - cw) / 2 if al == 4 else 0)
+                lp = float(it.property("leftPadding") or 0)
+                rp = float(it.property("rightPadding") or 0)
+                x0 = r.x() + (it.width() - rp - cw if al == 2 else (it.width() - cw) / 2 if al == 4 else lp)
                 tr = QRectF(x0, r.y(), cw, min(r.height(), (it.property("contentHeight") or r.height()))).intersected(clip)
                 if tr.width() > 1 and tr.height() > 1:
                     texts.append((tr, t, anc))
@@ -247,7 +257,7 @@ def _layout_check(root, where: str) -> list:
                 return True
             p = p.parentItem()
         return False
-    walk(root.contentItem().parentItem() or root.contentItem(), (), QRectF(0, 0, W, H))
+    walk(only if only is not None else (root.contentItem().parentItem() or root.contentItem()), (), QRectF(0, 0, W, H))
     for a in range(len(texts)):
         for b in range(a + 1, len(texts)):
             ra, ta, _ = texts[a]
