@@ -114,6 +114,8 @@ Item {
                     spacing: 16
 
                     RowLayout {
+                        Layout.maximumWidth: edCol.width
+                        Layout.fillWidth: true
                         spacing: 12
                         ColumnLayout {
                             Layout.fillWidth: true
@@ -136,6 +138,7 @@ Item {
 
                     Caption { text: "Slicer (wie Central „Print Parameters“)" }
                     GridLayout {
+                        Layout.maximumWidth: edCol.width
                         Layout.fillWidth: true
                         columns: 3; columnSpacing: 14; rowSpacing: 12
                         NumField { Layout.fillWidth: true; label: "Schichthöhe"; unit: "µm"; value: String(pp.prof.layer_um); onCommitted: (v) => pp.setv("layer_um", Number(v)) }
@@ -146,6 +149,7 @@ Item {
                         NumField { Layout.fillWidth: true; label: "Mindestvektorlänge"; unit: "µm"; value: String(pp.prof.min_vector_um); onCommitted: (v) => pp.setv("min_vector_um", Number(v)) }
                     }
                     ColumnLayout {
+                        Layout.maximumWidth: edCol.width
                         Layout.fillWidth: true
                         spacing: 4
                         Text { text: "Schraffurwinkel je Schicht (reihum)"; color: win.cMut; font.pixelSize: 12 }
@@ -160,6 +164,7 @@ Item {
 
                     Caption { text: "Strategien (leer/0 = wie Central)"; Layout.topMargin: 6 }
                     GridLayout {
+                        Layout.maximumWidth: edCol.width
                         Layout.fillWidth: true
                         columns: 3; columnSpacing: 14; rowSpacing: 12
                         ColumnLayout {
@@ -201,6 +206,7 @@ Item {
                         }
                     }
                     Flow {
+                        Layout.maximumWidth: edCol.width
                         Layout.fillWidth: true
                         spacing: 24
                         Row {
@@ -222,6 +228,7 @@ Item {
 
                     Caption { text: "Temperaturen (am Kit vor dem Druck eingestellt)"; Layout.topMargin: 6 }
                     GridLayout {
+                        Layout.maximumWidth: edCol.width
                         Layout.fillWidth: true
                         columns: 4; columnSpacing: 14; rowSpacing: 12
                         NumField { Layout.fillWidth: true; label: "Oberfläche Aufheizen"; unit: "°C"; value: pp.prof.temps ? String(pp.prof.temps.surface_warmup) : ""; onCommitted: (v) => pp.setTemp("surface_warmup", v) }
@@ -232,6 +239,7 @@ Item {
 
                     Caption { text: "Laser (leer = Wert am Kit lassen)"; Layout.topMargin: 6 }
                     GridLayout {
+                        Layout.maximumWidth: edCol.width
                         Layout.fillWidth: true
                         columns: 2; columnSpacing: 14; rowSpacing: 12
                         ColumnLayout {
@@ -247,11 +255,13 @@ Item {
                     }
 
                     RowLayout {
+                        Layout.maximumWidth: edCol.width
                         Layout.topMargin: 6
                         Caption { text: "Heizstrahler"; Layout.fillWidth: true }
                         KSwitch { id: lampSwitch; onToggled: pp.apply(); checked: pp.prof.lamps !== null && pp.prof.lamps !== undefined }
                     }
                     GridLayout {
+                        Layout.maximumWidth: edCol.width
                         visible: lampSwitch.checked
                         Layout.fillWidth: true
                         columns: 3; columnSpacing: 14
@@ -263,6 +273,7 @@ Item {
                     Text { visible: pp.err !== ""; text: "⚠ " + pp.err; color: "#ffb4b6"; font.pixelSize: 13; Layout.topMargin: 4; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 
                     RowLayout {
+                        Layout.maximumWidth: edCol.width
                         Layout.topMargin: 8
                         spacing: 10
                         Text {

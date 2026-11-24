@@ -249,7 +249,7 @@ def _layout_check(root, where: str, only=None) -> list:
                     if full.left() < pr.left() - 3 or full.right() > pr.right() + 3:
                         out.append(f"{where}: Text ragt seitlich aus seinem Feld: „{t[:40]}“")
                 vis = full.intersected(clip)
-                if full.width() > 4 and vis.height() > 1 and vis.width() < full.width() - 3 and not scroll_x:
+                if full.width() > 4 and vis.height() > 1 and vis.width() < full.width() - 1 and not scroll_x:
                     out.append(f"{where}: Text seitlich abgeschnitten: „{t[:40]}“")
                 tr = vis
                 if tr.width() > 1 and tr.height() > 1:
@@ -257,7 +257,8 @@ def _layout_check(root, where: str, only=None) -> list:
         if cls.startswith("QQuickTextField") or cls.endswith("Button") or "Button" in cls:
             if r.width() > 4 and r.height() > 4:
                 vis = r.intersected(clip)
-                if vis.height() > 1 and vis.width() < r.width() - 3 and not scroll_x:
+                if vis.height() > 1 and vis.width() < r.width() - 1 and not scroll_x:
+                    out.append(f"{where}:   ({r.left():.0f}..{r.right():.0f} sichtbar {vis.left():.0f}..{vis.right():.0f})")
                     nm = it.property("text") or it.property("placeholderText") or cls
                     out.append(f"{where}: Bedienelement seitlich abgeschnitten: {str(nm)[:40]}")
         if r.width() > 2 and r.height() > 2 and (r.right() > W + 2 or r.bottom() > H + 2) and cls.startswith("QQuick") \
