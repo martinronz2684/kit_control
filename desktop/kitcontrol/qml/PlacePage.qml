@@ -80,7 +80,7 @@ Item {
 
             Card {
                 Layout.fillWidth: true
-                Layout.preferredHeight: Math.min(300, 96 + pg.parts.length * 44)
+                Layout.preferredHeight: Math.min(320, 150 + Math.max(1, pg.parts.length) * 44)
                 ColumnLayout {
                     anchors.fill: parent; anchors.margins: 14
                     spacing: 10

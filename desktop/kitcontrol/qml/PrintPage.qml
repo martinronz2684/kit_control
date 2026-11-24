@@ -152,8 +152,17 @@ Item {
                         Stat { label: "Schicht"; value: k.printing ? (k.layer || 0) + (pr.job && pr.job.layers ? " / " + pr.job.layers : "") : "–" }
                         Stat { label: "Druckzeit"; value: k.printing ? win.fmtTime(k.elapsed_s) : "–" }
                         Stat {
+                            visible: k.countdown_on === true
+                            label: "Aufheizen noch"
+                            value: win.fmtCountdown(k.countdown_s)
+                            tint: win.cHeat
+                        }
+                        Stat {
+                            visible: k.countdown_on !== true
                             label: "Restzeit (geschätzt)"
-                            value: k.printing && k.layer > 3 && pr.job && pr.job.layers ? win.fmtTime(k.elapsed_s / k.layer * Math.max(0, pr.job.layers - k.layer)) : "–"
+                            value: !k.printing ? "–"
+                                 : (k.layer > 3 && pr.job && pr.job.layers) ? win.fmtTime(k.elapsed_s / k.layer * Math.max(0, pr.job.layers - k.layer))
+                                 : (k.percent > 2 ? win.fmtTime(k.elapsed_s / k.percent * (100 - k.percent)) : "–")
                             tint: win.cAcc
                         }
                         Stat { label: "Job"; value: pr.job ? pr.job.name : "–" }

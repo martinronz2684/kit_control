@@ -40,6 +40,12 @@ ApplicationWindow {
         var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
         return h + " h " + (m < 10 ? "0" : "") + m + " min"
     }
+    // wie Central: Aufheiz-Restzeit vom Kit, Minuten aufgerundet
+    function fmtCountdown(s) {
+        if (s === undefined || s === null) return "–"
+        var h = Math.floor(s / 3600), m = Math.floor((s - h * 3600) / 60) + 1
+        return h > 0 ? h + " h " + m + " min" : m + " min"
+    }
     function num(v, d) { return (v === undefined || v === null || v === "") ? "–" : Number(v).toFixed(d === undefined ? 1 : d) }
 
     // ---------- Dialoge ----------
@@ -206,6 +212,11 @@ ApplicationWindow {
                             spacing: 14
                             Column { Caption { text: "Oberfläche" } Text { text: win.num(win.kit.surface) + " °C"; color: win.cHeat; font.pixelSize: 15; font.weight: Font.DemiBold } }
                             Column { Caption { text: "Kammer" } Text { text: win.num(win.kit.chamber) + " °C"; color: win.cInk; font.pixelSize: 15; font.weight: Font.DemiBold } }
+                        }
+                        Text {
+                            visible: win.kit.countdown_on === true
+                            text: "Aufheizen: noch " + win.fmtCountdown(win.kit.countdown_s)
+                            color: win.cHeat; font.pixelSize: 12
                         }
                         Rectangle {
                             visible: win.kit.printing === true
