@@ -37,7 +37,13 @@ jobs:
           KIT_UPDATE_REPO: invalid/none
         run: |
           cd desktop
-          python -c "import sys; from kitcontrol.main import main; sys.argv += ['--selftest']; sys.exit(main())"
+          set +e
+          python -c "import sys; from kitcontrol.main import main; sys.argv += ['--selftest']; sys.exit(main())" > selftest.log 2>&1
+          rc=$?
+          cat selftest.log
+          # Meldungen als Anmerkungen ausgeben (auf der Run-Seite auch ohne Anmeldung lesbar)
+          grep -v "^$" selftest.log | tail -40 | while IFS= read -r l; do echo "::warning title=Selbsttest::$l"; done
+          exit $rc
       - name: App bauen (PyInstaller)
         shell: bash
         run: |
