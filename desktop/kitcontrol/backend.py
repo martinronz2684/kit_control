@@ -200,7 +200,8 @@ class Backend(QObject):
         def msg(r):
             if not r.get("ok"):
                 return r.get("error") or f"Angeordnet, aber höher als der ideale Bereich ({r.get('height')} mm)"
-            return f"Angeordnet: Bauhöhe {r['height']} mm, Packdichte {r['density']} %, leere Schichten {r.get('empty_mm', 0)} mm ({r['passes']} Durchläufe)"
+            return f"Angeordnet: Bauhöhe {r['height']} mm, Packdichte {r['density']} %, leere Schichten {r.get('empty_mm', 0)} mm ({r['passes']} Durchläufe)" + (
+                " – nur mit allen Lagen passend, Ausrichtungsregeln gelockert" if r.get("relaxed") else "")
         self._pack_job(fn, msg)
 
     @Slot(int, "QVariant")

@@ -270,6 +270,88 @@ def _compact(ctx: _Ctx, occ0: np.ndarray, plan):
     return top, occ, plan
 
 
+def _colmap(p: Part, h: float):
+    """Säulenkarte eines Teils im Weltraster (Zellgröße h): unterste/oberste Fläche je Zelle, exakt in mm
+    (relativ zu z_lift), aus dem vollen Netz."""
+    t = p.transform(p.mesh) + np.array([p.x, p.y, 0.0])
+    pts = _samples(t, h * 0.7)
+    ij = np.floor(pts[:, :2] / h).astype(np.int64)
+    o = ij.min(axis=0)
+    ij -= o
+    n = ij.max(axis=0) + 1
+    bot = np.full(n, np.inf)
+    top = np.full(n, -np.inf)
+    np.minimum.at(bot, (ij[:, 0], ij[:, 1]), pts[:, 2])
+    np.maximum.at(top, (ij[:, 0], ij[:, 1]), pts[:, 2])
+    return o, bot, top
+
+
+def _dilate_map(o, bot, top, r: int):
+    """Säulenkarte seitlich um r Zellen (Kreis) aufblasen: Mindestabstand auch schräg/seitlich."""
+    n = np.array(bot.shape) + 2 * r
+    B = np.full(n, np.inf)
+    T = np.full(n, -np.inf)
+    for dx in range(-r, r + 1):
+        for dy in range(-r, r + 1):
+            if dx * dx + dy * dy > (r + 0.5) ** 2:
+                continue
+            sl = (slice(r + dx, r + dx + bot.shape[0]), slice(r + dy, r + dy + bot.shape[1]))
+            np.minimum(B[sl], bot, out=B[sl])
+            np.maximum(T[sl], top, out=T[sl])
+    return o - r, B, T
+
+
+def settle(scene: Scene, movers, gap: float, h: float = 0.5, floor: float = 0.0, passes: int = 4) -> float:
+    """Exaktes Absenken: jedes Teil so weit nach unten, bis es den Mindestabstand zum Teil darunter
+    (bzw. die Bauplatte) erreicht – ohne Rasterzuschlag in Z. Liefert die gesamte Absenkung in mm."""
+    if not movers:
+        return 0.0
+    r = int(math.ceil(gap / h)) + 1
+    maps = {id(q): _colmap(q, h) for q in scene.parts}
+    dil = {id(q): _dilate_map(*maps[id(q)], r) for q in scene.parts}
+    mover_ids = {id(q) for q in movers}
+    total = 0.0
+    for _ in range(passes):
+        moved = 0.0
+        for p in sorted(scene.parts, key=lambda q: q.z_lift):
+            if id(p) not in mover_ids:
+                continue
+            o, bot, top = maps[id(p)]
+            pb = bot + p.z_lift
+            pt = top + p.z_lift
+            defined = np.isfinite(bot)
+            d = float(pb[defined].min() - floor)
+            for q in scene.parts:
+                if q is p or d <= 1e-6:
+                    continue
+                qo, QB, QT = dil[id(q)]
+                a0 = np.maximum(o, qo)
+                a1 = np.minimum(o + np.array(bot.shape), qo + np.array(QB.shape))
+                if (a1 <= a0).any():
+                    continue
+                ps = (slice(a0[0] - o[0], a1[0] - o[0]), slice(a0[1] - o[1], a1[1] - o[1]))
+                qs = (slice(a0[0] - qo[0], a1[0] - qo[0]), slice(a0[1] - qo[1], a1[1] - qo[1]))
+                m = defined[ps] & np.isfinite(QB[qs])
+                if not m.any():
+                    continue
+                b, t = pb[ps][m], pt[ps][m]
+                qb, qt = QB[qs][m] + q.z_lift, QT[qs][m] + q.z_lift
+                below = qt <= b + 1e-6
+                above = qb >= t - 1e-6
+                if (~below & ~above).any():          # schon zu nah/verschränkt: nicht bewegen
+                    d = 0.0
+                    break
+                if below.any():
+                    d = min(d, float((b[below] - qt[below]).min() - gap))
+            if d > 0.05:
+                p.z_lift = float(p.z_lift - d)
+                moved += d
+        total += moved
+        if moved < 0.05:
+            break
+    return total
+
+
 def _empty_layers(occ: np.ndarray) -> int:
     a = occ.any(axis=(0, 1))
     nz = np.nonzero(a)[0]
@@ -365,10 +447,17 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
             break
         if k >= len(orders) and time.time() - t0 > time_budget:
             break
+    if best is None and quality_w > 0 and not (cancel and cancel()):
+        # mit den besten Lagen passt es nicht -> alle Lagen erlauben
+        r = auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget / 2,
+                      progress, cancel, floor, 0.0)
+        r["relaxed"] = True
+        return r
     if best is None:
         return {"ok": False, "height": 0.0, "density": 0.0, "passes": tried,
                 "error": "Teile passen nicht in den idealen Bereich – Abstand verringern oder Teile verkleinern"}
     _apply(ctx, best[1])
+    settle(scene, movers, gap, floor=floor)
     empty = best[2]
     if not fixed:                                # Anordnung mittig (gleichmäßigste Temperatur)
         lo = np.min([q.bbox()[0] for q in scene.parts], axis=0)
@@ -390,35 +479,49 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
 def fill(scene: Scene, part: Part, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
          area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0, limit: int = 300,
          progress=None, cancel=None, floor: float = 0.0, quality_w: float = 0.5) -> int:
-    """„Bauraum auffüllen“: Kopien von `part` hinzufügen, solange sie im Bereich Platz finden."""
+    """„Bauraum auffüllen“: das Teil selbst neu setzen und Kopien hinzufügen, solange Platz ist.
+    Andere Teile bleiben liegen. Nach jeder Runde exakt absenken und die frei gewordene Höhe nachfüllen."""
     ctx = _Ctx(area, height, gap, wall, floor, res)
-    occ = _fixed_occ(ctx, scene.parts)
+    reuse = not getattr(part, "lock_pos", False)          # Original wird zur ersten „Kopie“
     orients = _orientations(part, allow_rotation, ctx, quality_w)
     added = 0
-    while added < limit:
-        if cancel and cancel():
+    placed = []
+    for _round in range(4):
+        occ = _fixed_occ(ctx, [q for q in scene.parts if not (reuse and q is part and not placed)])
+        new = 0
+        while added < limit:
+            if cancel and cancel():
+                break
+            occ_d = _dilate3(occ, ctx.g)
+            occF = np.fft.rfftn(occ_d.astype(np.float32))
+            shell = _shell_fn(occ_d)
+            best = None
+            for rot in orients:
+                sh = ctx.shape_of(part, rot)
+                if sh is None:
+                    continue
+                r = _best(ctx, occF, shell, sh, ctx.nz)      # Gesamthöhe zählt beim Auffüllen nicht
+                if r and (best is None or r[0] < best[0]):
+                    best = (r[0], rot, r[1], r[2], r[3], sh)
+            if best is None:
+                break
+            _, rot, i, j, k, sh = best
+            vox = sh[0]
+            occ[i:i + vox.shape[0], j:j + vox.shape[1], k:k + vox.shape[2]] |= vox
+            if reuse and not placed:
+                q = part
+            else:
+                q = Part(f"{part.name} ({added + 2})", part.mesh, scale=part.scale)
+                q.lock_orient = getattr(part, "lock_orient", False)
+                scene.add(q)
+                added += 1
+            _apply(ctx, [(q, rot, i, j, k, sh)])
+            placed.append(q)
+            new += 1
+            if progress:
+                progress(min(0.99, len(placed) / 60))
+        if placed:
+            settle(scene, placed, gap, floor=floor)
+        if not new or (cancel and cancel()):
             break
-        occ_d = _dilate3(occ, ctx.g)
-        occF = np.fft.rfftn(occ_d.astype(np.float32))
-        shell = _shell_fn(occ_d)
-        best = None
-        for rot in orients:
-            sh = ctx.shape_of(part, rot)
-            if sh is None:
-                continue
-            r = _best(ctx, occF, shell, sh, ctx.nz)      # Gesamthöhe zählt beim Auffüllen nicht
-            if r and (best is None or r[0] < best[0]):
-                best = (r[0], rot, r[1], r[2], r[3], sh)
-        if best is None:
-            break
-        _, rot, i, j, k, sh = best
-        vox = sh[0]
-        occ[i:i + vox.shape[0], j:j + vox.shape[1], k:k + vox.shape[2]] |= vox
-        q = Part(f"{part.name} ({added + 2})", part.mesh, scale=part.scale)
-        q.lock_orient = getattr(part, "lock_orient", False)
-        _apply(ctx, [(q, rot, i, j, k, sh)])
-        scene.add(q)
-        added += 1
-        if progress:
-            progress(min(0.99, added / 60))
     return added
