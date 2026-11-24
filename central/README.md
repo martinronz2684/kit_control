@@ -4,7 +4,13 @@
 spricht aber übers Netz mit dem Kit Control am Pi statt direkt per USB mit dem Kit.
 Display und Central können gleichzeitig arbeiten.
 
-**Installieren (Windows):** beide Dateien aus diesem Ordner in einen Ordner legen,
+**Installieren (Windows):** [KitControl-Central-Setup.exe](https://github.com/martinronz2684/kit_control/releases/download/central-setup/KitControl-Central-Setup.exe)
+herunterladen, Central schließen, ausführen. Das Setup findet Central, sichert die Original-Bibliothek
+(`usb4java-1.2.0.jar.original`, zusätzlich im Setup-Ordner) und setzt die neue ein.
+**Deinstallieren** über *Windows-Einstellungen → Apps → Kit Control für Sintratec Central* stellt das Original wieder her.
+Nach einem Update von Central das Setup einfach erneut ausführen.
+
+Ohne Setup geht es weiterhin per Skript: beide Dateien aus diesem Ordner in einen Ordner legen,
 Central schließen, `Install-CentralWLAN.ps1` mit Rechtsklick → *Mit PowerShell ausführen*.
 
 - **WLAN** (Standard am Pi): Der Pi wird im WLAN automatisch gefunden (UDP 8767). Klappt das nicht: `-IP <IP des Pi>`.

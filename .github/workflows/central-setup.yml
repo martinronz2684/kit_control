@@ -1,0 +1,53 @@
+name: Central-Setup bauen
+# Baut die Bibliothek aus central/src und daraus KitControl-Central-Setup.exe (Inno Setup).
+# Die fertige exe hängt am Release "central-setup" (immer die neueste).
+on:
+  push:
+    branches: [main]
+    paths: ["central/**", ".github/workflows/central-setup.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  setup:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Bibliothek bauen (Java 8 wie Central)
+        shell: bash
+        run: |
+          cd central
+          rm -rf build && mkdir build
+          javac --release 8 -d build src/org/usb4java/*.java
+          jar cf usb4java-1.2.0.jar -C build .
+      - name: Inno Setup bereitstellen
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup -y --no-progress }
+      - name: Setup bauen
+        shell: pwsh
+        run: |
+          $ver = "1.0.$env:GITHUB_RUN_NUMBER"
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DVer=$ver" central\setup\KitControlCentral.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          Get-Item dist\KitControl-Central-Setup.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KitControl-Central-Setup
+          path: dist/KitControl-Central-Setup.exe
+      - name: Am Release "central-setup" ablegen
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view central-setup >/dev/null 2>&1 || \
+            gh release create central-setup --title "Setup für Sintratec Central" \
+              --notes "KitControl-Central-Setup.exe herunterladen, Central schließen, ausführen. Deinstallieren über Windows-Einstellungen > Apps stellt das Original wieder her." --latest=false
+          gh release upload central-setup dist/KitControl-Central-Setup.exe --clobber
