@@ -11,9 +11,24 @@ import math
 import numpy as np
 
 
+def _nx(a):
+    """a[i+1] zyklisch (schneller als np.roll)."""
+    return np.concatenate((a[1:], a[:1]))
+
+
+def _pv(a):
+    """a[i-1] zyklisch."""
+    return np.concatenate((a[-1:], a[:-1]))
+
+
 def area(p: np.ndarray) -> float:
     x, y = p[:, 0], p[:, 1]
-    return 0.5 * float(np.dot(x, np.roll(y, -1)) - np.dot(np.roll(x, -1), y))
+    return 0.5 * float(np.dot(x[:-1], y[1:]) - np.dot(x[1:], y[:-1]) + x[-1] * y[0] - x[0] * y[-1])
+
+
+def perimeter(p: np.ndarray) -> float:
+    e = _nx(p) - p
+    return float(np.hypot(e[:, 0], e[:, 1]).sum())
 
 
 def _inside(pt, poly: np.ndarray) -> bool:
@@ -66,11 +81,11 @@ def simplify(p: np.ndarray, min_len: float) -> np.ndarray:
 
 
 def _offset_once(p: np.ndarray, d: float, miter: float):
-    e = np.roll(p, -1, axis=0) - p                        # Kante i: p[i] -> p[i+1]
+    e = _nx(p) - p                                        # Kante i: p[i] -> p[i+1]
     ln = np.hypot(e[:, 0], e[:, 1])
     t = e / ln[:, None]
     nrm = np.stack([-t[:, 1], t[:, 0]], axis=1)           # linke Normale = Richtung zum Material
-    n_in, n_out = np.roll(nrm, 1, axis=0), nrm            # einlaufende / auslaufende Kante je Punkt
+    n_in, n_out = _pv(nrm), nrm                           # einlaufende / auslaufende Kante je Punkt
     m = n_in + n_out
     ml = np.hypot(m[:, 0], m[:, 1])
     ml[ml < 1e-12] = 1e-12
@@ -88,24 +103,38 @@ def offset_loop(p: np.ndarray, d: float, miter: float = 4.0):
         return p.copy()
     p = p.copy()
     a0 = area(p)
+    # schnelle Absage: viel zu dünn für den Versatz (2·Fläche/Umfang ~ Inkreisradius)
+    if d > 0 and a0 > 0 and 2 * a0 / max(perimeter(p), 1e-12) < d * 0.95:
+        return None
     for _ in range(len(p)):
         if len(p) < 3:
             return None
         q, t = _offset_once(p, d, miter)
-        qe = np.roll(q, -1, axis=0) - q
+        qe = _nx(q) - q
         bad = np.einsum("ij,ij->i", qe, t) <= 0           # Kante zeigt nach dem Versatz rückwärts
         if not bad.any():
             break
-        # die beiden Endpunkte der kürzesten verschwundenen Kante durch einen ersetzen
+        # verschwundene Kanten auf je einen Punkt zusammenziehen (mehrere, nicht benachbarte auf einmal)
+        n = len(p)
         idx = np.flatnonzero(bad)
-        i = idx[np.argmin(np.hypot(*(np.roll(p, -1, axis=0)[idx] - p[idx]).T))]
-        j = (i + 1) % len(p)
-        a, b = p[i - 1], p[(j + 1) % len(p)]
-        mid = _intersect(a, p[i], p[j], b)
-        if mid is None:
-            mid = (p[i] + p[j]) / 2
-        p = np.delete(p, j, axis=0)
-        p[i if j > i else i - 1] = mid
+        pn = _nx(p)
+        lens = np.hypot(*(pn[idx] - p[idx]).T)
+        used = np.zeros(n, dtype=bool)
+        drop = []
+        newpt = {}
+        for i in idx[np.argsort(lens)][: max(1, len(idx) // 2)]:
+            j = (i + 1) % n
+            if used[i] or used[j] or used[(i - 1) % n] or used[(j + 1) % n]:
+                continue
+            mid = _intersect(p[i - 1], p[i], p[j], p[(j + 1) % n])
+            if mid is None or not np.isfinite(mid).all():
+                mid = (p[i] + p[j]) / 2
+            newpt[i] = mid
+            drop.append(j)
+            used[i] = used[j] = True
+        for i, m in newpt.items():
+            p[i] = m
+        p = np.delete(p, drop, axis=0)
     else:
         return None
     a1 = area(q)
@@ -187,7 +216,8 @@ def hatch(loops: list[np.ndarray], spacing: float, angle: float, alternating: bo
     if not loops:
         return []
     cb, sb = math.cos(angle), math.sin(angle)
-    pieces = []                                  # (Feld, k, xa, xb)
+    return _hatch_fast(loops, spacing, angle, alternating, min_len, island, parity, core, core_every)
+    pieces = []                                  # (Feld, k, xa, xb) – alte Fassung, nicht mehr erreicht
     for k, row in _rows(loops, spacing, angle):
         if len(row) % 2:                         # offener Querschnitt – Central überspringt die Linie
             continue
@@ -237,6 +267,118 @@ def hatch(loops: list[np.ndarray], spacing: float, angle: float, alternating: bo
     return segs
 
 
+def _hatch_fast(loops, spacing, angle, alternating, min_len, island=0.0, parity=0, core=None, core_every=1):
+    """Schraffur vollständig mit numpy (auch für Haut/Kern und Schachbrett)."""
+    c, s = math.cos(-angle), math.sin(-angle)
+    pts = [(l[:, 0] * c - l[:, 1] * s, l[:, 0] * s + l[:, 1] * c) for l in loops]
+    x0 = np.concatenate([p[0] for p in pts]); y0 = np.concatenate([p[1] for p in pts])
+    x1 = np.concatenate([np.roll(p[0], -1) for p in pts]); y1 = np.concatenate([np.roll(p[1], -1) for p in pts])
+    m = y0 != y1
+    x0, y0, x1, y1 = x0[m], y0[m], x1[m], y1[m]
+    lo, hi = np.minimum(y0, y1), np.maximum(y0, y1)
+    k0 = np.ceil(lo / spacing).astype(np.int64)
+    k1 = np.ceil(hi / spacing).astype(np.int64) - 1
+    cnt = np.maximum(0, k1 - k0 + 1)
+    tot = int(cnt.sum())
+    if tot == 0:
+        return []
+    rep = np.repeat(np.arange(len(cnt)), cnt)
+    k = np.repeat(k0, cnt) + (np.arange(tot) - np.repeat(np.cumsum(cnt) - cnt, cnt))
+    yy = k * spacing
+    xx = x0[rep] + (yy - y0[rep]) * (x1[rep] - x0[rep]) / (y1[rep] - y0[rep])
+    order = np.lexsort((xx, -k))                 # Zeilen von oben nach unten, je Zeile x aufsteigend
+    k, xx = k[order], xx[order]
+    starts = np.flatnonzero(np.r_[True, np.diff(k) != 0])
+    lens = np.diff(np.r_[starts, len(k)])
+    good_row = lens % 2 == 0                     # offene Querschnitte überspringen (wie Central)
+    row_id = np.repeat(np.arange(len(starts)), lens)
+    keep = good_row[row_id]
+    k, xx, row_id = k[keep], xx[keep], row_id[keep]
+    if len(k) == 0:
+        return []
+    # Zeilen neu nummerieren (nur gültige), Richtung: erste Zeile rückwärts, dann Zickzack
+    _, row_n = np.unique(row_id, return_inverse=True)
+    a, b = xx[0::2], xx[1::2]
+    kr = k[0::2]
+    rn = row_n[0::2]
+    yv = kr * spacing
+    rev = (rn % 2 == 0) if alternating else np.ones(len(rn), dtype=bool)
+    # in rückwärts laufenden Zeilen die Paare in umgekehrter Reihenfolge und vertauscht
+    pos = np.arange(len(a))
+    rstart = np.r_[0, np.flatnonzero(np.diff(rn)) + 1]
+    rend = np.r_[rstart[1:], len(a)]
+    seq = pos.copy()
+    for s0, e0, r in zip(rstart, rend, rev[rstart]):
+        if r:
+            seq[s0:e0] = pos[s0:e0][::-1]
+    a, b, yv, rev = a[seq], b[seq], yv[seq], rev[seq]
+    p_ = np.where(rev, b, a)
+    q_ = np.where(rev, a, b)
+    kk = kr[seq]
+    cb, sb = math.cos(angle), math.sin(angle)
+    if core is not None and core_every > 1:
+        p_, q_, yv, kk = _apply_core(p_, q_, yv, kk, core, core_every, cb, sb)
+    if island > 0:
+        p_, q_, yv, kk = _apply_islands(p_, q_, yv, kk, island, parity)
+    ok = np.abs(q_ - p_) >= min_len
+    p_, q_, yv = p_[ok], q_[ok], yv[ok]
+    out = np.stack([p_ * cb - yv * sb, p_ * sb + yv * cb, q_ * cb - yv * sb, q_ * sb + yv * cb], axis=1)
+    return out
+
+
+def _apply_core(p_, q_, yv, kk, core, every, cb, sb, step=0.25, min_run=1.0):
+    """Im Kern nur jede every-te Linie; auf den übrigen nur die Hautstücke behalten (vektorisiert)."""
+    full = (kk % every) == 0
+    idx = np.flatnonzero(~full)
+    if len(idx) == 0:
+        return p_, q_, yv, kk
+    P, Q, Y = p_[idx], q_[idx], yv[idx]
+    L = np.abs(Q - P)
+    ns = np.maximum(2, np.ceil(L / step).astype(int) + 1)
+    seg = np.repeat(np.arange(len(idx)), ns)
+    first = np.repeat(np.cumsum(ns) - ns, ns)
+    t = (np.arange(ns.sum()) - first) / np.repeat(ns - 1, ns)
+    xs = P[seg] + (Q[seg] - P[seg]) * t
+    ys = Y[seg]
+    skin = ~core(np.stack([xs * cb - ys * sb, xs * sb + ys * cb], axis=1))
+    newseg = np.r_[True, seg[1:] != seg[:-1]]
+    start = skin & (newseg | ~np.r_[False, skin[:-1]])
+    endseg = np.r_[seg[1:] != seg[:-1], True]
+    end = skin & (endseg | ~np.r_[skin[1:], False])
+    si, ei = np.flatnonzero(start), np.flatnonzero(end)
+    rp, rq, rseg = xs[si], xs[ei], seg[si]
+    keep = np.abs(rq - rp) >= min_run
+    rp, rq, rseg = rp[keep], rq[keep], rseg[keep]
+    # Ergebnis in der ursprünglichen Reihenfolge zusammensetzen
+    orig_pos = np.r_[np.flatnonzero(full), idx[rseg]]
+    sub = np.r_[np.zeros(full.sum()), np.arange(len(rseg))]
+    P2 = np.r_[p_[full], rp]; Q2 = np.r_[q_[full], rq]
+    Y2 = np.r_[yv[full], yv[idx[rseg]]]; K2 = np.r_[kk[full], kk[idx[rseg]]]
+    o = np.lexsort((sub, orig_pos))
+    return P2[o], Q2[o], Y2[o], K2[o]
+
+
+def _apply_islands(p_, q_, yv, kk, island, parity):
+    """Linien an den Feldgrenzen teilen, nur Felder mit passender Parität behalten, nach Feldern ordnen."""
+    lo, hi = np.minimum(p_, q_), np.maximum(p_, q_)
+    iy = np.floor(yv / island).astype(np.int64)
+    c0 = np.floor(lo / island).astype(np.int64)
+    c1 = np.floor(hi / island).astype(np.int64)
+    n = c1 - c0 + 1
+    rep = np.repeat(np.arange(len(p_)), n)
+    off = np.arange(n.sum()) - np.repeat(np.cumsum(n) - n, n)
+    fwd = q_ >= p_
+    # Felder in Laufrichtung durchnummerieren
+    ix = np.where(fwd[rep], c0[rep] + off, c1[rep] - off)
+    a = np.maximum(lo[rep], ix * island)
+    b = np.minimum(hi[rep], (ix + 1) * island)
+    ok = (b > a) & (((ix + iy[rep]) % 2) == parity)
+    rep, ix, a, b = rep[ok], ix[ok], a[ok], b[ok]
+    P = np.where(fwd[rep], a, b); Q = np.where(fwd[rep], b, a)
+    order = np.lexsort((np.arange(len(rep)), ix, -iy[rep]))
+    return P[order], Q[order], yv[rep][order], kk[rep][order]
+
+
 def _skin_only(spans, y, cb, sb, core, step: float = 0.25, min_run: float = 1.0):
     """Teile einer Linie, die NICHT im Kern liegen (Haut), in Schritten von step mm bestimmt."""
     out = []
@@ -260,9 +402,9 @@ def _skin_only(spans, y, cb, sb, core, step: float = 0.25, min_run: float = 1.0)
 
 def hatch_islands(loops, spacing, angle, island, **kw):
     """Schachbrett: Felder abwechselnd mit angle und angle + 90° schraffieren."""
-    a = hatch(loops, spacing, angle, island=island, parity=0, **kw)
-    b = hatch(loops, spacing, angle + math.pi / 2, island=island, parity=0, **kw)
-    return a + b
+    a = np.asarray(hatch(loops, spacing, angle, island=island, parity=0, **kw)).reshape(-1, 4)
+    b = np.asarray(hatch(loops, spacing, angle + math.pi / 2, island=island, parity=0, **kw)).reshape(-1, 4)
+    return np.concatenate([a, b])
 
 
 class Raster:
@@ -272,7 +414,7 @@ class Raster:
         self.res, self.half = res, half
         n = int(2 * half / res)
         self.mask = np.zeros((n, n), dtype=bool)
-        for k, row in _rows(loops, res, 0.0):
+        for k, row in (_rows(loops, res, 0.0) if loops else []):
             iy = int(round(k + half / res))
             if not 0 <= iy < n or len(row) % 2:
                 continue

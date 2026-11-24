@@ -17,6 +17,34 @@ IDEAL_Z = 110.0
 GRID = 1.0           # Raster für Nesting und Kollisionsprüfung (mm)
 
 
+_MESHCACHE: dict = {}      # id(Netz) -> (Netz, {Schlüssel: Wert}) – geteilt von Kopien desselben Teils
+
+
+def mesh_cache(mesh: np.ndarray) -> dict:
+    ent = _MESHCACHE.get(id(mesh))
+    if ent is None or ent[0] is not mesh:
+        if len(_MESHCACHE) > 200:
+            _MESHCACHE.clear()
+        ent = (mesh, {})
+        _MESHCACHE[id(mesh)] = ent
+    return ent[1]
+
+
+def mesh_bounds(mesh: np.ndarray):
+    c = mesh_cache(mesh)
+    if "bounds" not in c:
+        pts = mesh.reshape(-1, 3)
+        c["bounds"] = (pts.min(axis=0), pts.max(axis=0))
+    return c["bounds"]
+
+
+def mesh_verts(mesh: np.ndarray):
+    c = mesh_cache(mesh)
+    if "verts" not in c:
+        c["verts"] = np.unique(mesh.reshape(-1, 3), axis=0)
+    return c["verts"]
+
+
 @dataclass(eq=False)
 class Part:
     name: str
@@ -46,19 +74,70 @@ class Part:
         t = t @ _rotation(self.rot_x, self.rot_y, self.rot_z).T
         lo, hi = t.reshape(-1, 3).min(axis=0), t.reshape(-1, 3).max(axis=0)
         t = t - np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
-        self._cache = (key, t)
+        if len(t) <= 150_000:                    # große Netze nicht je Teil im Speicher halten
+            self._cache = (key, t)
         return t
 
     def placed(self) -> np.ndarray:
         return self._oriented() + np.array([self.x, self.y, self.z_lift])
 
+    def transform(self, pts: np.ndarray, rot=None) -> np.ndarray:
+        """Gleiche Drehung/Skalierung/Zentrierung wie _oriented() auf andere Punkte anwenden
+        (z. B. auf ein vereinfachtes Netz). rot = (rx, ry, rz) statt der aktuellen Drehung."""
+        rx, ry, rz = rot if rot is not None else (self.rot_x, self.rot_y, self.rot_z)
+        R = _rotation(rx, ry, rz)
+        sc = np.asarray(self.scale, dtype=float)
+        key = ("bb", rx, ry, rz, tuple(self.scale))
+        cache = self.__dict__.setdefault("_bbcache", {})
+        if key not in cache:
+            if all(abs(a % 90) < 1e-9 for a in (rx, ry, rz)):
+                # 90°-Drehungen: Hüllquader = gedrehte Ecken des Original-Hüllquaders (exakt, sofort)
+                lo0, hi0 = mesh_bounds(self.mesh)
+                v = np.array([[x, y, z] for x in (lo0[0], hi0[0]) for y in (lo0[1], hi0[1]) for z in (lo0[2], hi0[2])])
+            else:
+                v = mesh_verts(self.mesh)
+            r = (v * sc) @ R.T
+            lo, hi = r.min(axis=0), r.max(axis=0)
+            cache[key] = np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
+        return (pts * sc) @ R.T - cache[key]
+
+    def simple(self, max_tris: int = 6000) -> np.ndarray:
+        """Vereinfachtes Originalnetz (einmal berechnet) – für Packen und Anzeige."""
+        cache = mesh_cache(self.mesh)
+        if ("simple", max_tris) not in cache:
+            cache[("simple", max_tris)] = simplify_mesh(self.mesh, max_tris)
+        return cache[("simple", max_tris)]
+
+    def obox(self):
+        """Hüllquader im gedrehten, zentrierten System (ohne das volle Netz zu drehen)."""
+        key = ("ob", self.rot_x, self.rot_y, self.rot_z, tuple(self.scale))
+        cache = self.__dict__.setdefault("_bbcache", {})
+        if key not in cache:
+            R = _rotation(self.rot_x, self.rot_y, self.rot_z)
+            sc = np.asarray(self.scale, dtype=float)
+            if all(abs(a % 90) < 1e-9 for a in (self.rot_x, self.rot_y, self.rot_z)):
+                lo0, hi0 = mesh_bounds(self.mesh)
+                v = np.array([[x, y, z] for x in (lo0[0], hi0[0]) for y in (lo0[1], hi0[1]) for z in (lo0[2], hi0[2])])
+            else:
+                v = mesh_verts(self.mesh)
+            r = (v * sc) @ R.T
+            lo, hi = r.min(axis=0), r.max(axis=0)
+            off = np.array([(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2, lo[2]])
+            cache[key] = (lo - off, hi - off)
+        return cache[key]
+
     def size(self):
-        t = self._oriented().reshape(-1, 3)
-        return tuple(t.max(axis=0) - t.min(axis=0))
+        lo, hi = self.obox()
+        return tuple(float(v) for v in hi - lo)
 
     def bbox(self):
-        t = self.placed().reshape(-1, 3)
-        return tuple(t.min(axis=0)), tuple(t.max(axis=0))
+        lo, hi = self.obox()
+        p = np.array([self.x, self.y, self.z_lift])
+        return tuple(float(v) for v in lo + p), tuple(float(v) for v in hi + p)
+
+    def light(self, max_tris: int = 6000) -> np.ndarray:
+        """Vereinfachtes Netz in aktueller Lage (für Prüfungen, Packen, Anzeige)."""
+        return self.transform(self.simple(max_tris)) + np.array([self.x, self.y, self.z_lift])
 
     def lay_flat(self) -> None:
         """Größte ebene Fläche nach unten drehen (wie „auf Fläche legen“)."""
@@ -77,6 +156,30 @@ class Part:
         self._cache = None
 
 
+def simplify_mesh(tris: np.ndarray, max_tris: int) -> np.ndarray:
+    """Nahe Eckpunkte zusammenlegen (Mittelwert), bis höchstens max_tris Dreiecke übrig sind."""
+    if len(tris) <= max_tris:
+        return tris
+    pts = tris.reshape(-1, 3)
+    size = float(np.max(pts.max(axis=0) - pts.min(axis=0))) or 1.0
+    cell = size / (np.sqrt(max_tris) * 3.0)
+    for _ in range(24):
+        q = np.floor(pts / cell).astype(np.int64)
+        key = (q[:, 0] * 73856093) ^ (q[:, 1] * 19349663) ^ (q[:, 2] * 83492791)
+        _, inv = np.unique(key, return_inverse=True)
+        inv = inv.ravel()
+        f = inv.reshape(-1, 3)
+        keep = (f[:, 0] != f[:, 1]) & (f[:, 1] != f[:, 2]) & (f[:, 0] != f[:, 2])
+        if keep.sum() <= max_tris:
+            cnt = np.bincount(inv)
+            mean = np.zeros((len(cnt), 3))
+            np.add.at(mean, inv, pts)
+            mean /= cnt[:, None]
+            return mean[f[keep]]
+        cell *= 1.3
+    return tris[:: len(tris) // max_tris + 1]
+
+
 def _rotation(rx: float, ry: float, rz: float) -> np.ndarray:
     a, b, c = (math.radians(v) for v in (rx, ry, rz))
     Rx = np.array([[1, 0, 0], [0, math.cos(a), -math.sin(a)], [0, math.sin(a), math.cos(a)]])
@@ -93,6 +196,24 @@ class Scene:
     def add(self, part: Part) -> Part:
         self.parts.append(part)
         return part
+
+    def indexed(self):
+        """Alle Bauteile als ein indiziertes Netz (Eckpunkte, Dreiecke) – ohne Dreiecksuppe im Speicher.
+        Kopien desselben Teils teilen sich die Indizierung des Originalnetzes."""
+        if not self.parts:
+            raise ValueError("Keine Bauteile im Bauraum")
+        from kitslice.stl import index as index_mesh
+        vs, fs, off = [], [], 0
+        for p in self.parts:
+            c = mesh_cache(p.mesh)
+            if "index" not in c:
+                v0, f0 = index_mesh(p.mesh)
+                c["index"] = (v0, f0.astype(np.int32))
+            v0, f0 = c["index"]
+            vs.append(p.transform(v0) + np.array([p.x, p.y, p.z_lift]))
+            fs.append(f0 + off)
+            off += len(v0)
+        return np.concatenate(vs), np.concatenate(fs).astype(np.int64 if off > 2**31 - 1 else np.int32)
 
     def merged(self) -> np.ndarray:
         if not self.parts:
@@ -135,7 +256,13 @@ class Scene:
                     continue
                 for k in (i, j):
                     if k not in cols:
-                        cols[k] = _columns(self.parts[k].placed(), GRID / 2)
+                        q = self.parts[k]
+                        key = ("cols", q.rot_x, q.rot_y, q.rot_z, tuple(q.scale), q.x, q.y, q.z_lift)
+                        cc = q.__dict__.setdefault("_colcache", {})
+                        if key not in cc:
+                            cc.clear()
+                            cc[key] = _columns(q.light(2500), GRID)
+                        cols[k] = cc[key]
                 ca, cb = cols[i], cols[j]
                 common = set(ca) & set(cb)
                 if any(max(ca[c][0], cb[c][0]) < min(ca[c][1], cb[c][1]) - tol for c in common):
@@ -192,7 +319,7 @@ class Scene:
         for q in self.parts:                     # liegen bleibende Teile in die Höhenkarte eintragen
             if q in movers:
                 continue
-            prof = _profile(q.placed(), res)
+            prof = _profile(q.light(), res)
             if prof is None:
                 continue
             _, top, mx, my = prof
@@ -210,7 +337,7 @@ class Scene:
             for rz in rotations:
                 p.rot_z = (base_rot + rz) % 360
                 p._cache = None
-                prof = _profile(p._oriented(), res)
+                prof = _profile(p.transform(p.simple(6000)), res)
                 if prof is None:
                     continue
                 bot, top, mx, my = prof

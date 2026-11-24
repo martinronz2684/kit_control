@@ -42,20 +42,73 @@ def _records(data: bytes, start: int = HEADER, end: int | None = None):
         i += 2 + n
 
 
+_VREC = None
+
+
+def _vrec():
+    global _VREC
+    if _VREC is None:
+        import numpy as np
+        _VREC = np.dtype([("c", "<u2"), ("x", "<i4"), ("y", "<i4")])
+    return _VREC
+
+
+def _walk(data: bytes, start: int, end: int):
+    """Schnelles Durchlaufen: liefert ("rec", pos, code, body) für Nicht-Vektor-Befehle und
+    ("vec", pos, Array) für Läufe von Go/Jump-Befehlen (mit numpy, ohne Python-Schleife je Vektor)."""
+    try:
+        import numpy as np
+    except ImportError:                      # ohne numpy: langsamer, aber gleichwertig
+        for pos, c, body in _records(data, start, end):
+            yield ("rec", pos, c, body)
+        return
+    dt = _vrec()
+    i = start
+    while i + 2 <= end:
+        c = data[i] | data[i + 1] << 8
+        if c in (GO, JUMP):
+            m = min(4096, (end - i) // 10)
+            if m <= 0:
+                raise JobFormatError("Datei endet mitten in einem Befehl")
+            arr = np.frombuffer(data, dtype=dt, count=m, offset=i)
+            bad = np.flatnonzero((arr["c"] != GO) & (arr["c"] != JUMP))
+            k = int(bad[0]) if len(bad) else m
+            yield ("vec", i, arr[:k])
+            i += 10 * k
+            continue
+        n = _SIZE.get(c)
+        if n is None:
+            if not any(data[i:end]):
+                return
+            raise JobFormatError(f"unbekannter Befehl {c} bei Byte {i}")
+        if i + 2 + n > end:
+            raise JobFormatError("Datei endet mitten in einem Befehl")
+        yield ("rec", i, c, data[i + 2:i + 2 + n])
+        i += 2 + n
+
+
 def index(data: bytes) -> dict:
     """Schichten, Bauhöhe und Ausdehnung – für die Jobliste. Offsets erlauben schnellen Zugriff je Schicht."""
     if len(data) <= HEADER:
         raise JobFormatError("Datei zu kurz")
     offsets, zs = [], []
-    xmin = ymin = 1e9
-    xmax = ymax = -1e9
+    xmin = ymin = 1e18
+    xmax = ymax = -1e18
     vectors = 0
-    for pos, c, body in _records(data):
+    for item in _walk(data, HEADER, len(data)):
+        if item[0] == "vec":
+            arr = item[2]
+            if len(arr):
+                vectors += int((arr["c"] == GO).sum())
+                xmin, xmax = min(xmin, int(arr["x"].min())), max(xmax, int(arr["x"].max()))
+                ymin, ymax = min(ymin, int(arr["y"].min())), max(ymax, int(arr["y"].max()))
+            continue
+        _, pos, c, body = item
         if c == MAKELAYER:
             z, _n = struct.unpack("<ii", body)
             offsets.append(pos)
             zs.append(z)
-        elif c in (GO, JUMP):
+        elif c in (GO, JUMP):                 # nur ohne numpy
             x, y = struct.unpack("<ii", body)
             if c == GO:
                 vectors += 1
@@ -86,7 +139,21 @@ def layer(data: bytes, idx: dict, n: int, max_segments: int = 6000) -> dict:
     contour, infill = [], []
     fam = INFILL
     px = py = 0
-    for _pos, c, body in _records(data, start, end):
+    for item in _walk(data, start, end):
+        if item[0] == "vec":
+            arr = item[2]
+            if not len(arr):
+                continue
+            xs = [px] + arr["x"].tolist()
+            ys = [py] + arr["y"].tolist()
+            cs = arr["c"].tolist()
+            target = contour if fam == CONTOUR else infill
+            for k, c in enumerate(cs):
+                if c == GO:
+                    target.append((xs[k], ys[k], xs[k + 1], ys[k + 1]))
+            px, py = xs[-1], ys[-1]
+            continue
+        _, _pos, c, body = item
         if c in (INFILL, CONTOUR):
             fam = c
         elif c in (GO, JUMP):
@@ -102,44 +169,66 @@ def layer(data: bytes, idx: dict, n: int, max_segments: int = 6000) -> dict:
 
 
 # -- Erzeugen ---------------------------------------------------------------------
-def build_central(layers, layer_mm: float, max_empty: int = 20, contour_first=True) -> bytes:
-    """Wie PrintJobKit.writeOut. layers: je Schicht (Konturen, Schraffur); Konturen sind geschlossene
-    Polygone [(x, y), ...] in mm, Schraffur Strecken (x0, y0, x1, y1). Konturen vor Füllung."""
-    um = lambda v: int(round(v * 1000))
-    out = bytearray(HEADER)
+def build_central(layers, layer_mm: float, max_empty: int = 20, contour_first=True, info: dict | None = None) -> bytes:
+    """Wie PrintJobKit.writeOut. layers: je Schicht (Konturen, Schraffur[, Kontur zuerst]); Konturen sind
+    geschlossene Polygone [(x, y), ...] in mm, Schraffur Strecken (x0, y0, x1, y1).
+    info (dict): wird mit dem Index gefüllt (offsets, z_um, vectors, bbox) – spart das erneute Einlesen."""
+    import numpy as np
+    dt = _vrec()
+    parts = [bytes(HEADER)]
+    size = HEADER
+    offsets, zs = [], []
+    vectors = 0
+    lo = np.array([np.inf, np.inf]); hi = -lo
     written = empty = 0
+    cont_code = struct.pack("<H", CONTOUR)
+    inf_code = struct.pack("<H", INFILL)
+
+    def recs(codes, xy):
+        a = np.empty(len(codes), dtype=dt)
+        a["c"] = codes
+        a["x"] = np.rint(xy[:, 0] * 1000).astype(np.int32)
+        a["y"] = np.rint(xy[:, 1] * 1000).astype(np.int32)
+        return a.tobytes()
+
     for item in layers:
         contours, hatches = item[0], item[1]
         cfirst = item[2] if len(item) > 2 else contour_first
-        if not contours and not hatches:
+        if not len(contours) and not len(hatches):
             empty += 1
             if empty > max_empty:
                 continue
         else:
             empty = 0
-        out += struct.pack("<Hii", MAKELAYER, um((written + 1) * layer_mm), written)
+        z = int(round((written + 1) * layer_mm * 1000))
+        chunk = [struct.pack("<Hii", MAKELAYER, z, written)]
+        offsets.append(size)
+        zs.append(z)
         written += 1
-
-        def put_contours():
-            nonlocal out
-            if contours:
-                out += struct.pack("<H", CONTOUR)
-                for poly in contours:
-                    out += struct.pack("<Hii", JUMP, um(poly[0][0]), um(poly[0][1]))
-                    for x, y in list(poly[1:]) + [poly[0]]:
-                        out += struct.pack("<Hii", GO, um(x), um(y))
-
-        def put_hatches():
-            nonlocal out
-            if hatches:
-                out += struct.pack("<H", INFILL)
-                for x0, y0, x1, y1 in hatches:
-                    out += struct.pack("<HiiHii", JUMP, um(x0), um(y0), GO, um(x1), um(y1))
-        if cfirst:
-            put_contours(); put_hatches()
-        else:
-            put_hatches(); put_contours()
-    return bytes(out)
+        cb = hb = b""
+        if len(contours):
+            polys = [np.asarray(p, dtype=float) for p in contours]
+            xy = np.concatenate([np.vstack([p, p[:1]]) for p in polys])
+            codes = np.concatenate([np.r_[JUMP, np.full(len(p), GO)] for p in polys]).astype(np.uint16)
+            cb = cont_code + recs(codes, xy)
+            vectors += int(sum(len(p) for p in polys))
+            lo = np.minimum(lo, xy.min(axis=0)); hi = np.maximum(hi, xy.max(axis=0))
+        if len(hatches):
+            h = np.asarray(hatches, dtype=float).reshape(-1, 4)
+            xy = h.reshape(-1, 2)
+            codes = np.tile(np.array([JUMP, GO], dtype=np.uint16), len(h))
+            hb = inf_code + recs(codes, xy)
+            vectors += len(h)
+            lo = np.minimum(lo, xy.min(axis=0)); hi = np.maximum(hi, xy.max(axis=0))
+        chunk += [cb, hb] if cfirst else [hb, cb]
+        blob = b"".join(chunk)
+        parts.append(blob)
+        size += len(blob)
+    if info is not None:
+        info.update(offsets=offsets, z_um=zs, vectors=vectors, layers=len(offsets),
+                    layer_mm=round(layer_mm, 3), height_mm=round(zs[-1] / 1000, 2) if zs else 0.0,
+                    bbox=[round(float(v), 2) for v in (lo[0], lo[1], hi[0], hi[1])] if vectors else [0, 0, 0, 0])
+    return b"".join(parts)
 
 
 # -- Demo-Job und Tests -------------------------------------------------------------

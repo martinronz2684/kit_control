@@ -23,32 +23,42 @@ class Layer:
 
     @property
     def empty(self) -> bool:
-        return not self.contours and not self.hatches
+        return not len(self.contours) and not len(self.hatches)
 
 
-def cross_sections(tris: np.ndarray, layer_mm: float, progress=None, cancel=None):
+def layer_count(tris: np.ndarray, layer_mm: float) -> int:
+    return max(1, int(math.ceil(float(tris[:, :, 2].max()) / layer_mm - 1e-9)))
+
+
+def cross_sections(tris, layer_mm: float, progress=None, cancel=None, rng=None, mesh=None):
     """Schnitte in der Mitte jeder Schicht: z = (i + 0.5) * Schichtdicke, i = 0 .. n-1.
-    Liefert eine Liste von Querschnitten (Liste von Polygonen, noch nicht ausgerichtet)."""
-    verts, faces = index_mesh(tris)
-    zmin = verts[:, 2].min()
-    if zmin < -1e-6:
-        raise ValueError("Bauteil liegt unter der Bauplatte")
+    Liefert eine Liste von Querschnitten (Liste von Polygonen, noch nicht ausgerichtet).
+    rng = (von, bis): nur diese Schichten (für das Rechnen auf mehreren Kernen).
+    mesh = (Eckpunkte, Dreiecke): bereits indiziertes Netz (tris wird dann nicht gebraucht)."""
+    verts, faces = mesh if mesh is not None else index_mesh(tris)
     vz = verts[:, 2]
+    if vz.min() < -1e-6:
+        raise ValueError("Bauteil liegt unter der Bauplatte")
+    n = max(1, int(math.ceil(vz.max() / layer_mm - 1e-9)))
+    lo_i, hi_i = rng if rng else (0, n)
+    hi_i = min(hi_i, n)
     fz = vz[faces]
     fmin, fmax = fz.min(axis=1), fz.max(axis=1)
-    n = max(1, int(math.ceil(vz.max() / layer_mm - 1e-9)))
-    order = np.argsort(fmin)
-    fmin_sorted = fmin[order]
     out = []
-    for i in range(n):
-        if cancel and cancel():
-            raise SliceCancelled()
-        z = (i + 0.5) * layer_mm
-        cand = order[: np.searchsorted(fmin_sorted, z, side="right")]
-        act = cand[fmax[cand] > z]
-        out.append(_section(verts, faces[act], z) if len(act) else [])
-        if progress and (i % 10 == 0 or i == n - 1):
-            progress(0.6 * (i + 1) / n)
+    BLOCK = 24
+    for b0 in range(lo_i, hi_i, BLOCK):
+        b1 = min(hi_i, b0 + BLOCK)
+        zlo, zhi = (b0 + 0.5) * layer_mm, (b1 - 0.5) * layer_mm
+        sub = np.flatnonzero((fmin <= zhi) & (fmax > zlo))      # nur Dreiecke, die diesen Block schneiden
+        smin, smax = fmin[sub], fmax[sub]
+        for i in range(b0, b1):
+            if cancel and cancel():
+                raise SliceCancelled()
+            z = (i + 0.5) * layer_mm
+            act = sub[(smin <= z) & (smax > z)]
+            out.append(_section(verts, faces[act], z) if len(act) else [])
+            if progress and (i % 10 == 0 or i == n - 1):
+                progress(0.6 * (i + 1 - lo_i) / max(1, hi_i - lo_i))
     return out
 
 
@@ -161,9 +171,12 @@ def _nearest_order(items, start, key_start, key_end):
     return out
 
 
-def build_layers(sections, s: SliceSettings, progress=None, cancel=None) -> list[Layer]:
+def build_layers(sections, s: SliceSettings, progress=None, cancel=None, base: int = 0,
+                 n_total: int | None = None, only=None) -> list[Layer]:
+    """sections[j] gehört zur Schicht base + j. only = (von, bis) relativ zu sections: nur diese ausgeben."""
     layers = []
     n = len(sections)
+    n_total = n_total if n_total is not None else base + n
     angles = [math.radians(a) for a in s.hatch_angles_deg] or [0.0]
     prepared = {}            # Schicht -> ausgerichtete Polygone
     rasters = {}             # Schicht -> Raster des Füllbereichs (nur für Haut/Kern)
@@ -180,13 +193,14 @@ def build_layers(sections, s: SliceSettings, progress=None, cancel=None) -> list
             rasters[i] = G.Raster(G.offset(loops_of(i), s.hatch_offset_mm)) if 0 <= i < n and loops_of(i) else None
         return rasters[i]
 
-    for i in range(n):
+    o0, o1 = only if only else (0, n)
+    for i in range(o0, o1):
         if cancel and cancel():
             raise SliceCancelled()
         for old in [k for k in prepared if k < i - s.skin_layers - 1]:
             prepared.pop(old, None)
             rasters.pop(old, None)
-        z = (i + 0.5) * s.layer_mm
+        z = (base + i + 0.5) * s.layer_mm
         L = Layer(z)
         loops = loops_of(i)
         if loops:
@@ -198,12 +212,14 @@ def build_layers(sections, s: SliceSettings, progress=None, cancel=None) -> list
                 cur = G.offset(cur, s.perimeter_offset_mm, keep_thin=(pi == 0 and s.keep_thin))
                 contours += cur
             infill = G.offset(loops, s.hatch_offset_mm)  # Füllversatz vom Originalrand
-            ang = _angle(s, i, angles)
+            ang = _angle(s, base + i, angles)
             core = None
             if s.skin_layers > 0 and s.core_every > 1:
                 rs = [raster_of(j) for j in range(i - s.skin_layers, i + s.skin_layers + 1)]
                 if all(r is not None for r in rs):
-                    core = lambda pts, rs=rs: np.logical_and.reduce([r.contains(pts) for r in rs])
+                    comb = G.Raster([], res=rs[0].res, half=rs[0].half)
+                    comb.mask = np.logical_and.reduce([r.mask for r in rs])
+                    core = comb.contains
             kw = dict(alternating=s.alternating, min_len=s.min_vector_mm, core=core, core_every=s.core_every)
             regions = G.groups(infill) if s.optimize_path else [infill]
             hatch_parts = []
@@ -212,23 +228,106 @@ def build_layers(sections, s: SliceSettings, progress=None, cancel=None) -> list
                     h = G.hatch_islands(reg, s.hatch_spacing_mm, ang, s.island_mm, **kw)
                 else:
                     h = G.hatch(reg, s.hatch_spacing_mm, ang, **kw)
-                if h:
-                    hatch_parts.append(h)
+                if len(h):
+                    hatch_parts.append(np.asarray(h, dtype=float).reshape(-1, 4))
             if s.optimize_path:
                 contours = _nearest_order(contours, (0.0, 0.0), lambda c: c[0], lambda c: c[0])
                 last = contours[-1][0] if contours and s.contour_first else (0.0, 0.0)
                 hatch_parts = _nearest_order(hatch_parts, last, lambda h: h[0][:2], lambda h: h[-1][2:])
             L.contours = contours
-            L.hatches = [seg for h in hatch_parts for seg in h]
+            L.hatches = np.concatenate(hatch_parts) if hatch_parts else np.zeros((0, 4))
             L.contour_first = s.contour_first
         layers.append(L)
-        if progress and (i % 10 == 0 or i == n - 1):
-            progress(0.6 + 0.35 * (i + 1) / n)
+        if progress and (i % 10 == 0 or i == o1 - 1):
+            progress(0.6 + 0.35 * (i + 1 - o0) / max(1, o1 - o0))
     return layers
 
 
-def slice_mesh(tris: np.ndarray, settings: SliceSettings, progress=None, cancel=None) -> list[Layer]:
+_W = {}
+
+
+def _share(arr):
+    from multiprocessing import shared_memory
+    shm = shared_memory.SharedMemory(create=True, size=max(1, arr.nbytes))
+    np.ndarray(arr.shape, dtype=arr.dtype, buffer=shm.buf)[...] = arr
+    return shm, (shm.name, arr.shape, arr.dtype.str)
+
+
+def _attach(desc):
+    from multiprocessing import shared_memory
+    name, shape, dt = desc
+    shm = shared_memory.SharedMemory(name=name)
+    return shm, np.ndarray(shape, dtype=np.dtype(dt), buffer=shm.buf)
+
+
+def _winit(vdesc, fdesc, settings, n):
+    sv, verts = _attach(vdesc)
+    sf, faces = _attach(fdesc)
+    _W.update(shm=(sv, sf), mesh=(verts, faces), s=settings, n=n)
+
+
+def _wrun(a, b):
+    s = _W["s"]
+    n = _W["n"]
+    lo, hi = max(0, a - s.skin_layers), min(n, b + s.skin_layers)
+    secs = cross_sections(None, s.layer_mm, rng=(lo, hi), mesh=_W["mesh"])
+    layers = build_layers(secs, s, base=lo, n_total=n, only=(a - lo, b - lo))
+    return a, [([np.asarray(c) for c in L.contours], np.asarray(L.hatches), L.contour_first, L.z) for L in layers]
+
+
+def workers() -> int:
+    import os
+    return max(1, min(16, (os.cpu_count() or 1) - 1))
+
+
+def slice_mesh(tris, settings: SliceSettings, progress=None, cancel=None, parallel=None, mesh=None) -> list[Layer]:
+    """tris: Dreiecksuppe (n, 3, 3) oder None mit mesh = (Eckpunkte, Dreiecke)."""
+    if mesh is None:
+        mesh = index_mesh(tris)
+    verts, faces = mesh
     if any(settings.shrink_pct):                 # Schwundausgleich: um die Plattenmitte bzw. ab z = 0 skalieren
-        tris = tris * (1.0 + np.asarray(settings.shrink_pct) / 100.0)
-    secs = cross_sections(tris, settings.layer_mm, progress, cancel)
+        verts = verts * (1.0 + np.asarray(settings.shrink_pct) / 100.0)
+    n = max(1, int(math.ceil(float(verts[:, 2].max()) / settings.layer_mm - 1e-9)))
+    nw = workers() if parallel is None else parallel
+    if nw > 1 and n >= 120 and len(faces) * n > 2_000_000:
+        try:
+            return _slice_parallel(verts, faces, settings, n, nw, progress, cancel)
+        except SliceCancelled:
+            raise
+        except Exception:                        # z. B. Prozesse nicht startbar – dann eben auf einem Kern
+            pass
+    secs = cross_sections(None, settings.layer_mm, progress, cancel, mesh=(verts, faces))
     return build_layers(secs, settings, progress, cancel)
+
+
+def _slice_parallel(verts, faces, settings, n, nw, progress, cancel):
+    from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+    chunk = max(10, n // (nw * 4))
+    jobs = [(a, min(n, a + chunk)) for a in range(0, n, chunk)]
+    out = [None] * n
+    done_layers = 0
+    sv, vdesc = _share(np.ascontiguousarray(verts))
+    sf, fdesc = _share(np.ascontiguousarray(faces))
+    try:
+        with ProcessPoolExecutor(max_workers=nw, initializer=_winit, initargs=(vdesc, fdesc, settings, n)) as ex:
+            pending = {ex.submit(_wrun, a, b) for a, b in jobs}
+            while pending:
+                if cancel and cancel():
+                    for f in pending:
+                        f.cancel()
+                    raise SliceCancelled()
+                fin, pending = wait(pending, timeout=0.3, return_when=FIRST_COMPLETED)
+                for f in fin:
+                    a, res = f.result()
+                    for k, (cont, hat, cf, z) in enumerate(res):
+                        L = Layer(z, list(cont), hat)
+                        L.contour_first = cf
+                        out[a + k] = L
+                        done_layers += 1
+                if progress:
+                    progress(0.95 * done_layers / n)
+    finally:
+        for shm in (sv, sf):
+            shm.close()
+            shm.unlink()
+    return out

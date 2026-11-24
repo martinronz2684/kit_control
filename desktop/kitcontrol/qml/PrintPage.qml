@@ -74,7 +74,7 @@ Item {
                     Body {
                         color: win.cMut; font.pixelSize: 12
                         text: backend.sliceState === "done"
-                              ? (win.meta.layers + " Schichten · " + win.meta.height_mm.toFixed(1) + " mm · " + backend.profile.name)
+                              ? (win.meta.layers + " Schichten · " + win.meta.height_mm.toFixed(1) + " mm · ca. " + win.fmtTime(backend.estimate.seconds) + " · " + backend.profile.name)
                               : "Noch kein geslicter Job – unter „Vorschau“ slicen."
                     }
                     KButton { text: "Nur übertragen"; Layout.fillWidth: true; enabled: backend.connected && backend.sliceState === "done"; onClicked: backend.send(false) }

@@ -271,7 +271,7 @@ class AppCore:
             max_tris = int(max(1500, min(16000, 40000 / max(1, len(self.scene.parts)))))
         key = ("mesh", id(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale), max_tris)
         if key not in self._outline_cache:
-            self._outline_cache[key] = decimate(p._oriented(), max_tris)
+            self._outline_cache[key] = np.round(p.transform(p.simple(max_tris)), 3).ravel().tolist()
         return self._outline_cache[key]
 
     def parts_info(self) -> list[dict]:
@@ -280,7 +280,7 @@ class AppCore:
             sx, sy, sz = p.size()
             key = (id(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale))
             if key not in self._outline_cache:
-                t = p._oriented().reshape(-1, 3)
+                t = p.transform(p.simple(3000)).reshape(-1, 3)
                 if len(t) > 60000:
                     t = t[:: len(t) // 60000 + 1]
                 self._outline_cache[key] = hull(t[:, :2])
@@ -363,6 +363,45 @@ class AppCore:
         self.job = (data, meta, layers)
         return meta
 
+    def laser_speed(self) -> float:
+        """Für die Zeitschätzung: Profilwert, sonst zuletzt am Kit gesehene Geschwindigkeit, sonst 200 mm/s."""
+        v = self.profile().get("laser_speed_mm_s")
+        return float(v or self.settings.get("kit_laser_speed") or 200.0)
+
+    def estimate(self, meta: dict | None = None) -> dict:
+        from kitslice.job import estimate_seconds
+        meta = meta or (self.job[1] if self.job else None)
+        if not meta:
+            return {}
+        f = float(self.settings.get("est_factor", 1.0))
+        secs = estimate_seconds(meta, self.laser_speed(), float(self.settings.get("est_recoat_s", 10.0)),
+                                float(self.settings.get("est_jump_mm_s", 2000.0)), f)
+        return {"seconds": round(secs), "laser_mm_s": self.laser_speed(), "learned": len(self.settings.get("est_history", []))}
+
+    def learn_print(self, job_id: str, elapsed_s: float, layers_done: int) -> None:
+        """Nach einem Druck: Schätzfaktor aus gemessener Zeit nachführen (gleitender Mittelwert)."""
+        sent = self.settings.get("sent_jobs", {}).get(job_id)
+        if not sent or layers_done < 20 or elapsed_s <= 0:
+            return
+        pred = sent["seconds"] / max(1.0, float(self.settings.get("est_factor", 1.0)))   # ohne Faktor
+        pred_done = pred * min(1.0, layers_done / max(1, sent["layers"]))
+        if pred_done <= 0:
+            return
+        ratio = elapsed_s / pred_done
+        f = float(self.settings.get("est_factor", 1.0))
+        hist = (self.settings.get("est_history", []) + [round(ratio, 3)])[-10:]
+        f = 0.5 * f + 0.5 * ratio if len(hist) > 1 else ratio
+        sj = dict(self.settings.get("sent_jobs", {}))
+        sj.pop(job_id, None)
+        self.save_settings(est_factor=round(max(0.2, min(5.0, f)), 3), est_history=hist, sent_jobs=sj)
+
+    def remember_sent(self, job_id: str) -> None:
+        est = self.estimate()
+        if job_id and est and self.job:
+            sj = dict(self.settings.get("sent_jobs", {}))
+            sj[job_id] = {"seconds": est["seconds"], "layers": self.job[1]["layers"]}
+            self.save_settings(sent_jobs=dict(list(sj.items())[-20:]))
+
     def layer_preview(self, n: int, max_infill: int = 9000) -> dict:
         if not self.job:
             return {}
@@ -376,7 +415,7 @@ class AppCore:
             cont.extend(np.round(seg, 3).ravel().tolist())
         h = L.hatches
         step = max(1, len(h) // max_infill + (1 if len(h) % max_infill else 0)) if len(h) > max_infill else 1
-        inf = np.round(np.asarray(h[::step]), 3).ravel().tolist() if h else []
+        inf = np.round(np.asarray(h[::step]), 3).ravel().tolist() if len(h) else []
         return {"layer": n, "z": round(L.z, 3), "contour": cont, "infill": inf, "count": len(layers)}
 
     def save_job(self, path: str) -> None:

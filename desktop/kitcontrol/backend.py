@@ -352,6 +352,10 @@ class Backend(QObject):
         return self._slice_error
 
     @Property("QVariant", notify=sliceChanged)
+    def estimate(self):
+        return self.core.estimate() if self.core.job and self._slice_state == "done" else {}
+
+    @Property("QVariant", notify=sliceChanged)
     def sliceMeta(self):
         return self.core.job[1] if self.core.job and self._slice_state == "done" else {}
 
@@ -473,8 +477,10 @@ class Backend(QObject):
                     for k in ("current_job", "central", "pc_link", "transfer", "job_result"):
                         st.setdefault(k, self._kit.get(k))
                     changed_job = (st.get("current_job") or {}).get("id") != (self._kit.get("current_job") or {}).get("id")
+                    prev = self._kit
                     self._kit = st
                     self._log.feed(st)
+                    self._learn(prev, st)
                     self.kitChanged.emit()
                     if changed_job:
                         self.refreshJobs()
@@ -486,6 +492,17 @@ class Backend(QObject):
                 self._connected = False
                 self.kitChanged.emit()
             time.sleep(3)
+
+    def _learn(self, prev, st):
+        """Laufzeit echter Drucke merken: Lasergeschwindigkeit und Schätzfaktor nachführen."""
+        if st.get("laser_speed"):
+            if abs(float(st["laser_speed"]) - float(self.core.settings.get("kit_laser_speed", 0) or 0)) > 0.5:
+                self.core.save_settings(kit_laser_speed=float(st["laser_speed"]))
+        if prev.get("printing") and not st.get("printing"):
+            job = prev.get("current_job") or {}
+            if job.get("id") and (prev.get("percent") or 0) >= 95:
+                self.core.learn_print(job["id"], float(prev.get("elapsed_s") or 0), int(prev.get("layer") or 0))
+                self.sliceChanged.emit()
 
     @Slot()
     def refreshJobs(self):
@@ -516,6 +533,8 @@ class Backend(QObject):
                 r = self.core.send(host, start)
             except Exception as e:
                 r = {"ok": False, "error": str(e)}
+            if r.get("ok") and r.get("job"):
+                self.core.remember_sent(r["job"].get("id", ""))
             if not r.get("ok"):
                 self.message.emit("Senden fehlgeschlagen: " + str(r.get("error", "")), "error")
             elif r.get("started"):

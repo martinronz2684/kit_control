@@ -132,10 +132,23 @@ Item {
                     Stat { label: "Schichten"; value: vp.m.layers || "–" }
                     Stat { label: "Bauhöhe"; value: vp.m.height_mm !== undefined ? vp.m.height_mm.toFixed(1) + " mm" : "–" }
                     Stat { label: "Pulver laden"; value: vp.m.powder_mm !== undefined ? vp.m.powder_mm.toFixed(1) + " mm" : "–"; tint: win.cAcc }
+                    Stat {
+                        label: "Druckzeit (geschätzt)"
+                        value: backend.estimate.seconds !== undefined ? win.fmtTime(backend.estimate.seconds) : "–"
+                        tint: win.cAcc
+                    }
                     Stat { label: "Laserweg"; value: vp.m.est_scan_m !== undefined ? Math.round(vp.m.est_scan_m) + " m" : "–" }
                     Stat { label: "Vektoren"; value: vp.m.vectors !== undefined ? Number(vp.m.vectors).toLocaleString(Qt.locale("de_DE"), "f", 0) : "–" }
                     Stat { label: "Rechenzeit"; value: vp.m.slice_s !== undefined ? vp.m.slice_s + " s" : "–" }
                 }
+            }
+
+            Text {
+                visible: vp.done && backend.estimate.seconds !== undefined
+                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                text: "Ohne Aufheizen. Berechnet mit " + Math.round(backend.estimate.laser_mm_s || 0) + " mm/s"
+                      + (backend.estimate.learned > 0 ? ", an " + backend.estimate.learned + " echten Drucken angepasst." : " – wird mit jedem Druck genauer.")
+                color: win.cMut; font.pixelSize: 11
             }
 
             Item { Layout.fillHeight: true }

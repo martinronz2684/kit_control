@@ -26,7 +26,7 @@ ZROT = [0, 90, 180, 270]
 
 
 def volume(p: Part) -> float:
-    t = p._oriented()
+    t = p.transform(p.simple(6000))
     return abs(float(np.einsum("ij,ij->i", t[:, 0], np.cross(t[:, 1], t[:, 2])).sum()) / 6.0)
 
 
@@ -42,14 +42,10 @@ class _Ctx:
         self.profiles = {}
 
     def profile(self, p: Part, rot):
-        key = (id(p), rot, tuple(p.scale))
+        key = (id(p.mesh), rot, tuple(p.scale))
         if key not in self.profiles:
-            old = (p.rot_x, p.rot_y, p.rot_z)
-            p.rot_x, p.rot_y, p.rot_z = rot
-            p._cache = None
-            pr = _profile(p._oriented(), self.res)
-            p.rot_x, p.rot_y, p.rot_z = old
-            p._cache = None
+            # vereinfachtes Netz genügt (Raster 2 mm), Zentrierung aber wie beim vollen Netz
+            pr = _profile(p.transform(p.simple(6000), rot), self.res)
             if pr is not None:
                 bot, top, mx, my = pr
                 occ = np.isfinite(bot)
@@ -58,35 +54,51 @@ class _Ctx:
         return self.profiles[key]
 
 
-def _orientations(p: Part, allow: bool):
+def _orientations(p: Part, allow: bool, ctx=None):
     if not allow or getattr(p, "lock_orient", False):
         return [(p.rot_x, p.rot_y, p.rot_z)]
-    out, seen = [], set()
-    for rx, ry in UPS:
-        for rz in ZROT:
-            p2 = (rx, ry, rz)
-            if p2 not in seen:
-                seen.add(p2)
-                out.append(p2)
-    return out
+    out = [(rx, ry, rz) for rx, ry in UPS for rz in ZROT]
+    if ctx is None:
+        return out
+    # gleiche Profile (symmetrische Teile, z. B. Quader) nur einmal prüfen
+    seen, uniq = set(), []
+    for rot in out:
+        pr = ctx.profile(p, rot)
+        if pr is None:
+            continue
+        sig = (pr[0].shape, round(pr[4], 1), hash(np.nan_to_num(pr[0], posinf=-1).round(1).tobytes()),
+               hash(np.nan_to_num(pr[1], nan=-1).round(1).tobytes()))
+        if sig not in seen:
+            seen.add(sig)
+            uniq.append(rot)
+    return uniq
 
 
-def _place(ctx: _Ctx, H: np.ndarray, prof, cur_max: float):
+def _place(ctx: _Ctx, H: np.ndarray, prof, cur_max: float, Hd=None):
     """Beste Lage eines Profils in der Höhenkarte: (Score, i, j, z)."""
     bot, top, mx, my, h, (rows, cols) = prof
     ph, pw = bot.shape
     n = ctx.n
     if ph > n or pw > n:
         return None
-    Hd = _dilate(H, ctx.g)
-    L = np.full((n - ph + 1, n - pw + 1), -np.inf)
-    # Zeilen/Spalten ausdünnen: Säulen eines Teils ändern sich selten von Zelle zu Zelle
-    for r, c in zip(rows, cols):
-        np.maximum(L, Hd[r:r + n - ph + 1, c:c + n - pw + 1] - bot[r, c], out=L)
+    if Hd is None:
+        Hd = _dilate(H, ctx.g)
+    N1, N2 = n - ph + 1, n - pw + 1
+    if not np.isfinite(Hd).any():
+        L = np.full((N1, N2), -np.inf)
+    else:
+        win = np.lib.stride_tricks.sliding_window_view(Hd, (ph, pw))
+        b = bot[rows, cols]
+        # in Blöcken rechnen, damit der Speicher klein bleibt
+        L = np.empty((N1, N2))
+        step = max(1, int(4_000_000 // max(1, N2 * len(rows))))
+        for r0 in range(0, N1, step):
+            blk = win[r0:r0 + step][:, :, rows, cols]
+            L[r0:r0 + step] = (blk - b).max(axis=2)
     z = np.maximum(np.where(np.isfinite(L), L + ctx.gap, 0.0), 0.0)
     tops = z + h
     total = np.maximum(tops, cur_max)
-    ii, jj = np.mgrid[0:n - ph + 1, 0:n - pw + 1]
+    ii, jj = np.mgrid[0:N1, 0:N2]
     score = np.round(total, 2) * 1e9 + np.round(tops, 2) * 1e6 + ii * n + jj
     k = int(np.argmin(score))
     i, j = divmod(k, score.shape[1])
@@ -103,7 +115,7 @@ def _stamp(H, prof, i, j, z):
 def _fixed_map(ctx: _Ctx, parts) -> np.ndarray:
     H = np.full((ctx.n, ctx.n), -np.inf)
     for q in parts:
-        pr = _profile(q.placed(), ctx.res)
+        pr = _profile(q.light(), ctx.res)
         if pr is None:
             continue
         _, top, mx, my = pr
@@ -127,11 +139,12 @@ def _run(ctx, H0, order, allow_rot, cancel):
         if cancel and cancel():
             return None
         best = None
-        for rot in _orientations(p, allow_rot):
+        Hd = _dilate(H, ctx.g)
+        for rot in _orientations(p, allow_rot, ctx):
             prof = ctx.profile(p, rot)
             if prof is None:
                 continue
-            r = _place(ctx, H, prof, cur)
+            r = _place(ctx, H, prof, cur, Hd)
             if r and (best is None or r[0] < best[0]):
                 best = (r[0], rot, r[1], r[2], r[3], prof)
         if best is None:
@@ -229,6 +242,7 @@ def fill(scene: Scene, part: Part, gap: float = 3.0, wall: float = 2.0, allow_ro
     H = _fixed_map(ctx, scene.parts)
     cur = float(np.max(H[np.isfinite(H)])) if np.isfinite(H).any() else 0.0
     added = 0
+    orients = _orientations(part, allow_rotation, ctx)
     while added < limit:
         if cancel and cancel():
             break
@@ -236,11 +250,12 @@ def fill(scene: Scene, part: Part, gap: float = 3.0, wall: float = 2.0, allow_ro
                  rot_z=part.rot_z, scale=part.scale)
         q.lock_orient = getattr(part, "lock_orient", False)
         best = None
-        for rot in _orientations(q, allow_rotation):
+        Hd = _dilate(H, ctx.g)
+        for rot in orients:
             prof = ctx.profile(part, rot)        # Profile des Originals wiederverwenden
             if prof is None:
                 continue
-            r = _place(ctx, H, prof, max(cur, height))   # nur innerhalb der Höhe – Gesamthöhe zählt nicht
+            r = _place(ctx, H, prof, max(cur, height), Hd)   # nur innerhalb der Höhe – Gesamthöhe zählt nicht
             if r and r[3] + prof[4] <= height + 1e-6 and (best is None or r[0] < best[0]):
                 best = (r[0], rot, r[1], r[2], r[3], prof)
         if best is None:
