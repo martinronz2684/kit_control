@@ -53,16 +53,17 @@ jobs:
           cd desktop
           timeout 120 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--screenshots', '../shots']; sys.exit(main())" || true
           ls -la ../shots || true
-      - name: Bildschirmfotos ablegen (Release desktop-screens)
+      - name: Bildschirmfotos ablegen (Branch screens)
         if: github.ref == 'refs/heads/main'
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view desktop-screens >/dev/null 2>&1 || \
-            gh release create desktop-screens --title "Kit Control – Bildschirmfotos (automatisch)" \
-              --notes "Vom Build erzeugte Bildschirmfotos aller Seiten zur Kontrolle des Layouts." --latest=false --prerelease
-          gh release upload desktop-screens shots/*.png --clobber || true
+          mkdir -p ../screens && cp shots/*.png ../screens/ 2>/dev/null || true
+          cd ../screens
+          git init -q -b screens
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A && git commit -q -m "Bildschirmfotos ${GITHUB_SHA::7}" || exit 0
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" screens:screens
       - name: App bauen (PyInstaller)
         shell: bash
         run: |
