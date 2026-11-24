@@ -10,9 +10,17 @@ Item {
     property string err: ""
     onProfChanged: { ed = JSON.parse(JSON.stringify(prof)); err = ""; nameField.text = prof.builtin ? prof.name + " (eigen)" : prof.name }
 
-    function setv(key, v) { ed[key] = v }
-    function setTemp(key, v) { if (!ed.temps) ed.temps = {}; ed.temps[key] = Number(String(v).replace(",", ".")) }
-    function save(asNew) {
+    function setv(key, v) {
+        v = Number(String(v).replace(",", "."))
+        // µm-Felder: Eingaben unter 5 als mm verstehen (0.05 -> 50 µm)
+        if (/_um$/.test(key) && v > 0 && v < 5) v = Math.round(v * 1000)
+        ed[key] = v
+        apply()
+    }
+    // Jede Änderung gilt sofort: eigene Profile werden gespeichert, aus einer Vorlage entsteht automatisch ein eigenes Profil
+    function apply() { save(false, true) }
+    function setTemp(key, v) { if (!ed.temps) ed.temps = {}; ed.temps[key] = Number(String(v).replace(",", ".")); apply() }
+    function save(asNew, quiet) {
         var q = JSON.parse(JSON.stringify(ed))
         q.name = nameField.text
         q.hatch_angles_deg = angleField.text.split(/[;,]/).map(function(s) { return Number(s.trim()) }).filter(function(n) { return !isNaN(n) })
@@ -28,8 +36,11 @@ Item {
         q.optimize_path = optPath.checked
         q.keep_thin = keepThin.checked
         q.lamps = lampSwitch.checked ? { left: Number(lampL.text), right: Number(lampR.text), front: Number(lampF.text) } : null
-        if (asNew || q.builtin) { q.base = q.id; delete q.id; q.builtin = false }
-        err = backend.saveProfile(q)
+        if (asNew || q.builtin) {
+            q.base = q.id; delete q.id; q.builtin = false
+            if (q.name === pp.prof.name) q.name = pp.prof.name + " (eigen)"
+        }
+        err = quiet ? backend.applyProfile(q) : backend.saveProfile(q)
     }
 
     RowLayout {
@@ -104,7 +115,7 @@ Item {
                             Layout.fillWidth: true
                             spacing: 4
                             Text { text: "Name"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: nameField; Layout.fillWidth: true; Component.onCompleted: text = pp.prof.builtin ? pp.prof.name + " (eigen)" : pp.prof.name }
+                            KField { id: nameField; onUserChanged: pp.apply(); Layout.fillWidth: true; Component.onCompleted: text = pp.prof.builtin ? pp.prof.name + " (eigen)" : pp.prof.name }
                         }
                     }
                     Rectangle {
@@ -134,13 +145,13 @@ Item {
                         Layout.fillWidth: true
                         spacing: 4
                         Text { text: "Schraffurwinkel je Schicht (reihum)"; color: win.cMut; font.pixelSize: 12 }
-                        KField { id: angleField; Layout.fillWidth: true; text: (pp.prof.hatch_angles_deg || []).join(", ") }
+                        KField { id: angleField; onUserChanged: pp.apply(); Layout.fillWidth: true; text: (pp.prof.hatch_angles_deg || []).join(", ") }
                     }
                     KCheck {
                         id: origBox
                         text: "Originalkontur zusätzlich lasern"
                         checked: pp.prof.draw_original_boundary === true
-                        onToggled: pp.setv("draw_original_boundary", checked)
+                        onToggled: { pp.ed.draw_original_boundary = checked; pp.apply() }
                     }
 
                     Caption { text: "Strategien (leer/0 = wie Central)"; Layout.topMargin: 6 }
@@ -150,56 +161,56 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Winkelschritt je Schicht"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: stepField; Layout.fillWidth: true; placeholderText: "Liste oben (z. B. 67)"; text: pp.prof.hatch_angle_step_deg ? String(pp.prof.hatch_angle_step_deg) : "" }
+                            KField { id: stepField; onUserChanged: pp.apply(); Layout.fillWidth: true; placeholderText: "Liste oben (z. B. 67)"; text: pp.prof.hatch_angle_step_deg ? String(pp.prof.hatch_angle_step_deg) : "" }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Schachbrett-Felder (mm)"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: islandField; Layout.fillWidth: true; placeholderText: "aus (z. B. 5)"; text: pp.prof.island_mm ? String(pp.prof.island_mm) : "" }
+                            KField { id: islandField; onUserChanged: pp.apply(); Layout.fillWidth: true; placeholderText: "aus (z. B. 5)"; text: pp.prof.island_mm ? String(pp.prof.island_mm) : "" }
                         }
                         Item { Layout.fillWidth: true }
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Hautschichten oben/unten"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: skinField; Layout.fillWidth: true; placeholderText: "aus (z. B. 3)"; text: pp.prof.skin_layers ? String(pp.prof.skin_layers) : "" }
+                            KField { id: skinField; onUserChanged: pp.apply(); Layout.fillWidth: true; placeholderText: "aus (z. B. 3)"; text: pp.prof.skin_layers ? String(pp.prof.skin_layers) : "" }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Schraffur-Abstand im Kern (µm)"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: coreField; Layout.fillWidth: true; placeholderText: "wie oben (z. B. 240)"; text: pp.prof.core_spacing_um ? String(pp.prof.core_spacing_um) : "" }
+                            KField { id: coreField; onUserChanged: pp.apply(); Layout.fillWidth: true; placeholderText: "wie oben (z. B. 240)"; text: pp.prof.core_spacing_um ? String(pp.prof.core_spacing_um) : "" }
                         }
                         Item { Layout.fillWidth: true }
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Schwundausgleich X (%)"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: shrinkX; Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.x) : "0" }
+                            KField { id: shrinkX; onUserChanged: pp.apply(); Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.x) : "0" }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Schwundausgleich Y (%)"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: shrinkY; Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.y) : "0" }
+                            KField { id: shrinkY; onUserChanged: pp.apply(); Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.y) : "0" }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Schwundausgleich Z (%)"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: shrinkZ; Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.z) : "0" }
+                            KField { id: shrinkZ; onUserChanged: pp.apply(); Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.z) : "0" }
                         }
                     }
                     RowLayout {
                         spacing: 24
                         RowLayout {
                             spacing: 8
-                            Switch { id: contourFirst; checked: pp.prof.contour_first !== false }
+                            Switch { id: contourFirst; onToggled: pp.apply(); checked: pp.prof.contour_first !== false }
                             Text { text: "Kontur vor Füllung"; color: win.cInk; font.pixelSize: 13 }
                         }
                         RowLayout {
                             spacing: 8
-                            Switch { id: optPath; checked: pp.prof.optimize_path === true }
+                            Switch { id: optPath; onToggled: pp.apply(); checked: pp.prof.optimize_path === true }
                             Text { text: "Laserwege optimieren"; color: win.cInk; font.pixelSize: 13 }
                         }
                         RowLayout {
                             spacing: 8
-                            Switch { id: keepThin; checked: pp.prof.keep_thin !== false }
+                            Switch { id: keepThin; onToggled: pp.apply(); checked: pp.prof.keep_thin !== false }
                             Text { text: "Dünne Wände erhalten"; color: win.cInk; font.pixelSize: 13 }
                         }
                     }
@@ -221,27 +232,27 @@ Item {
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Geschwindigkeit Füllung"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: laserField; Layout.fillWidth: true; placeholderText: "unverändert"; text: pp.prof.laser_speed_mm_s === null || pp.prof.laser_speed_mm_s === undefined ? "" : String(pp.prof.laser_speed_mm_s) }
+                            KField { id: laserField; onUserChanged: pp.apply(); Layout.fillWidth: true; placeholderText: "unverändert"; text: pp.prof.laser_speed_mm_s === null || pp.prof.laser_speed_mm_s === undefined ? "" : String(pp.prof.laser_speed_mm_s) }
                         }
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4
                             Text { text: "Geschwindigkeit Kontur"; color: win.cMut; font.pixelSize: 12 }
-                            KField { id: contourField; Layout.fillWidth: true; placeholderText: "unverändert"; text: pp.prof.contour_speed_mm_s === null || pp.prof.contour_speed_mm_s === undefined ? "" : String(pp.prof.contour_speed_mm_s) }
+                            KField { id: contourField; onUserChanged: pp.apply(); Layout.fillWidth: true; placeholderText: "unverändert"; text: pp.prof.contour_speed_mm_s === null || pp.prof.contour_speed_mm_s === undefined ? "" : String(pp.prof.contour_speed_mm_s) }
                         }
                     }
 
                     RowLayout {
                         Layout.topMargin: 6
                         Caption { text: "Heizstrahler"; Layout.fillWidth: true }
-                        Switch { id: lampSwitch; checked: pp.prof.lamps !== null && pp.prof.lamps !== undefined }
+                        Switch { id: lampSwitch; onToggled: pp.apply(); checked: pp.prof.lamps !== null && pp.prof.lamps !== undefined }
                     }
                     GridLayout {
                         visible: lampSwitch.checked
                         Layout.fillWidth: true
                         columns: 3; columnSpacing: 14
-                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Links"; color: win.cMut; font.pixelSize: 12 } KField { id: lampL; Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.left) : "80" } }
-                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Rechts"; color: win.cMut; font.pixelSize: 12 } KField { id: lampR; Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.right) : "100" } }
-                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Vorne"; color: win.cMut; font.pixelSize: 12 } KField { id: lampF; Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.front) : "100" } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Links"; color: win.cMut; font.pixelSize: 12 } KField { id: lampL; onUserChanged: pp.apply(); Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.left) : "80" } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Rechts"; color: win.cMut; font.pixelSize: 12 } KField { id: lampR; onUserChanged: pp.apply(); Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.right) : "100" } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 4; Text { text: "Vorne"; color: win.cMut; font.pixelSize: 12 } KField { id: lampF; onUserChanged: pp.apply(); Layout.fillWidth: true; text: pp.prof.lamps ? String(pp.prof.lamps.front) : "100" } }
                     }
 
                     Text { visible: pp.err !== ""; text: "⚠ " + pp.err; color: "#ffb4b6"; font.pixelSize: 13; Layout.topMargin: 4 }
@@ -249,8 +260,11 @@ Item {
                     RowLayout {
                         Layout.topMargin: 8
                         spacing: 10
-                        KButton { visible: !pp.ro; text: "Speichern"; kind: "pri"; onClicked: pp.save(false) }
-                        KButton { text: "Als neues Profil speichern"; kind: pp.ro ? "pri" : "normal"; onClicked: pp.save(true) }
+                        Text {
+                            text: pp.ro ? "Änderungen legen automatisch ein eigenes Profil an." : "Änderungen werden sofort gespeichert."
+                            color: win.cMut; font.pixelSize: 12
+                        }
+                        KButton { text: "Als neues Profil speichern"; onClicked: pp.save(true, false) }
                         Item { Layout.fillWidth: true }
                         KButton {
                             visible: !pp.ro

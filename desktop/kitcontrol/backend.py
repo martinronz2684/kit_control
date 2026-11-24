@@ -278,7 +278,7 @@ class Backend(QObject):
         """Liefert eine Fehlermeldung oder einen leeren Text."""
         try:
             q = dict(p)
-            for k in ("temps", "lamps"):
+            for k in ("temps", "lamps", "shrink_pct"):
                 if q.get(k) is not None:
                     q[k] = dict(q[k])
             if q.get("hatch_angles_deg") is not None:
@@ -289,6 +289,23 @@ class Backend(QObject):
         self.profilesChanged.emit()
         self._parts_changed()
         self.message.emit("Profil gespeichert", "ok")
+        return ""
+
+    @Slot("QVariant", result=str)
+    def applyProfile(self, p):
+        """Wie saveProfile, aber ohne Meldung (für sofort übernommene Änderungen)."""
+        try:
+            q = dict(p)
+            for k in ("temps", "lamps", "shrink_pct"):
+                if q.get(k) is not None:
+                    q[k] = dict(q[k])
+            if q.get("hatch_angles_deg") is not None:
+                q["hatch_angles_deg"] = list(q["hatch_angles_deg"])
+            self.core.save_profile(q)
+        except (ValueError, KeyError, TypeError) as e:
+            return str(e)
+        self.profilesChanged.emit()
+        self._parts_changed()
         return ""
 
     @Slot(str)

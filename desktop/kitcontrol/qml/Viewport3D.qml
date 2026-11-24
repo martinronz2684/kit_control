@@ -73,20 +73,9 @@ Canvas {
         g.strokeStyle = "#3b5566"; g.lineWidth = 1.4
         g.beginPath(); g.moveTo(c0[0], c0[1]); g.lineTo(c1[0], c1[1]); g.lineTo(c2[0], c2[1]); g.lineTo(c3[0], c3[1]); g.closePath(); g.stroke()
 
-        // Maschinengrenzen: hintere Wände leicht bläulich (Farbe des Betts), vordere nur als Kante
+        // Maschinengrenzen (nur Linien, siehe unten)
         var mz = machineZ
         var mb = [P(-h, -h, 0), P(h, -h, 0), P(h, h, 0), P(-h, h, 0), P(-h, -h, mz), P(h, -h, mz), P(h, h, mz), P(-h, h, mz)]
-        var walls = [[0, 1, 5, 4], [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]]
-        var mid = P(0, 0, mz / 2)[2]
-        for (var wi = 0; wi < 4; wi++) {
-            var W = walls[wi]
-            var wd = (mb[W[0]][2] + mb[W[1]][2] + mb[W[2]][2] + mb[W[3]][2]) / 4
-            if (wd <= mid) continue          // vordere Wand: nicht füllen
-            g.fillStyle = "rgba(38,62,78,0.30)"
-            g.beginPath(); g.moveTo(mb[W[0]][0], mb[W[0]][1])
-            for (var wk = 1; wk < 4; wk++) g.lineTo(mb[W[wk]][0], mb[W[wk]][1])
-            g.closePath(); g.fill()
-        }
 
         // Dreiecke aller Bauteile sammeln
         var tris = []

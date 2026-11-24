@@ -4,6 +4,11 @@ import QtQuick.Layouts
 
 TextField {
     id: kf
+    // nur echte Eingaben melden (nicht schon beim Verlassen des Feldes)
+    property bool edited: false
+    signal userChanged()
+    onTextEdited: edited = true
+    onEditingFinished: if (edited) { edited = false; userChanged() }
     implicitHeight: 36
     color: win.cInk
     font.pixelSize: 13
