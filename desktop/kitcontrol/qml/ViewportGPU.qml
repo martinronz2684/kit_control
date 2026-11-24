@@ -175,9 +175,10 @@ Item {
 
     Text {
         // rechts oben neben den Ansichts-Tasten (ca. 300 px); wird bei schmalem Fenster umgebrochen statt überlappt
-        anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 14
-        width: Math.min(implicitWidth, Math.max(80, parent.width - 330))
-        wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignRight
+        // eine Zeile unter den Ansichts-Tasten (dort ist immer Platz), notfalls gekürzt
+        anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+        anchors.leftMargin: 16; anchors.rightMargin: 16; anchors.topMargin: 56
+        elide: Text.ElideRight
         text: "hellgrau: idealer Bereich " + vg.idealXY + " × " + vg.idealXY + " × " + vg.idealZ + " mm · bläulich: Bauraum " + vg.plate + " × " + vg.plate + " × " + vg.machineZ + " mm"
         color: "#6b737d"; font.pixelSize: 11
     }

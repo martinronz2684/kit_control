@@ -100,13 +100,17 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
             Flickable {
+                id: edFlick
                 anchors.fill: parent; anchors.margins: 20
                 contentHeight: edCol.implicitHeight
+                contentWidth: width                     // nur senkrecht scrollen, Inhalt nie breiter als die Karte
+                flickableDirection: Flickable.VerticalFlick
+                boundsBehavior: Flickable.StopAtBounds
                 clip: true
                 ScrollBar.vertical: ScrollBar {}
                 ColumnLayout {
                     id: edCol
-                    width: parent.width - 12
+                    width: edFlick.width - 12
                     spacing: 16
 
                     RowLayout {

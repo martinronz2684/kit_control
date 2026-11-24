@@ -143,7 +143,7 @@ def _screenshots(app, engine, backend, out):
 
     # danach: alle Seiten in mehreren Fenstergrößen auf Darstellungsfehler prüfen
     checks = []
-    for (w, h) in ((1100, 700), (1280, 760), (1366, 768), (1920, 1040)):
+    for (w, h) in ((1120, 720), (1280, 760), (1366, 768), (1920, 1040)):
         for pg in range(5):
             checks.append((w, h, pg, False))
         checks.append((w, h, 0, True))                   # Auto-Anordnen-Fenster
@@ -182,7 +182,7 @@ def _screenshots(app, engine, backend, out):
             ci = popup.property("contentItem")
             top = ci.parentItem() if ci is not None and ci.parentItem() is not None else ci
         found.extend(_layout_check(root, where, top))
-        if w == 1100:
+        if w == 1120:
             root.grabWindow().save(os.path.join(out, f"klein-{names[pg]}{'-fenster' if pop else ''}.png"))
         if popup is not None and pop:
             popup.setProperty("visible", False)
@@ -219,9 +219,11 @@ def _layout_check(root, where: str, only=None) -> list:
     texts, out = [], []
     W, H = root.width(), root.height()
 
-    def walk(it, anc, clip):
+    def walk(it, anc, clip, scroll_x=False):
         if not it.isVisible() or it.opacity() < 0.05:
             return
+        if (it.property("contentWidth") or 0) > it.width() + 2 and it.metaObject().className().startswith("QQuickFlickable"):
+            scroll_x = True
         cls = it.metaObject().className()
         r = it.mapRectToScene(QRectF(0, 0, it.width(), it.height()))
         if it.clip():
@@ -240,15 +242,30 @@ def _layout_check(root, where: str, only=None) -> list:
                 lp = float(it.property("leftPadding") or 0)
                 rp = float(it.property("rightPadding") or 0)
                 x0 = r.x() + (it.width() - rp - cw if al == 2 else (it.width() - cw) / 2 if al == 4 else lp)
-                tr = QRectF(x0, r.y(), cw, min(r.height(), (it.property("contentHeight") or r.height()))).intersected(clip)
+                full = QRectF(x0, r.y(), cw, min(r.height(), (it.property("contentHeight") or r.height())))
+                par = it.parentItem()
+                if par is not None and par.width() > 0:
+                    pr = par.mapRectToScene(QRectF(0, 0, par.width(), par.height()))
+                    if full.left() < pr.left() - 3 or full.right() > pr.right() + 3:
+                        out.append(f"{where}: Text ragt seitlich aus seinem Feld: „{t[:40]}“")
+                vis = full.intersected(clip)
+                if full.width() > 4 and vis.width() < full.width() - 3 and not scroll_x:
+                    out.append(f"{where}: Text seitlich abgeschnitten: „{t[:40]}“")
+                tr = vis
                 if tr.width() > 1 and tr.height() > 1:
                     texts.append((tr, t, anc))
+        if cls.startswith("QQuickTextField") or cls.endswith("Button") or "Button" in cls:
+            if r.width() > 4 and r.height() > 4:
+                vis = r.intersected(clip)
+                if vis.width() < r.width() - 3 and not scroll_x:
+                    nm = it.property("text") or it.property("placeholderText") or cls
+                    out.append(f"{where}: Bedienelement seitlich abgeschnitten: {str(nm)[:40]}")
         if r.width() > 2 and r.height() > 2 and (r.right() > W + 2 or r.bottom() > H + 2) and cls.startswith("QQuick") \
                 and not anc_clipped(it):
             nm = it.property("text") or it.objectName() or cls
             out.append(f"{where}: außerhalb des Fensters: {str(nm)[:40]} ({r.right():.0f}, {r.bottom():.0f})")
         for c in it.childItems():
-            walk(c, anc + (id(it),), clip)
+            walk(c, anc + (id(it),), clip, scroll_x)
 
     def anc_clipped(it):
         p = it.parentItem()

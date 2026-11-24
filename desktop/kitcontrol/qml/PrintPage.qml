@@ -26,6 +26,8 @@ Item {
         ColumnLayout {
             Layout.preferredWidth: 360
             Layout.maximumWidth: 360
+            Layout.minimumWidth: 270
+            Layout.fillWidth: true
             Layout.fillHeight: true
             spacing: 14
 
@@ -178,6 +180,7 @@ Item {
                 Card {
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Layout.minimumWidth: 200
                     LayerView {
                         id: liveView
                         anchors.fill: parent; anchors.margins: 14
@@ -185,6 +188,8 @@ Item {
                         Text {
                             visible: !(k.printing === true)
                             anchors.centerIn: parent
+                            width: parent.width - 24
+                            wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
                             text: "Hier erscheint während des Drucks die aktuelle Schicht"
                             color: win.cMut; font.pixelSize: 13
                         }
@@ -194,6 +199,8 @@ Item {
                 ColumnLayout {
                     Layout.preferredWidth: 300
                     Layout.maximumWidth: 300
+                    Layout.minimumWidth: 260
+                    Layout.fillWidth: true
                     Layout.fillHeight: true
                     spacing: 14
 
