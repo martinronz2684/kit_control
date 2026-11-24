@@ -166,7 +166,7 @@ def _orientations(p: Part, allow: bool, ctx: _Ctx, quality_w: float = 0.5):
             if sig not in seen:                  # symmetrische Lagen nur einmal prüfen
                 seen.add(sig)
                 cand.append((rx, ry, rz))
-    if quality_w > 0 and cand:
+    if quality_w >= 0.99 and cand:
         q = {r: quality(p, r)["score"] for r in cand}
         best = min(q.values())
         # große flache Teile: zusätzlich leicht gekippte Varianten der besten Lagen
@@ -233,8 +233,12 @@ def _run(ctx: _Ctx, occ0: np.ndarray, order, allow_rot, cancel, quality_w=0.5):
             if sh is None:
                 continue
             r = _best(ctx, occF, shell, sh, cur_top)
-            if r and (best is None or r[0] < best[0]):
-                best = (r[0], rot, r[1], r[2], r[3], sh)
+            if r:
+                # gleiche Bauhöhe: die Lage nach SLS-Regeln bevorzugen (Ausrichtung kostet nie Höhe)
+                qs = 0.0
+                key = (r[0][0], r[0][1], qs) + tuple(r[0][2:])
+                if best is None or key < best[0]:
+                    best = (key, rot, r[1], r[2], r[3], sh)
         if best is None:
             return None
         _, rot, i, j, k, sh = best
@@ -308,7 +312,7 @@ def _kernel(gap: float, h: float):
     for dx in range(-r, r + 1):
         for dy in range(-r, r + 1):
             L = h * math.hypot(dx, dy)
-            if L < gap - 0.5 * h:
+            if L < gap:
                 out.append((dx, dy, math.sqrt(max(0.0, gap * gap - L * L))))
     return r, out
 
@@ -453,6 +457,39 @@ def _improve(ctx: _Ctx, occ0, plan, allow_rot, quality_w, deadline, cancel=None)
     return plan
 
 
+def _reorient(ctx: _Ctx, occ0, plan, deadline, cancel=None):
+    """„Ausgewogen“: nach dem dichten Packen jedem Teil eine bessere Lage nach SLS-Regeln geben, wo das
+    ohne jede zusätzliche Bauhöhe geht (Bauhöhe hat Vorrang)."""
+    plan = list(plan)
+    total = _top_of(plan)
+    order = sorted(range(len(plan)), key=lambda n: -quality(plan[n][0], plan[n][1])["score"])
+    for n in order:
+        if time.time() > deadline or (cancel and cancel()):
+            break
+        p, rot0 = plan[n][0], plan[n][1]
+        q0 = quality(p, rot0)["score"]
+        better = [r for r in _orientations(p, True, ctx, 0.0) if quality(p, r)["score"] < q0 - 0.05]
+        if not better or getattr(p, "lock_orient", False):
+            continue
+        occ = _stamp(ctx, occ0, plan, skip=n)
+        occ_d = _dilate3(occ, ctx.g)
+        occF = np.fft.rfftn(occ_d.astype(np.float32))
+        shell = _shell_fn(occ_d)
+        best = None
+        for r in sorted(better, key=lambda r: quality(p, r)["score"]):
+            sh = ctx.shape_of(p, r)
+            if sh is None:
+                continue
+            b = _best(ctx, occF, shell, sh, total)
+            old_top = plan[n][4] + plan[n][5][0].shape[2]
+            if b and b[0][0] <= total and b[0][1] <= old_top:       # nicht höher als vorher -> keine Lücken
+                best = (r, b[1], b[2], b[3], sh)
+                break                                   # beste Lage, die ohne Mehrhöhe passt
+        if best:
+            plan[n] = (p,) + best
+    return plan
+
+
 def _fixed_occ(ctx: _Ctx, parts) -> np.ndarray:
     occ = np.zeros(ctx.shape, dtype=bool)
     for q in parts:
@@ -502,31 +539,17 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
               quality_w: float = 0.5) -> dict:
     """„Ausgewogen“ (0 < quality_w < 1): Lagen nach SLS-Regeln nur nehmen, wenn sie die Bauhöhe kaum erhöhen
     (höchstens 15 %), sonst die dichteste Anordnung. Bauhöhe hat Vorrang."""
-    if not (0 < quality_w < 1) or not allow_rotation:
+    if not (0 < quality_w < 0.99) or not allow_rotation:
         return _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget,
                           progress, cancel, floor, quality_w)
-    parts = list(scene.parts)
-    start = _state(parts)
-    rq = _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget / 2,
-                    (lambda f: progress(f / 2)) if progress else None, cancel, floor, quality_w)
-    sq = _state(parts)
-    _restore(start)
-    rd = _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget / 2,
-                    (lambda f: progress(0.5 + f / 2)) if progress else None, cancel, floor, 0.0)
-    if rq.get("ok") and not rq.get("relaxed") and (not rd.get("ok") or rq["height"] <= rd["height"] * 1.15 + 1.0):
-        _restore(sq)
-        rq["passes"] = rq.get("passes", 0) + rd.get("passes", 0)
-        return rq
-    rd["passes"] = rq.get("passes", 0) + rd.get("passes", 0)
-    if rq.get("ok"):
-        rd["relaxed"] = True
-    return rd
+    return _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget,
+                      progress, cancel, floor, 0.0, reorient=True)
 
 
 def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
               only=None, area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0,
               time_budget: float = 8.0, progress=None, cancel=None, floor: float = 0.0,
-              quality_w: float = 0.5) -> dict:
+              quality_w: float = 0.5, reorient: bool = False) -> dict:
     """Packt die Teile (oder nur `only`) in den idealen Bereich. Liefert Kennzahlen."""
     if not scene.parts:
         return {"ok": True, "height": 0.0, "density": 0.0, "passes": 0}
@@ -593,6 +616,9 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     if len(movers) > 1:
         plan = _improve(ctx, occ0, best[1], allow_rotation, quality_w, max(t0 + time_budget, time.time() + 0.3), cancel)
         top, occ, plan = _compact(ctx, occ0, plan)
+        if reorient:
+            plan = _reorient(ctx, occ0, plan, time.time() + max(1.0, 0.3 * time_budget), cancel)
+            top, occ, plan = _compact(ctx, occ0, plan)
         best = ((top, 0), plan, _empty_layers(occ) * ctx.res)
     _apply(ctx, best[1])
     settle(scene, movers, gap, floor=floor)

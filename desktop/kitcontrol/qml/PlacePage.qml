@@ -276,7 +276,7 @@ Item {
                 Body {
                     Layout.fillWidth: true; color: win.cMut; font.pixelSize: 11
                     text: packPop.quality > 0.9 ? "Jedes Teil in seiner besten Lage: große Flächen hochkant oder gekippt, Bohrungen stehend, wenig Treppenstufen, gleichmäßiger Querschnitt – kostet etwas Bauhöhe."
-                        : packPop.quality > 0.1 ? "Nur gute Lagen nach SLS-Regeln erlaubt, darunter die am dichtesten packende."
+                        : packPop.quality > 0.1 ? "Erst so niedrig wie möglich packen, dann jedes Teil in eine bessere Lage nach SLS-Regeln drehen, wo das keine Bauhöhe kostet."
                         : "Nur Bauhöhe und Dichte zählen, Ausrichtung egal."
                 }
             }

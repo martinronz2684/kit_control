@@ -291,7 +291,7 @@ class Scene:
                         cc = q.__dict__.setdefault("_colcache", {})
                         if key not in cc:
                             cc.clear()
-                            cc[key] = _columns(q.light(2500), GRID)
+                            cc[key] = _columns(q.light(12000), 0.5)   # fein genug auch für 1 mm Abstand
                         cols[k] = cc[key]
                 ca, cb = cols[i], cols[j]
                 common = set(ca) & set(cb)
