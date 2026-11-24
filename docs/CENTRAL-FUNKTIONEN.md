@@ -81,10 +81,10 @@ Spalte „Pi“ = Touch-Oberfläche am Kit, „PC“ = Kit Control Desktop.
 ## 7. Kalibrierung
 | Funktion | Pi | PC | Anmerkung |
 |---|---|---|---|
-| Kalibriermuster / Mittelpunkt anzeigen, beenden | ✅ | ⬜ | |
+| Kalibriermuster / Mittelpunkt anzeigen, beenden | ✅ | ✅ | PC: Seite „Pulver“ |
 | Achsen referenzieren | ✅ (nur nach Bestätigung) | ⬜ | Grundsatz: Pi stößt das nie selbst an |
-| Digitale Skalierung berechnen (Soll/Ist, ±5 %) und senden | ✅ | ⬜ | |
-| Kalibrierteil / Musterkarte (PDF) speichern | ⬜ | ⬜ | eigene Dateien statt Sintratec-PDFs |
+| Digitale Skalierung berechnen (Soll/Ist, ±5 %) und senden | ✅ | ✅ | PC zeigt die Werte im Kit und die gesicherten Werkswerte |
+| Kalibrierteil / Musterkarte (PDF) speichern | ⬜ | ✅ | PC: eigenes Kalibrierteil 50 × 50 × 10 mm |
 
 ## 8. Verbindung, System
 | Funktion | Pi | PC | Anmerkung |

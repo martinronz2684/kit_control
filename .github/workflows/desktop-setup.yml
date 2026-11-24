@@ -53,7 +53,8 @@ jobs:
         run: |
           cd desktop
           timeout 300 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--screenshots', '../shots']; sys.exit(main())" > shots.log 2>&1 || true
-          grep "^LAYOUT" shots.log | head -60 | while IFS= read -r l; do echo "::warning title=Layout::$l"; done
+          (grep "^LAYOUT" shots.log || tail -15 shots.log) | head -40 | while IFS= read -r l; do echo "::warning title=Layout::$l"; done || true
+          cp shots.log ../shots/ 2>/dev/null || true
           ls -la ../shots || true
       - name: Maus und Anordnen mit echter 3D-Darstellung prüfen
         shell: bash

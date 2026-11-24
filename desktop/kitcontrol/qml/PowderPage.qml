@@ -74,10 +74,20 @@ Item {
             }
         }
 
-        ColumnLayout {
+        Flickable {
+            id: rightFlick
             Layout.preferredWidth: 320
             Layout.maximumWidth: 320
             Layout.fillHeight: true
+            clip: true
+            contentWidth: width
+            contentHeight: rightCol.implicitHeight
+            flickableDirection: Flickable.VerticalFlick
+            boundsBehavior: Flickable.StopAtBounds
+            ScrollBar.vertical: ScrollBar { policy: rightFlick.contentHeight > rightFlick.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
+        ColumnLayout {
+            id: rightCol
+            width: rightFlick.width - (rightFlick.contentHeight > rightFlick.height ? 10 : 0)
             spacing: 14
 
             Card {
@@ -118,7 +128,7 @@ Item {
                 }
             }
 
-            Item { Layout.fillHeight: true }
+            CalibCard { Layout.fillWidth: true; ready: pw.ready }
 
             Rectangle {
                 Layout.fillWidth: true
@@ -133,6 +143,7 @@ Item {
                         : "Fahren wie am Display. Die Freigabe für die Bedienung vom PC erfolgt am Pi (KIT_REMOTE=1)."
                 }
             }
+        }
         }
     }
 }

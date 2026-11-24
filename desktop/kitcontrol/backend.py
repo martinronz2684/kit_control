@@ -227,6 +227,12 @@ class Backend(QObject):
         return sum(1 for p in self.core.scene.parts if p.lock_pos or p.lock_orient)
 
     @Slot()
+    def addCalibrationPart(self):
+        self.core.add_calibration_part()
+        self._parts_changed()
+        self.message.emit("Kalibrierteil hinzugefügt – drucken, X/Y-Länge und Höhe messen, unter „Pulver“ eintragen", "ok")
+
+    @Slot()
     def unlockAll(self):
         n = self.core.unlock_all()
         self._parts_changed()
