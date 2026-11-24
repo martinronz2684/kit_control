@@ -5,9 +5,11 @@ import QtQuick.Controls
 Switch {
     id: ks
     implicitHeight: 28
+    padding: 0
+    implicitWidth: 40                   // Breite = Schalter selbst (sonst überdeckt er den Text daneben)
     indicator: Rectangle {
         implicitWidth: 40; implicitHeight: 22
-        x: ks.leftPadding
+        x: 0
         anchors.verticalCenter: parent.verticalCenter
         radius: 11
         color: ks.checked ? win.cAcc : "#262b33"
