@@ -102,6 +102,10 @@ class Session(socketserver.BaseRequestHandler):
             return
         held = False
         held_since = 0.0
+        cap = None          # mitgeschnittene Dateiübertragung von Central
+        expect_frame = False
+        saved = None        # zuletzt gespeicherter Job dieser Sitzung (für den folgenden Druckstart)
+        fake = None         # Antwort, die statt des Kits zurückgeht (Druckstart unterdrückt)
         usb = self.worker.usb
         sock = self.request
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
@@ -133,9 +137,35 @@ class Session(socketserver.BaseRequestHandler):
                     self.reply(ERR_NO_DEVICE)
                     continue
                 if op == b"W":
-                    if len(data) >= 2 and P.code_of(data) in BLOCKED:
+                    frame = expect_frame
+                    expect_frame = False
+                    code = P.code_of(data) if len(data) >= 2 and not frame else -1
+                    if code in BLOCKED:
                         self.reply(ERR_ACCESS)
                         continue
+                    if frame and cap is not None:
+                        cap["data"] += data
+                    elif code == FTP_INIT and len(data) >= 7:
+                        cap = {"type": data[2], "size": struct.unpack_from("<i", data, 3)[0], "data": bytearray()}
+                    elif code == P.COM_STARTPRINT and saved is not None:
+                        job, saved = saved, None
+                        from kitd import jobs
+                        if not jobs.settings()["autostart"]:
+                            # Autostart aus: Job bleibt auf dem Pi, Kit startet nicht. Central meldet „nicht erfolgreich“.
+                            if not held:
+                                if not usb.acquire(timeout=HOLD_MAX):
+                                    self.reply(ERR_TIMEOUT); continue
+                                held, held_since = True, time.time()
+                            try:
+                                kit.command(P.cmd_warmup(False))   # Central hat vorgeheizt – wieder aus
+                            except Exception:
+                                pass
+                            fake = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x00"
+                            self.worker._set(central_job={"id": job["id"], "name": job["name"], "started": False, "ts": time.time()})
+                            self.reply(OK, struct.pack(">I", len(data)))
+                            continue
+                        self.worker.set_current_job(job)
+                        self.worker._set(central_job={"id": job["id"], "name": job["name"], "started": True, "ts": time.time()})
                     if not held:
                         if not usb.acquire(timeout=HOLD_MAX):
                             self.reply(ERR_TIMEOUT); continue
@@ -147,6 +177,13 @@ class Session(socketserver.BaseRequestHandler):
                         usb.release(); held = False
                         self.reply(ERR_IO)
                 elif op == b"R":
+                    if fake is not None:
+                        ans, fake = fake[:n], None
+                        if held:
+                            usb.release(); held = False
+                        self.reply(OK, ans)
+                        STATE["transfers"] += 1
+                        continue
                     if not held:
                         if not usb.acquire(timeout=HOLD_MAX):
                             self.reply(ERR_TIMEOUT); continue
@@ -154,6 +191,14 @@ class Session(socketserver.BaseRequestHandler):
                     try:
                         ans = kit.t.read(n)[:n]
                         self.reply(OK, ans)
+                        if cap is not None and len(ans) >= 3 and P.code_of(ans) == FTP_MAIN_RESPONSE:
+                            if ans[2] == 1:
+                                expect_frame = True
+                            elif ans[2] == 5:
+                                saved = _store(cap, self.worker)
+                                cap = None
+                            elif ans[2] == 2:
+                                cap = None
                     except Exception as e:
                         self.reply(ERR_TIMEOUT if "timeout" in str(e).lower() or "timed out" in str(e).lower() else ERR_IO)
                     finally:
@@ -168,6 +213,27 @@ class Session(socketserver.BaseRequestHandler):
                 usb.release()
             STATE.update(central=False, peer="")
             _session_lock.release()
+
+
+FTP_INIT, FTP_MAIN_RESPONSE = 3100, 3103
+
+
+def _store(cap: dict, worker):
+    """Übertragenen Druckjob in der Bibliothek ablegen (Kalibrierdateien nicht)."""
+    if cap["type"] != 1 or len(cap["data"]) < cap["size"]:
+        return None
+    try:
+        from kitd import jobs
+        def indexed(m):   # läuft der Job schon, Vorschau/Bauhöhe auf der Druckseite nachtragen
+            cur = worker.snapshot().get("current_job") or {}
+            if cur.get("id") == m["id"]:
+                worker.set_current_job(m)
+        meta = jobs.save(bytes(cap["data"][:cap["size"]]), "central", background=True, on_indexed=indexed)
+        worker._set(central_job={"id": meta["id"], "name": meta["name"], "started": None, "ts": time.time()})
+        return meta
+    except Exception as e:
+        worker._set(central_job={"error": f"Job konnte nicht gespeichert werden: {e}", "ts": time.time()})
+        return None
 
 
 class _Server(socketserver.ThreadingTCPServer):

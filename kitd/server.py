@@ -231,6 +231,9 @@ class KitWorker(threading.Thread):
             except queue.Empty:
                 return
             try:
+                if cmd.get("cmd") == "job_start":
+                    self._start_job(str(cmd.get("id", "")), reply)
+                    continue
                 if cmd.get("cmd") == "lamps_full":
                     # Heizstrahler links/rechts/vorne auf volle Leistung (die Firmware speichert den Wert dauerhaft)
                     if self.snapshot().get("printing"):
@@ -270,6 +273,81 @@ class KitWorker(threading.Thread):
                 reply.put({"ok": True})
             except (P.ProtocolError, ValueError, KeyError) as e:
                 reply.put({"ok": False, "error": str(e)})
+
+    # -- Job-Bibliothek --------------------------------------------------------
+    CURRENT_FILE = "aktueller-job.json"
+
+    def set_current_job(self, meta: dict | None):
+        """Job, den der Kit gerade druckt – für Schichtvorschau und Bauhöhe auf der Druckseite."""
+        cur = None
+        if meta:
+            cur = {k: meta.get(k) for k in ("id", "name", "layers", "layer_mm", "height_mm", "bbox")}
+        try:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            with open(os.path.join(STATE_DIR, self.CURRENT_FILE), "w") as f:
+                json.dump(cur, f)
+        except OSError:
+            pass
+        self._set(current_job=cur)
+
+    def load_current_job(self):
+        try:
+            with open(os.path.join(STATE_DIR, self.CURRENT_FILE)) as f:
+                self._set(current_job=json.load(f))
+        except (OSError, ValueError):
+            pass
+
+    def _start_job(self, job_id: str, reply: queue.Queue):
+        """Wie Central: Vorheizen an, Datei per FTPJ16 übertragen, Druck starten (bei Fehler Vorheizen aus)."""
+        from kitctl import ftp
+        from kitd import jobs
+        snap = self.snapshot()
+        try:
+            if snap.get("printing"):
+                raise ValueError("Der Kit druckt bereits")
+            meta = jobs.get(job_id)
+            if meta.get("source") == "demo" and not self.demo:
+                raise ValueError("Der Beispieljob läuft nur im Demo-Modus")
+            data = jobs.data(job_id)
+        except ValueError as e:
+            reply.put({"ok": False, "error": str(e)})
+            return
+        reply.put({"ok": True})
+        tr = {"id": job_id, "name": meta["name"], "sent": 0, "total": len(data), "phase": "Vorheizen einschalten", "error": ""}
+        self._set(transfer=dict(tr))
+        last = [0.0]
+
+        def progress(sent, total):
+            if time.time() - last[0] > 0.25 or sent == total:
+                last[0] = time.time()
+                tr.update(sent=sent, phase="Übertrage Job zum Kit")
+                self._set(transfer=dict(tr))
+
+        warm = False
+        try:
+            with self.usb:
+                if snap.get("state") == P.STATE_POWDER_PREP:
+                    self.kit.command(P.cmd_simple(P.COM_EXIT_POWDERPREPARATION))
+                self.kit.command(P.cmd_warmup(True), strict=True)
+                warm = True
+                ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress)
+                tr["phase"] = "Druck starten"
+                self._set(transfer=dict(tr))
+                self.kit.command(P.cmd_simple(P.COM_STARTPRINT), strict=True)
+            jobs.update(job_id, last_started=time.time(), starts=int(meta.get("starts") or 0) + 1)
+            self.set_current_job(meta)
+            self._set(transfer=None, job_result={"ok": True, "name": meta["name"], "ts": time.time()})
+        except Exception as e:
+            if warm:
+                try:
+                    with self.usb:
+                        self.kit.command(P.cmd_warmup(False))
+                except Exception:
+                    pass
+            msg = f"{tr['phase']}: {str(e) or e.__class__.__name__}"
+            self._set(transfer=None, job_result={"ok": False, "name": meta["name"], "error": msg, "ts": time.time()})
+            if isinstance(e, (OSError,)) and not isinstance(e, ftp.TransferError):
+                raise   # USB weg -> Hauptschleife verbindet neu
 
     def _encode(self, c: dict) -> bytes:
         name = c.get("cmd")
@@ -356,6 +434,22 @@ class Handler(BaseHTTPRequestHandler):
         if self.path.startswith("/api/wifi"):
             from kitd import wifi
             return self._json(wifi.status(rescan="rescan=1" in self.path))
+        if self.path == "/api/jobs":
+            from kitd import jobs
+            if WORKER.demo:
+                jobs.ensure_demo()
+            # Der Beispieljob erscheint nur im Demo-Modus – nie versehentlich auf dem echten Kit drucken
+            lst = [j for j in jobs.listing() if WORKER.demo or j.get("source") != "demo"]
+            return self._json({"jobs": lst, **jobs.settings()})
+        if self.path.startswith("/api/jobs/"):
+            from kitd import jobs
+            parts = self.path.split("/")   # /api/jobs/<id>/layer/<n>
+            try:
+                if len(parts) == 6 and parts[4] == "layer":
+                    return self._json(jobs.layer(parts[3], int(parts[5])))
+            except (ValueError, KeyError) as e:
+                return self._json({"error": str(e)}, HTTPStatus.NOT_FOUND)
+            return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         if self.path == "/api/state":
             st = WORKER.snapshot()
             try:
@@ -434,6 +528,18 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"ok": True})
             except ValueError as e:
                 return self._json({"ok": False, "error": str(e)})
+        if cmd.get("cmd") in ("job_delete", "job_autostart"):
+            from kitd import jobs
+            try:
+                if cmd["cmd"] == "job_delete":
+                    if (WORKER.snapshot().get("transfer") or {}).get("id") == cmd.get("id"):
+                        raise ValueError("Job wird gerade übertragen")
+                    jobs.delete(str(cmd.get("id", "")))
+                else:
+                    jobs.set_autostart(bool(cmd.get("on")))
+                return self._json({"ok": True})
+            except (ValueError, OSError) as e:
+                return self._json({"ok": False, "error": str(e)})
         if cmd.get("cmd") == "demo":
             WORKER.want_demo = bool(cmd.get("on"))
             return self._json({"ok": True})
@@ -445,6 +551,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    WORKER.load_current_job()
     WORKER.start()
     if os.environ.get("KIT_BRIDGE", "1") == "1":
         from kitd.bridge import start_bridge

@@ -39,11 +39,15 @@ Window {
     property var moved: ({ print: 0, reservoir: 0 })
     // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
     readonly property var baseDepth: ({ print: 70, reservoir: 30 })
-    // Schichtdaten: Im Demo-Modus ein Beispieljob. Für echte Jobs folgt das, sobald das Jobformat von Central entschlüsselt ist.
-    // parts: [x %, y %, Breite %, Höhe %, Rundung, Z von mm, Z bis mm]
-    readonly property var demoJob: ({ name: "Scharniergehäuse_v3", layers: 680, layerMm: 0.1,
-        parts: [[12, 14, 30, 40, 12, 0, 68], [50, 18, 36, 25, 12, 0, 30], [54, 56, 18, 28, 50, 10, 55], [12, 62, 30, 20, 12, 40, 68]] })
-    readonly property var job: win.st.demo ? win.demoJob : null
+    // Job, den der Kit druckt (vom Pi gestartet oder von Central über den Pi übertragen)
+    readonly property var job: st.current_job && st.current_job.layers ? st.current_job : null
+    // Job-Bibliothek auf dem Pi
+    property var jobs: []
+    property bool autostart: true
+    function loadJobs() { Api.get("/api/jobs", function (j) { if (j) { win.jobs = j.jobs; win.autostart = j.autostart } }) }
+    property real seenCentral: -1
+    property real seenResult: -1
+    property string seenCurrent: ""
     // Kalibrierung: bearbeitete Skalierung in % (wird erst mit „An Kit senden“ übertragen)
     property var scEdit: ({ x: 0, y: 0, z: 0 })
     property bool scDirty: false
@@ -67,6 +71,24 @@ Window {
         }
         if (!scDirty && st.scaling) scEdit = { x: st.scaling.x, y: st.scaling.y, z: st.scaling.z }
         if (!pDirty && st.target_surface_print !== undefined) pEdit = pKit()
+        // Meldungen zur Job-Bibliothek (beim ersten Zustand nur merken, nicht anzeigen)
+        var cj = st.central_job, jr = st.job_result
+        if (cj && cj.ts !== seenCentral) {
+            if (seenCentral >= 0)
+                toast.show(cj.error ? cj.error
+                           : cj.started === true ? "Job von Central gespeichert und gestartet"
+                           : cj.started === false ? "Job von Central gespeichert – nicht gestartet (Autostart aus)"
+                           : "Job von Central wird gespeichert …")
+            seenCentral = cj.ts; loadJobs()
+        }
+        if (jr && jr.ts !== seenResult) {
+            if (seenResult >= 0) toast.show(jr.ok ? "„" + jr.name + "“ gestartet" : "Start fehlgeschlagen – " + jr.error)
+            seenResult = jr.ts; loadJobs()
+        }
+        if (seenCentral < 0) seenCentral = 0
+        if (seenResult < 0) seenResult = 0
+        // Bauhöhe des laufenden Jobs für Laden & Entladen übernehmen
+        if (job && job.id !== seenCurrent) { seenCurrent = job.id; if (job.height_mm > 0) jobH = Math.round(job.height_mm) }
     }
     // Wie Central (Pulver-Fenster): Beim Öffnen von „Bewegung“ geht der Kit in die Pulvervorbereitung,
     // beim Verlassen wieder heraus. Nur darin lassen sich Platten fahren und Schichten auftragen.
@@ -216,27 +238,52 @@ Window {
         }
         MouseArea { anchors.fill: parent; onClicked: win.page = nb.key }
     }
-    // Draufsicht auf die Bauplatte: Teile in dieser Schicht gefüllt, übrige nur als Umriss
+    // Draufsicht einer Schicht aus der Jobdatei: Kontur hell, Füllung gedämpft (Linien vom Pi in mm)
     component LayerView: Rectangle {
         id: lv
-        property var parts: []
-        property real layerZ: 0
-        radius: 6; color: "#0e0f11"; border.color: "#c9ced6"; border.width: 1.5
-        Image { anchors.fill: parent; anchors.margins: 2; source: "assets/powder.png"; fillMode: Image.Tile; opacity: 0.5; smooth: false }
-        Repeater {
-            model: lv.parts
-            Rectangle {
-                readonly property bool inLayer: lv.layerZ >= modelData[5] && lv.layerZ <= modelData[6]
-                x: 6 + modelData[0] / 100 * (lv.width - 12); y: 6 + modelData[1] / 100 * (lv.height - 12)
-                width: modelData[2] / 100 * (lv.width - 12); height: modelData[3] / 100 * (lv.height - 12)
-                radius: Math.min(width, height) / 2 * modelData[4] / 50
-                color: inLayer ? "#4d2fa6cc" : "transparent"
-                border.color: inLayer ? "#5cc3e3" : "#33ffffff"; border.width: inLayer ? 1.5 : 1
-                Behavior on color { ColorAnimation { duration: 200 } }
+        property var job: null          // { id, layers, bbox }
+        property int layerNo: 0
+        property var ld: null
+        property string hint: "Kein Job"
+        radius: 14; color: "#0e0f11"; border.color: "#2a2d33"; border.width: 1
+        function load() {
+            if (!job || !job.layers || layerNo < 1) { ld = null; cv.requestPaint(); return }
+            var want = job.id + "/" + layerNo
+            Api.get("/api/jobs/" + job.id + "/layer/" + layerNo, function (j) {
+                if (lv.job && lv.job.id + "/" + lv.layerNo === want) { lv.ld = j; cv.requestPaint() }
+            })
+        }
+        Timer { id: lvT; interval: 90; onTriggered: lv.load() }
+        onJobChanged: lvT.restart()
+        onLayerNoChanged: lvT.restart()
+        Canvas {
+            id: cv
+            anchors.fill: parent; anchors.margins: 8
+            onPaint: {
+                var g = getContext("2d"); g.reset()
+                var d = lv.ld, b = lv.job ? lv.job.bbox : null
+                if (!d || !b) return
+                // Ausschnitt: Bauraum 130 mm um die Mitte des Jobs, größer falls nötig
+                var span = Math.max(130, b[2] - b[0] + 10, b[3] - b[1] + 10)
+                var cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2
+                var k = Math.min(width, height) / span, ox = width / 2, oy = height / 2
+                function line(a, col, w) {
+                    g.strokeStyle = col; g.lineWidth = w; g.beginPath()
+                    for (var i = 0; i + 3 < a.length; i += 4) {
+                        g.moveTo(ox + (a[i] - cx) * k, oy - (a[i + 1] - cy) * k)
+                        g.lineTo(ox + (a[i + 2] - cx) * k, oy - (a[i + 3] - cy) * k)
+                    }
+                    g.stroke()
+                }
+                // Bauplatte 110 mm (bevorzugter Bereich des Kits) als Orientierung
+                g.strokeStyle = "#22ffffff"; g.lineWidth = 1
+                var p = 110 * k; g.strokeRect(ox - p / 2, oy - p / 2, p, p)
+                line(d.infill, "#7a2fa6cc", Math.max(0.6, 0.35 * k))
+                line(d.contour, "#8fdcf2", 1.4)
             }
         }
-        Text { visible: !lv.parts || lv.parts.length === 0; anchors.centerIn: parent; width: parent.width - 20; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
-            text: "Schichtdaten folgen"; color: win.cMut; font.family: win.fontName; font.pixelSize: 11 }
+        Text { visible: !lv.ld; anchors.centerIn: parent; width: parent.width - 24; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+            text: lv.hint; color: win.cMut; font.family: win.fontName; font.pixelSize: 12 }
     }
     // Temperaturring: Ist-Wert im Verhältnis zum Sollwert
     component HeatRing: Canvas {
@@ -404,14 +451,15 @@ Window {
                         LayerView {
                             id: curLayer
                             x: 10; y: 15; width: parent.height - 30; height: width
-                            parts: win.job ? win.job.parts : []
-                            layerZ: win.job && win.st.printing ? win.st.layer * win.job.layerMm : 0
+                            job: win.job
+                            layerNo: win.job ? (win.st.printing ? Math.max(1, Math.min(win.job.layers, win.st.layer)) : win.job.layers) : 0
+                            hint: "Schichtvorschau erscheint, sobald ein Job über den Pi läuft"
                         }
                         Column {
                             x: curLayer.width + 22; y: 10; width: parent.width - curLayer.width - 32; spacing: 2
                             Lbl { text: "Aktuelle Schicht" }
                             Text { text: win.st.printing ? win.st.layer : "—"; color: win.cInk; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.Light }
-                            Lbl { text: win.job && win.st.printing ? "von " + win.job.layers + " · Z " + Api.de(win.st.layer * win.job.layerMm) + " mm" : " " ; font.pixelSize: 11 }
+                            Lbl { text: win.job && win.st.printing ? "von " + win.job.layers + " · Z " + Api.de(win.st.layer * win.job.layer_mm) + " mm" : " " ; font.pixelSize: 11 }
                             Item { width: 1; height: 6 }
                             Lbl { text: "Verstrichen" }
                             Text { text: win.st.printing ? Api.hms(win.st.elapsed_s) : "—"; color: win.cInk; font.family: win.fontName; font.pixelSize: 16 }
@@ -641,32 +689,51 @@ Window {
             }
 
             // ======= Jobs =======
+            // Bibliothek auf dem Pi: Jobs von Central werden beim Übertragen mitgespeichert und lassen sich hier erneut starten
             Item {
                 id: jobsPage
                 opacity: win.page === "jobs" ? 1 : 0; visible: opacity > 0
                 Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
-                property int pick: 0          // gewählte Schicht in der Vorschau
-                readonly property int layers: win.job ? win.job.layers : 0
+                property string selId: ""
+                readonly property var sel: {
+                    for (var i = 0; i < win.jobs.length; i++) if (win.jobs[i].id === selId) return win.jobs[i]
+                    return win.jobs.length ? win.jobs[0] : null
+                }
+                readonly property int layers: sel && sel.layers ? sel.layers : 0
+                readonly property var tr: win.st.transfer || null
+                property int pick: 1
+                onSelChanged: {
+                    pick = Math.max(1, Math.round(layers * 0.5))
+                    if (sel && sel.height_mm > 0 && !win.st.printing) win.jobH = Math.round(sel.height_mm)   // für Pulver laden / Entladen
+                }
+                onVisibleChanged: if (visible) win.loadJobs()
+                function fmtDate(t) { var d = new Date(t * 1000); return ("0" + d.getDate()).slice(-2) + "." + ("0" + (d.getMonth() + 1)).slice(-2) + ". " + d.getHours() + ":" + ("0" + d.getMinutes()).slice(-2) }
+
                 Panel {
                     id: prevPanel
                     width: parent.height; height: parent.height
                     LayerView {
                         id: prevView
-                        height: parent.height - 28 - 56; width: height; x: (parent.width - width) / 2; y: 14
-                        parts: win.job ? win.job.parts : []
-                        layerZ: win.job ? jobsPage.pick * win.job.layerMm : 0
+                        x: 12; y: 12; width: parent.width - 24; height: parent.height - 24 - 48
+                        job: jobsPage.sel
+                        layerNo: jobsPage.pick
+                        hint: !jobsPage.sel ? "Noch keine Jobs. Druckjobs, die Central über den Pi schickt, landen automatisch hier."
+                              : jobsPage.sel.error ? "Keine Vorschau: " + jobsPage.sel.error
+                              : !jobsPage.sel.layers ? "Job wird ausgewertet …" : "Lade Schicht …"
                     }
+                    Text { x: 22; y: 20; visible: jobsPage.layers > 0; color: win.cMut; font.family: win.fontName; font.pixelSize: 12
+                        text: "Schicht " + jobsPage.pick + " / " + jobsPage.layers + " · Z " + Api.de(jobsPage.pick * (jobsPage.sel ? jobsPage.sel.layer_mm : 0), 2) + " mm" }
                     // Schichtregler
                     Item {
                         id: slider
-                        x: 14; y: parent.height - 14 - 40; width: parent.width - 28; height: 40
+                        x: 14; y: parent.height - 12 - 40; width: parent.width - 28; height: 40
                         opacity: jobsPage.layers > 0 ? 1 : 0.3
                         Rectangle { y: 18; width: parent.width; height: 4; radius: 2; color: "#2a2a30" }
                         Rectangle { y: 18; width: knob.x + 14; height: 4; radius: 2; color: win.cBlue }
                         Rectangle {
                             id: knob; y: 6; width: 28; height: 28; radius: 14; color: "#f2f3f5"
-                            x: jobsPage.layers > 0 ? (jobsPage.pick - 1) / Math.max(1, jobsPage.layers - 1) * (slider.width - 28) : 0
+                            x: jobsPage.layers > 1 ? (jobsPage.pick - 1) / (jobsPage.layers - 1) * (slider.width - 28) : 0
                         }
                         MouseArea {
                             anchors.fill: parent; enabled: jobsPage.layers > 0
@@ -677,28 +744,63 @@ Window {
                     }
                 }
                 Panel {
+                    id: listPanel
                     x: prevPanel.width + 8; width: parent.width - prevPanel.width - 8; height: parent.height
-                    Column {
-                        anchors.fill: parent; anchors.margins: 16; spacing: 6
-                        Lbl { text: win.job ? "Job" : "Job auf der SD-Karte im Kit" }
-                        Val { width: parent.width; elide: Text.ElideRight; font.pixelSize: 22; text: win.job ? win.job.name : "Letzter Job von Central" }
-                        Item { width: 1; height: 8 }
-                        Lbl { text: "Schicht" }
-                        Row { spacing: 4
-                            Text { text: jobsPage.layers > 0 ? jobsPage.pick : "—"; color: win.cInk; font.family: win.fontName; font.pixelSize: 44; font.weight: Font.Light; font.letterSpacing: -1.6 }
-                            Text { y: 24; text: jobsPage.layers > 0 ? "/ " + jobsPage.layers : ""; color: win.cMut; font.family: win.fontName; font.pixelSize: 16 } }
-                        Lbl { text: win.job ? "Z " + Api.de(jobsPage.pick * win.job.layerMm) + " mm · Bauhöhe " + Api.de(jobsPage.layers * win.job.layerMm) + " mm" : "" }
-                        Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 12; visible: !win.job
-                            text: "Die Schichtvorschau braucht die Geometrie des Jobs. Das Jobformat von Central ist noch nicht entschlüsselt – bis dahin gibt es sie im Demo-Modus mit einem Beispieljob." }
-                        Item { width: 1; height: 8 }
-                        KButton { width: parent.width; height: 48; text: "Bauhöhe für Laden & Entladen übernehmen"; size: 13; visible: !!win.job
-                            onClicked: { win.jobH = Math.round(jobsPage.layers * win.job.layerMm); toast.show("Bauhöhe " + win.jobH + " mm übernommen") } }
+                    Lbl { x: 16; y: 14; text: "Jobs auf dem Pi" }
+                    ListView {
+                        id: jobList
+                        x: 8; y: 34; width: parent.width - 16; height: parent.height - 34 - detail.height - 12
+                        clip: true; spacing: 4; model: win.jobs
+                        delegate: Rectangle {
+                            readonly property bool act: !!jobsPage.sel && jobsPage.sel.id === modelData.id
+                            width: jobList.width; height: 50; radius: 12
+                            color: act ? "#1d3a44" : "#1c1c20"
+                            border.color: act ? win.cBlue2 : "transparent"; border.width: 1
+                            Column { x: 12; y: 7; width: parent.width - 24; spacing: 2
+                                Text { width: parent.width; elide: Text.ElideRight; text: modelData.name; color: win.cInk; font.family: win.fontName; font.pixelSize: 14 }
+                                Text { width: parent.width; elide: Text.ElideRight; color: win.cMut; font.family: win.fontName; font.pixelSize: 11
+                                    text: (modelData.layers ? modelData.layers + " Schichten · " + Api.de(modelData.height_mm) + " mm" : (modelData.error ? "ohne Vorschau" : "wird ausgewertet …"))
+                                          + (modelData.starts ? " · " + modelData.starts + "× gedruckt" : "") }
+                            }
+                            MouseArea { anchors.fill: parent; onClicked: jobsPage.selId = modelData.id }
+                        }
+                        Text { visible: win.jobs.length === 0; anchors.centerIn: parent; width: parent.width - 20; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+                            text: "Leer"; color: win.cMut; font.family: win.fontName; font.pixelSize: 12 }
                     }
-                    KButton { x: 16; y: parent.height - 16 - 52; width: parent.width - 32; kind: "pri"; text: "Druck starten"; ok: !win.st.printing
-                        onClicked: win.ask("Druck starten?", "Pulver geladen, Haube geschlossen, Kammer vorgeheizt?", function () { win.send({ cmd: "start_print" }) }) }
+                    Column {
+                        id: detail
+                        x: 16; y: parent.height - height - 14; width: parent.width - 32; spacing: 8
+                        Item { width: parent.width; height: 32
+                            Text { anchors.verticalCenter: parent.verticalCenter; width: parent.width - 116; wrapMode: Text.WordWrap; maximumLineCount: 2
+                                text: "Jobs von Central sofort drucken"; color: win.cInk; font.family: win.fontName; font.pixelSize: 12 }
+                            Seg { anchors.right: parent.right; width: 108; height: 32; items: [["Aus", false], ["An", true]]; value: win.autostart
+                                onPicked: function (v) {
+                                    if (v === win.autostart) return
+                                    win.autostart = v
+                                    win.send({ cmd: "job_autostart", on: v }, function (ok) {
+                                        win.loadJobs()
+                                        if (ok) toast.show(v ? "Jobs von Central starten sofort (wie bisher)" : "Jobs von Central werden nur gespeichert – Start hier am Display")
+                                    })
+                                } }
+                        }
+                        // Übertragung zum Kit läuft
+                        Column { width: parent.width; spacing: 6; visible: !!jobsPage.tr
+                            Lbl { width: parent.width; text: jobsPage.tr ? jobsPage.tr.phase + (jobsPage.tr.total ? " · " + Math.floor(100 * jobsPage.tr.sent / jobsPage.tr.total) + " %" : "") : "" }
+                            Rectangle { width: parent.width; height: 6; radius: 3; color: "#2a2a30"
+                                Rectangle { height: parent.height; radius: 3; color: win.cBlue; width: jobsPage.tr && jobsPage.tr.total ? parent.width * jobsPage.tr.sent / jobsPage.tr.total : 0 } }
+                        }
+                        Row { width: parent.width; spacing: 8; visible: !jobsPage.tr
+                            KButton { width: 52; height: 52; text: "✕"; ok: !!jobsPage.sel
+                                onClicked: win.ask("Job löschen?", "„" + jobsPage.sel.name + "“ wird vom Pi gelöscht.", function () {
+                                    win.send({ cmd: "job_delete", id: jobsPage.sel.id }, function () { jobsPage.selId = ""; win.loadJobs() }) }) }
+                            KButton { width: parent.width - 60; height: 52; kind: "pri"; text: "Drucken"
+                                ok: !!jobsPage.sel && win.st.connected && !win.st.printing
+                                onClicked: win.ask("„" + jobsPage.sel.name + "“ drucken?",
+                                    "Pulver geladen" + (jobsPage.sel.height_mm ? " (Vorrat mind. " + Math.round(jobsPage.sel.height_mm + 5) + " mm)" : "") + ", Haube geschlossen? Der Pi schaltet das Vorheizen ein, überträgt den Job zum Kit und startet ihn.",
+                                    function () { win.send({ cmd: "job_start", id: jobsPage.sel.id }) }) }
+                        }
+                    }
                 }
-                Component.onCompleted: pick = Math.round(layers * 0.6)
-                onLayersChanged: pick = Math.max(1, Math.round(layers * 0.6))
             }
 
             // ======= Kalibrieren =======
