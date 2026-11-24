@@ -8,7 +8,10 @@ Aufbau:
     73 GosContour  –                                      – folgende Vektoren sind Kontur
      1 Go          x, y (int32 µm)                        – Laser an, Linie zum Punkt
      2 Jump        x, y (int32 µm)                        – Laser aus, Sprung zum Punkt
-Leere Schichten schreibt Central nicht; Z zählt trotzdem weiter.
+Leere Schichten (PrintJobKit.writeOut): bis zu getMaxNumEmptyLayers() (20) leere Schichten am Stück
+schreibt Central als MakeLayer ohne Vektoren; längere Lücken werden übersprungen. Z ist immer
+(Nummer der geschriebenen Schicht + 1) * Schichtdicke, die Schichtnummer zählt ab 0.
+Koordinaten: mm * 1000, Bauraum um den Ursprung zentriert (Central clippt auf ±55 mm).
 """
 from __future__ import annotations
 
@@ -98,7 +101,36 @@ def layer(data: bytes, idx: dict, n: int, max_segments: int = 6000) -> dict:
             "infill": flat(infill[::step]) if budget else [], "thinned": step > 1}
 
 
-# -- Erzeugen (Demo-Job und Tests) -----------------------------------------------
+# -- Erzeugen ---------------------------------------------------------------------
+def build_central(layers, layer_mm: float, max_empty: int = 20) -> bytes:
+    """Wie PrintJobKit.writeOut. layers: je Schicht (Konturen, Schraffur); Konturen sind geschlossene
+    Polygone [(x, y), ...] in mm, Schraffur Strecken (x0, y0, x1, y1). Konturen vor Füllung."""
+    um = lambda v: int(round(v * 1000))
+    out = bytearray(HEADER)
+    written = empty = 0
+    for contours, hatches in layers:
+        if not contours and not hatches:
+            empty += 1
+            if empty > max_empty:
+                continue
+        else:
+            empty = 0
+        out += struct.pack("<Hii", MAKELAYER, um((written + 1) * layer_mm), written)
+        written += 1
+        if contours:
+            out += struct.pack("<H", CONTOUR)
+            for poly in contours:
+                out += struct.pack("<Hii", JUMP, um(poly[0][0]), um(poly[0][1]))
+                for x, y in list(poly[1:]) + [poly[0]]:
+                    out += struct.pack("<Hii", GO, um(x), um(y))
+        if hatches:
+            out += struct.pack("<H", INFILL)
+            for x0, y0, x1, y1 in hatches:
+                out += struct.pack("<HiiHii", JUMP, um(x0), um(y0), GO, um(x1), um(y1))
+    return bytes(out)
+
+
+# -- Demo-Job und Tests -------------------------------------------------------------
 def build(layers: list[list[tuple[str, list[tuple[float, float]]]]], layer_mm: float = 0.1) -> bytes:
     """layers: je Schicht eine Liste (Art 'contour'/'infill', Polylinie in mm)."""
     um = lambda v: int(round(v * 1000))

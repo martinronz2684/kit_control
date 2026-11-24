@@ -133,6 +133,7 @@ class StartFromPiTest(unittest.TestCase):
         w = S.KitWorker()
         w.kit = Kit(DemoTransport())
         w.kit.connect()
+        w.demo = True   # Quelle "demo" darf nur im Demo-Modus starten
         meta = jobs.save(pjob.build([[("contour", [(0, 0), (5, 5)])]] * 5), "demo", "Test")
         q = queue.Queue()
         w._start_job(meta["id"], q)
@@ -141,6 +142,21 @@ class StartFromPiTest(unittest.TestCase):
         self.assertTrue(w.kit.t.printing)
         self.assertEqual(w.kit.t.layers, 5)
         self.assertEqual(jobs.get(meta["id"])["starts"], 1)
+
+    def test_start_job_with_profile(self):
+        import kitd.server as S
+        w = S.KitWorker()
+        w.kit = Kit(DemoTransport())
+        w.kit.connect()
+        meta = jobs.save(pjob.build([[("contour", [(0, 0), (5, 5)])]] * 3), "pc", "Mit Profil")
+        prof = {"name": "PA12", "temps": {"surface_warmup": 150, "chamber_warmup": 140, "surface_print": 170,
+                                          "chamber_print": 140}, "lamps": {"left": 80, "right": 100, "front": 100}}
+        jobs.update(meta["id"], profile=prof)
+        q = queue.Queue()
+        w._start_job(meta["id"], q)
+        self.assertTrue(q.get_nowait()["ok"])
+        self.assertTrue(w.snapshot()["job_result"]["ok"], w.snapshot())
+        self.assertEqual(w.snapshot()["lamps"]["left"], 80)
 
 
 if __name__ == "__main__":

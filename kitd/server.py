@@ -3,7 +3,12 @@
     GET  /                 Oberfläche (ui/index.html)
     GET  /api/state        aktueller Zustand als JSON
     GET  /api/events       Server-Sent Events, ein Zustand pro Sekunde
-    POST /api/cmd          {"cmd": "...", ...} -> {"ok": true} / {"ok": false, "error": "..."}
+    POST /api/cmd          {"cmd": "...", ...} -> {"ok": true} / {"ok": false, "error": "..."}  (nur am Gerät)
+    POST /api/jobs         Druckdatei von der PC-App (Kit Control Desktop), optional sofort starten
+
+Lesen (Zustand, Jobs, Schichtvorschau) geht aus dem Netz, damit die PC-App den Druck live verfolgen kann.
+Bedienbefehle bleiben am Gerät (KIT_REMOTE=1 erlaubt sie aus dem Netz). Jobs annehmen: KIT_NET_JOBS=0
+schaltet es ab, KIT_NET_START=0 verbietet das Starten aus dem Netz.
 
 Nur Python-Standardbibliothek plus pyusb. KIT_DEMO=1 simuliert einen druckenden Kit.
 """
@@ -30,6 +35,9 @@ MOVE_SIGN = float(os.environ.get("KIT_MOVE_SIGN", "-1"))
 
 
 STATE_DIR = os.environ.get("KIT_STATE_DIR", "/var/lib/kitd")
+NET_JOBS = os.environ.get("KIT_NET_JOBS", "1") == "1"
+NET_START = os.environ.get("KIT_NET_START", "1") == "1"
+MAX_UPLOAD = int(os.environ.get("KIT_MAX_UPLOAD_MB", "1024")) * 1024 * 1024
 IGNORED_WARNINGS = {int(x) for x in os.environ.get("KIT_IGNORE_WARNINGS", "81").replace(" ", "").split(",") if x}
 
 
@@ -328,6 +336,12 @@ class KitWorker(threading.Thread):
             with self.usb:
                 if snap.get("state") == P.STATE_POWDER_PREP:
                     self.kit.command(P.cmd_simple(P.COM_EXIT_POWDERPREPARATION))
+                prof = meta.get("profile")
+                if prof:
+                    tr["phase"] = "Pulverprofil einstellen"
+                    self._set(transfer=dict(tr))
+                    self._apply_profile(prof)
+                tr["phase"] = "Vorheizen einschalten"
                 self.kit.command(P.cmd_warmup(True), strict=True)
                 warm = True
                 ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress)
@@ -348,6 +362,41 @@ class KitWorker(threading.Thread):
             self._set(transfer=None, job_result={"ok": False, "name": meta["name"], "error": msg, "ts": time.time()})
             if isinstance(e, (OSError,)) and not isinstance(e, ftp.TransferError):
                 raise   # USB weg -> Hauptschleife verbindet neu
+
+    def _apply_profile(self, prof: dict):
+        """Sollwerte, Lasergeschwindigkeit und Heizstrahler aus dem Pulverprofil des Jobs (falls angegeben)."""
+        t = prof.get("temps")
+        if t:
+            vals = [float(t[k]) for k in ("surface_warmup", "chamber_warmup", "surface_print", "chamber_print")]
+            for v, lim in zip(vals, (P.MAX_SURFACE, P.MAX_CHAMBER, P.MAX_SURFACE, P.MAX_CHAMBER)):
+                if not 0 <= v <= lim:
+                    raise ValueError(f"Profil: Temperatur außerhalb 0–{lim:g} °C")
+            self.kit.command(P.cmd_targets(*vals), strict=True)
+        for key, which in (("laser_speed_mm_s", "general"), ("contour_speed_mm_s", "contour")):
+            if prof.get(key) is not None:
+                v = float(prof[key])
+                if not P.MIN_LASER <= v <= P.MAX_LASER:
+                    raise ValueError("Profil: Lasergeschwindigkeit außerhalb des erlaubten Bereichs")
+                self.kit.command(P.cmd_laser_speed(which, v), strict=True)
+        for w, pct in (prof.get("lamps") or {}).items():
+            if w in ("left", "right", "front") and 0 <= float(pct) <= 100:
+                self.kit.command(P.cmd_lamp(w, float(pct)), strict=True)
+                self._remember_lamp(w, float(pct))
+
+    def ready_for_net_start(self) -> str:
+        """Leer, wenn ein Job aus dem Netz gestartet werden darf, sonst der Grund."""
+        s = self.snapshot()
+        if not s.get("connected"):
+            return "Kein Kit verbunden"
+        if s.get("printing"):
+            return "Der Kit druckt bereits"
+        if s.get("transfer"):
+            return "Es wird gerade ein Job übertragen"
+        if s.get("errors"):
+            return "Kit meldet Fehler: " + ", ".join(str(e.get("text", e)) if isinstance(e, dict) else str(e) for e in s["errors"])
+        if s.get("waiting_for_sd"):
+            return "Kit wartet auf SD-Karte"
+        return ""
 
     def _encode(self, c: dict) -> bytes:
         name = c.get("cmd")
@@ -485,7 +534,62 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _upload_job(self):
+        """Druckdatei von der PC-App annehmen; mit X-Job-Start: 1 gleich starten, wenn der Kit bereit ist."""
+        import base64
+        import urllib.parse
+        from kitd import jobs
+        if not NET_JOBS:
+            return self._json({"ok": False, "error": "Jobs aus dem Netz sind am Pi abgeschaltet"}, HTTPStatus.FORBIDDEN)
+        try:
+            from kitd.bridge import _allowed
+            if not _allowed(self.client_address[0]):
+                return self._json({"ok": False, "error": "Gerät nicht erlaubt"}, HTTPStatus.FORBIDDEN)
+        except ImportError:
+            pass
+        try:
+            n = int(self.headers.get("Content-Length", "0"))
+        except ValueError:
+            n = 0
+        if n <= 0 or n > MAX_UPLOAD:
+            return self._json({"ok": False, "error": "Datei fehlt oder ist zu groß"}, HTTPStatus.BAD_REQUEST)
+        buf = bytearray()
+        while len(buf) < n:
+            chunk = self.rfile.read(min(1 << 20, n - len(buf)))
+            if not chunk:
+                return self._json({"ok": False, "error": "Übertragung abgebrochen"}, HTTPStatus.BAD_REQUEST)
+            buf += chunk
+        name = urllib.parse.unquote(self.headers.get("X-Job-Name", ""))[:80]
+        profile = None
+        if self.headers.get("X-Job-Profile"):
+            try:
+                profile = json.loads(base64.b64decode(self.headers["X-Job-Profile"]))
+                if not isinstance(profile, dict):
+                    raise ValueError
+            except (ValueError, json.JSONDecodeError):
+                return self._json({"ok": False, "error": "Profil unlesbar"}, HTTPStatus.BAD_REQUEST)
+        meta = jobs.save(bytes(buf), "pc", name)
+        if profile:
+            keep = {k: profile.get(k) for k in ("name", "temps", "laser_speed_mm_s", "contour_speed_mm_s", "lamps")}
+            jobs.update(meta["id"], profile=keep)
+            meta["profile"] = keep
+        if meta.get("error"):
+            return self._json({"ok": False, "job": meta, "started": False, "error": "Datei ungültig: " + meta["error"]})
+        res = {"ok": True, "job": meta, "started": False}
+        if self.headers.get("X-Job-Start") == "1":
+            why = "Starten aus dem Netz ist am Pi abgeschaltet" if not NET_START else WORKER.ready_for_net_start()
+            if why:
+                res["start_error"] = why + " – Job liegt in der Bibliothek"
+            else:
+                r = WORKER.submit({"cmd": "job_start", "id": meta["id"]})
+                res["started"] = bool(r.get("ok"))
+                if not r.get("ok"):
+                    res["start_error"] = r.get("error", "Start fehlgeschlagen")
+        return self._json(res)
+
     def do_POST(self):
+        if self.path == "/api/jobs":
+            return self._upload_job()
         if self.path != "/api/cmd":
             return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         if self.client_address[0] not in ("127.0.0.1", "::1") and os.environ.get("KIT_REMOTE") != "1":
@@ -556,7 +660,7 @@ def main():
     if os.environ.get("KIT_BRIDGE", "1") == "1":
         from kitd.bridge import start_bridge
         start_bridge(WORKER)
-    host = os.environ.get("KIT_HOST", "127.0.0.1")
+    host = os.environ.get("KIT_HOST", "0.0.0.0")   # Lesen aus dem Netz für die PC-App; Bedienung bleibt lokal
     ThreadingHTTPServer((host, PORT), Handler).serve_forever()
 
 

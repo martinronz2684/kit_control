@@ -251,6 +251,8 @@ def _discovery():
             msg, addr = s.recvfrom(256)
             if msg.strip() == b"KITCONTROL?" and _allowed(addr[0]):
                 s.sendto(f"KITCONTROL {PORT} {name}".encode(), addr)
+            elif msg.strip() == b"KITCONTROL-HTTP?" and _allowed(addr[0]):   # PC-App (Kit Control Desktop)
+                s.sendto(f"KITCONTROL-HTTP {os.environ.get('KIT_PORT', '8080')} {name}".encode(), addr)
         except OSError:
             time.sleep(1)
 
