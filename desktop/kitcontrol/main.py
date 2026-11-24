@@ -83,7 +83,7 @@ def main() -> int:
             import re
             bad = [p for p in problems if re.search(
                 r"is not a type|Cannot assign|Invalid property|Expected token|Syntax error|failed to load|"
-                r"Non-existent|is not installed|ReferenceError|TypeError|is not defined|Unable to assign", p)]
+                r"Non-existent|is not installed|ReferenceError|TypeError|is not defined|Unable to assign|without a camera", p)]
             for p in problems:
                 print(("FEHLER " if p in bad else "Hinweis ") + p, file=sys.stderr)
             app.exit(1 if bad else 0)

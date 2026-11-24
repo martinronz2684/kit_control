@@ -95,6 +95,7 @@ Item {
     View3D {
         id: v3
         anchors.fill: parent
+        camera: cam                     // ohne feste Kamera liefern pick()/mapTo3DScene() nichts -> kein Anklicken/Ziehen
         environment: SceneEnvironment {
             clearColor: "#13161a"
             backgroundMode: SceneEnvironment.Color
