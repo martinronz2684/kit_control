@@ -53,6 +53,7 @@ Item {
             }
             Text {
                 anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.margins: 14
+                width: parent.width * 0.5; elide: Text.ElideRight
                 text: "Bauteil ziehen: verschieben · daneben ziehen: drehen · rechte Maustaste: schieben · Mausrad: zoomen"
                 color: "#59606b"; font.pixelSize: 11
             }

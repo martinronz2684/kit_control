@@ -48,6 +48,7 @@ jobs:
         shell: bash
         env:
           QT_QPA_PLATFORM: offscreen
+          QT_QPA_FONTDIR: C:\Windows\Fonts
           KIT_UPDATE_REPO: invalid/none
         run: |
           cd desktop

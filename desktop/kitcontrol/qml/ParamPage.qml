@@ -196,22 +196,23 @@ Item {
                             KField { id: shrinkZ; onUserChanged: pp.apply(); Layout.fillWidth: true; text: pp.prof.shrink_pct ? String(pp.prof.shrink_pct.z) : "0" }
                         }
                     }
-                    RowLayout {
+                    Flow {
+                        Layout.fillWidth: true
                         spacing: 24
-                        RowLayout {
+                        Row {
                             spacing: 8
                             Switch { id: contourFirst; onToggled: pp.apply(); checked: pp.prof.contour_first !== false }
-                            Text { text: "Kontur vor Füllung"; color: win.cInk; font.pixelSize: 13 }
+                            Text { text: "Kontur vor Füllung"; color: win.cInk; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         }
-                        RowLayout {
+                        Row {
                             spacing: 8
                             Switch { id: optPath; onToggled: pp.apply(); checked: pp.prof.optimize_path === true }
-                            Text { text: "Laserwege optimieren"; color: win.cInk; font.pixelSize: 13 }
+                            Text { text: "Laserwege optimieren"; color: win.cInk; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         }
-                        RowLayout {
+                        Row {
                             spacing: 8
                             Switch { id: keepThin; onToggled: pp.apply(); checked: pp.prof.keep_thin !== false }
-                            Text { text: "Dünne Wände erhalten"; color: win.cInk; font.pixelSize: 13 }
+                            Text { text: "Dünne Wände erhalten"; color: win.cInk; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         }
                     }
 
@@ -263,9 +264,9 @@ Item {
                         Text {
                             text: pp.ro ? "Änderungen legen automatisch ein eigenes Profil an." : "Änderungen werden sofort gespeichert."
                             color: win.cMut; font.pixelSize: 12
+                            Layout.fillWidth: true; elide: Text.ElideRight
                         }
                         KButton { text: "Als neues Profil speichern"; onClicked: pp.save(true, false) }
-                        Item { Layout.fillWidth: true }
                         KButton {
                             visible: !pp.ro
                             text: "Löschen"; kind: "ghost"

@@ -81,7 +81,7 @@ Item {
                     Text {
                         text: "Schicht " + Math.round(slider.value) + " / " + Math.round(slider.to) + (view.layerData.z !== undefined ? "  ·  z " + view.layerData.z.toFixed(2) + " mm" : "")
                         color: win.cInk; font.pixelSize: 13
-                        Layout.preferredWidth: 220
+                        Layout.preferredWidth: 230; elide: Text.ElideRight
                     }
                 }
             }

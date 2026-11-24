@@ -1,9 +1,12 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 
 // Häkchen im Kit-Control-Stil: Kästchen links, Text rechts daneben
 CheckBox {
     id: kc
+    Layout.fillWidth: true
+    Layout.minimumWidth: 60
     spacing: 8
     padding: 2
     font.pixelSize: 13
@@ -28,5 +31,6 @@ CheckBox {
         opacity: kc.enabled ? 1 : 0.4
         leftPadding: kc.indicator.width + kc.spacing
         verticalAlignment: Text.AlignVCenter
+        elide: Text.ElideRight
     }
 }
