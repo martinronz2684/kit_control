@@ -147,6 +147,8 @@ Item {
                     id: selFlick
                     anchors.fill: parent; anchors.margins: 14
                     contentHeight: selCol.implicitHeight
+                    contentWidth: width
+                    flickableDirection: Flickable.VerticalFlick
                     boundsBehavior: Flickable.StopAtBounds
                     clip: true
                     ScrollBar.vertical: ScrollBar { policy: selFlick.contentHeight > selFlick.height ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded }
@@ -168,7 +170,8 @@ Item {
                         NumField { Layout.fillWidth: true; label: "Kippen (Nicken)"; unit: "°"; value: pg.cur ? String(pg.cur.rot_y) : ""; onCommitted: (v) => backend.setPart(pg.sel, "rot_y", v) }
                         NumField { Layout.fillWidth: true; label: "Höhe über Platte"; unit: "mm"; value: pg.cur ? pg.cur.z.toFixed(1) : ""; onCommitted: (v) => backend.setPart(pg.sel, "z_lift", v) }
                         Text {
-                            Layout.fillWidth: true; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 8
+                            Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 8
+                            elide: Text.ElideRight
                             text: pg.cur ? pg.cur.size[0].toFixed(1) + " × " + pg.cur.size[1].toFixed(1) + " × " + pg.cur.size[2].toFixed(1) + " mm" : ""
                             color: win.cMut; font.pixelSize: 12
                         }
@@ -176,17 +179,19 @@ Item {
                     RowLayout {
                         enabled: pg.cur !== null
                         spacing: 8
-                        KButton { text: "90° drehen"; Layout.fillWidth: true; onClicked: backend.setPart(pg.sel, "rot_z", (pg.cur.rot_z + 90) % 360) }
-                        KButton { text: "Auf Fläche legen"; Layout.fillWidth: true; onClicked: backend.layFlat(pg.sel) }
+                        KButton { text: "90° drehen"; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.setPart(pg.sel, "rot_z", (pg.cur.rot_z + 90) % 360) }
+                        KButton { text: "Auf Fläche legen"; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.layFlat(pg.sel) }
                     }
                     RowLayout {
                         enabled: pg.cur !== null
                         spacing: 14
                         KCheck {
+                            Layout.preferredWidth: 1
                             id: lockPos
                             checked: pg.cur ? pg.cur.lock_pos : false
                             onToggled: backend.setPart(pg.sel, "lock_pos", checked); text: "Position sperren" }
                         KCheck {
+                            Layout.preferredWidth: 1
                             id: lockOri
                             checked: pg.cur ? pg.cur.lock_orient : false
                             onToggled: backend.setPart(pg.sel, "lock_orient", checked); text: "Lage sperren" }
@@ -194,8 +199,8 @@ Item {
                     RowLayout {
                         enabled: pg.cur !== null
                         spacing: 8
-                        KButton { text: "Duplizieren"; Layout.fillWidth: true; onClicked: backend.duplicatePart(pg.sel) }
-                        KButton { text: "Entfernen"; kind: "ghost"; Layout.fillWidth: true; onClicked: backend.removePart(pg.sel) }
+                        KButton { text: "Duplizieren"; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.duplicatePart(pg.sel) }
+                        KButton { text: "Entfernen"; kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.preferredWidth: 1; onClicked: backend.removePart(pg.sel) }
                     }
                     Repeater {
                         model: backend.notes
@@ -217,8 +222,8 @@ Item {
                     }
                     RowLayout {
                         spacing: 8
-                        KButton { text: "Alles entfernen"; kind: "ghost"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: confirm.ask("Alle Bauteile aus dem Bauraum entfernen?", function() { backend.clearParts() }) }
-                        KButton { text: "STL exportieren"; kind: "ghost"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: exportStl.open() }
+                        KButton { text: "Alles entfernen"; kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: pg.parts.length > 0; onClicked: confirm.ask("Alle Bauteile aus dem Bauraum entfernen?", function() { backend.clearParts() }) }
+                        KButton { text: "STL exportieren"; kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: pg.parts.length > 0; onClicked: exportStl.open() }
                     }
                 }
                 }

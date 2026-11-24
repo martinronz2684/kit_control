@@ -10,6 +10,7 @@ ColumnLayout {
     property bool readOnly: false
     signal committed(string v)
     spacing: 4
+    implicitWidth: 60                  // Breite kommt vom Layout (sonst drücken lange Felder Karten auseinander)
     Text { text: nf.label; color: win.cMut; font.pixelSize: 12 }
     KField {
         Layout.fillWidth: true
