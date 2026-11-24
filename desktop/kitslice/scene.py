@@ -30,6 +30,18 @@ def mesh_cache(mesh: np.ndarray) -> dict:
     return ent[1]
 
 
+_UID = [0]
+
+
+def mesh_uid(mesh: np.ndarray) -> int:
+    """Eindeutige, nie wiederverwendete Nummer eines Netzes (id() kann nach dem Löschen neu vergeben werden)."""
+    c = mesh_cache(mesh)
+    if "uid" not in c:
+        _UID[0] += 1
+        c["uid"] = _UID[0]
+    return c["uid"]
+
+
 def mesh_bounds(mesh: np.ndarray):
     c = mesh_cache(mesh)
     if "bounds" not in c:

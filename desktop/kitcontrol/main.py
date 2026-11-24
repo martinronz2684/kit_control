@@ -30,7 +30,11 @@ def main() -> int:
 
     selftest = "--selftest" in sys.argv
     shots = None
-    if "--screenshots" in sys.argv:
+    mouse = None
+    if "--selftest-mouse" in sys.argv:
+        mouse = shots = sys.argv[sys.argv.index("--selftest-mouse") + 1]
+        os.environ["KIT_PROFILE_DIR"] = os.path.join(shots, "_profile")
+    elif "--screenshots" in sys.argv:
         shots = sys.argv[sys.argv.index("--screenshots") + 1]
         os.environ["KIT_PROFILE_DIR"] = os.path.join(shots, "_profile")
     files = [a for a in sys.argv[1:] if not a.startswith("--") and a != shots]
@@ -59,6 +63,9 @@ def main() -> int:
     stls = [f for f in files if f.lower().endswith(".stl")]
     if stls:
         backend.addUrls(stls)
+    if mouse:
+        _selftest_mouse(app, engine, backend, mouse)
+        return app.exec()
     if shots:
         _screenshots(app, engine, backend, shots)
         return app.exec()
@@ -134,6 +141,119 @@ def _screenshots(app, engine, backend, out):
         img.save(os.path.join(out, names[i] + ".png"))
         QTimer.singleShot(100, shoot)
     QTimer.singleShot(1500, shoot)
+
+
+def _selftest_mouse(app, engine, backend, out):
+    """Prüfung mit echter 3D-Darstellung: Auto-Anordnen ansehen, ein Teil anklicken und mit der linken
+    Maustaste ziehen (von oben und von vorne). Ergebnis als Zeilen „MAUS …“ und Bilder."""
+    import numpy as np
+    from PySide6.QtCore import QEvent, QMetaObject, QPointF, Qt, QTimer, Q_ARG, Q_RETURN_ARG
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtQuick import QQuickItem
+    from kitslice import stl
+    os.makedirs(out, exist_ok=True)
+
+    def box(w, d, h, o=(0, 0, 0)):
+        v = np.array([[x, y, z] for x in (0, w) for y in (0, d) for z in (0, h)], float) + o
+        f = [(0, 2, 3), (0, 3, 1), (4, 5, 7), (4, 7, 6), (0, 1, 5), (0, 5, 4),
+             (2, 6, 7), (2, 7, 3), (0, 4, 6), (0, 6, 2), (1, 3, 7), (1, 7, 5)]
+        return v[np.array(f)]
+    big = np.concatenate([box(56, 39, 6), box(14, 39, 20.7, (0, 0, 0)), box(56, 8, 14, (0, 31, 0)),
+                          box(10, 10, 20.7, (40, 5, 0))])
+    small = np.concatenate([box(10, 14.6, 4), box(10, 4, 19), box(10, 4, 19, (0, 10.6, 0))])
+    paths = []
+    for name, t in (("gross", big), ("klein", small)):
+        pth = os.path.join(out, name + ".stl")
+        stl.save_binary(t, pth)
+        paths.append(pth)
+    backend.addUrls([paths[0]] * 6 + [paths[1]] * 8)
+    root = engine.rootObjects()[0]
+    root.setProperty("width", 1360)
+    root.setProperty("height", 860)
+    log = []
+
+    def say(t):
+        print("MAUS " + t, flush=True)
+        log.append(t)
+
+    def vp():
+        return root.findChild(QQuickItem, "viewport")
+
+    def shot(name):
+        root.grabWindow().save(os.path.join(out, name + ".png"))
+
+    def screen_of(i):
+        lo, hi = backend.core.scene.parts[i].bbox()
+        c = (np.asarray(lo) + np.asarray(hi)) / 2
+        v = vp()
+        r = QMetaObject.invokeMethod(v, "screenPoint", Qt.DirectConnection, Q_RETURN_ARG("QVariant"),
+                                     Q_ARG("QVariant", float(c[0])), Q_ARG("QVariant", float(c[1])),
+                                     Q_ARG("QVariant", float(hi[2])))
+        pt = v.mapToScene(QPointF(r.x(), r.y()))
+        return pt
+
+    def send(kind, pt, buttons):
+        btn = Qt.LeftButton if kind in (QEvent.MouseButtonPress, QEvent.MouseButtonRelease) else Qt.NoButton
+        ev = QMouseEvent(kind, pt, root.mapToGlobal(pt), btn, buttons, Qt.NoModifier)
+        app.sendEvent(root, ev)
+
+    steps = []
+
+    def drag(view):
+        def run():
+            v = vp()
+            if v is None:
+                say("FEHLER: 3D-Ansicht nicht gefunden"); return
+            v.setProperty("elev", 90 if view == "top" else 4)
+            v.setProperty("yaw", 0)
+            QTimer.singleShot(700, lambda: do(view))
+        return run
+
+    def do(view):
+        i = 0
+        p = backend.core.scene.parts[i]
+        x0, y0, z0 = p.x, p.y, p.z_lift
+        pt = screen_of(i)
+        say(f"{view}: Teil 0 bei Bildpunkt {pt.x():.0f},{pt.y():.0f}; Position {x0:.1f},{y0:.1f},{z0:.1f}")
+        backend.selected = -1
+        send(QEvent.MouseButtonPress, pt, Qt.LeftButton)
+        say(f"{view}: nach Klick ausgewählt = {backend.selected}")
+        for k in range(1, 11):
+            send(QEvent.MouseMove, QPointF(pt.x() + 6 * k, pt.y() - 3 * k), Qt.LeftButton)
+            app.processEvents()
+        send(QEvent.MouseButtonRelease, QPointF(pt.x() + 60, pt.y() - 30), Qt.NoButton)
+        app.processEvents()
+        p = backend.core.scene.parts[i]
+        moved = abs(p.x - x0) + abs(p.y - y0) + abs(p.z_lift - z0)
+        say(f"{view}: danach Position {p.x:.1f},{p.y:.1f},{p.z_lift:.1f} -> {'OK verschoben' if moved > 1 else 'FEHLER nicht verschoben'}")
+        shot("maus-" + view)
+        QTimer.singleShot(300, nxt)
+
+    def pack():
+        r = backend.core.auto_pack(3.0, 2.0, True, False, 6.0)
+        backend._parts_changed()
+        say(f"Anordnen: {r}")
+        v = vp()
+        if v:
+            v.setProperty("elev", 4); v.setProperty("yaw", 0)
+        QTimer.singleShot(1500, lambda: (shot("anordnen-vorne"), QTimer.singleShot(200, nxt)))
+
+    def iso():
+        v = vp()
+        if v:
+            v.setProperty("elev", 26); v.setProperty("yaw", -32)
+        QTimer.singleShot(1200, lambda: (shot("anordnen-3d"), QTimer.singleShot(200, nxt)))
+
+    steps += [pack, iso, drag("top"), drag("front")]
+
+    def nxt():
+        if not steps:
+            with open(os.path.join(out, "maus.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(log))
+            app.exit(0)
+            return
+        steps.pop(0)()
+    QTimer.singleShot(2500, nxt)
 
 
 def _selftest_slice() -> int:

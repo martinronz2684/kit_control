@@ -18,6 +18,7 @@ Item {
     property real tx: 0
     property real ty: 0
     property real tz: 40
+    objectName: "viewport"
     signal picked(int index)
     signal moved(int index, real x, real y, bool first)
     property int dragIdx: -1          // Teil, das gerade gezogen wird (nur Anzeige, gespeichert beim Loslassen)
@@ -59,7 +60,12 @@ Item {
     // Bildpunkt -> Strahl in Slicer-Koordinaten [a, b]
     function ray(mx, my) {
         var a = v3.mapTo3DScene(Qt.vector3d(mx, my, 0)), b = v3.mapTo3DScene(Qt.vector3d(mx, my, 1000))
-        return [Qt.vector3d(a.x, -a.z, a.y), Qt.vector3d(b.x, -b.z, b.y)]
+        return [world.mapPositionFromScene(a), world.mapPositionFromScene(b)]
+    }
+    // Slicer-Koordinaten -> Bildpunkt (für die automatische Prüfung)
+    function screenPoint(x, y, z) {
+        var p = v3.mapFrom3DScene(world.mapPositionToScene(Qt.vector3d(x, y, z)))
+        return Qt.point(p.x, p.y)
     }
     function pickAt(mx, my) {
         var r = ray(mx, my)
@@ -80,8 +86,7 @@ Item {
     }
     // Bildpunkt -> Punkt auf der waagrechten Ebene z = z0 (Slicer-Koordinaten)
     function ground(mx, my, z0) {
-        var a = v3.mapTo3DScene(Qt.vector3d(mx, my, 0)), b = v3.mapTo3DScene(Qt.vector3d(mx, my, 1000))
-        var oa = Qt.vector3d(a.x, -a.z, a.y), ob = Qt.vector3d(b.x, -b.z, b.y)
+        var r = ray(mx, my), oa = r[0], ob = r[1]
         if (Math.abs(ob.z - oa.z) < 1e-9) return null
         var t = (z0 - oa.z) / (ob.z - oa.z)
         return Qt.vector3d(oa.x + (ob.x - oa.x) * t, oa.y + (ob.y - oa.y) * t, z0)

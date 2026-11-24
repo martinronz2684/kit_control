@@ -54,6 +54,18 @@ jobs:
           cd desktop
           timeout 120 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--screenshots', '../shots']; sys.exit(main())" || true
           ls -la ../shots || true
+      - name: Maus und Anordnen mit echter 3D-Darstellung prüfen
+        shell: bash
+        continue-on-error: true
+        env:
+          QSG_RHI_BACKEND: d3d11
+          QSG_RHI_PREFER_SOFTWARE_RENDERER: "1"
+          KIT_UPDATE_REPO: invalid/none
+        run: |
+          cd desktop
+          timeout 150 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--selftest-mouse', '../shots']; sys.exit(main())" > maus.log 2>&1 || true
+          cat maus.log
+          grep -v "^$" maus.log | tail -40 | while IFS= read -r l; do echo "::warning title=Maus::$l"; done
       - name: Bildschirmfotos ablegen (Branch screens)
         if: github.ref == 'refs/heads/main'
         shell: bash

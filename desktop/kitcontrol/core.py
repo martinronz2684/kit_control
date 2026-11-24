@@ -14,6 +14,8 @@ import time
 
 import numpy as np
 
+from kitslice.scene import mesh_uid
+
 import kitslice  # noqa: F401  (setzt den Pfad zu kitctl)
 from kitslice import profiles as PR
 from kitslice import stl
@@ -320,7 +322,7 @@ class AppCore:
         p = self.scene.parts[i]
         if not max_tris:   # Gesamtbudget für flüssiges Drehen auf alle Teile verteilen
             max_tris = int(max(1500, min(16000, 40000 / max(1, len(self.scene.parts)))))
-        key = ("mesh", id(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale), max_tris)
+        key = ("mesh", mesh_uid(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale), max_tris)
         if key not in self._outline_cache:
             self._outline_cache[key] = np.round(p.transform(p.simple(max_tris)), 3).ravel().tolist()
         return self._outline_cache[key]
@@ -329,7 +331,7 @@ class AppCore:
         out = []
         for i, p in enumerate(self.scene.parts):
             sx, sy, sz = p.size()
-            key = (id(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale))
+            key = (mesh_uid(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale))
             if key not in self._outline_cache:
                 t = p.transform(p.simple(3000)).reshape(-1, 3)
                 if len(t) > 60000:
@@ -338,11 +340,11 @@ class AppCore:
             from kitslice.scene import _rotation
             origin = p.transform(np.zeros((1, 3)))[0]          # wohin der Original-Nullpunkt wandert
             out.append({
-                "gkey": f"m{id(p.mesh)}",
+                "gkey": f"m{mesh_uid(p.mesh)}",
                 "quat": quat(_rotation(p.rot_x, p.rot_y, p.rot_z)),
                 "pos": [float(p.x + origin[0]), float(p.y + origin[1]), float(p.z_lift + origin[2])],
                 "scale3": [float(v) for v in p.scale],
-                "mesh_key": f"{id(p.mesh)}:{p.rot_x}:{p.rot_y}:{p.rot_z}:{p.scale[0]}",
+                "mesh_key": f"{mesh_uid(p.mesh)}:{p.rot_x}:{p.rot_y}:{p.rot_z}:{p.scale[0]}",
                 "z": round(float(p.z_lift), 2),
                 "index": i, "name": p.name, "x": round(float(p.x), 2), "y": round(float(p.y), 2),
                 "rot_x": float(p.rot_x), "rot_y": float(p.rot_y), "rot_z": float(p.rot_z),

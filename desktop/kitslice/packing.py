@@ -22,6 +22,8 @@ import time
 
 import numpy as np
 
+from kitslice.scene import mesh_uid
+
 from kitslice.scene import IDEAL_XY, IDEAL_Z, Part, Scene, _samples
 
 UPS = [(0, 0), (90, 0), (180, 0), (270, 0), (0, 90), (0, 270)]
@@ -49,7 +51,7 @@ def quality(p: Part, rot) -> dict:
       down   nach unten zeigende Flächen (rauer)
       tall   Bauhöhe des Teils (Zeit, Wärme)
     """
-    key = (id(p.mesh), tuple(rot), tuple(p.scale))
+    key = (mesh_uid(p.mesh), tuple(rot), tuple(p.scale))
     if key in _QCACHE:
         return _QCACHE[key]
     _QCACHE[key] = r = _quality(p, rot)
@@ -136,7 +138,7 @@ class _Ctx:
         self.cache = {}
 
     def shape_of(self, p: Part, rot):
-        key = (id(p.mesh), tuple(rot), tuple(p.scale))
+        key = (mesh_uid(p.mesh), tuple(rot), tuple(p.scale))
         if key not in self.cache:
             vox, lo = _voxelize(p.transform(p.simple(6000), rot), self.res)
             if any(v > s for v, s in zip(vox.shape, self.shape)):
@@ -151,7 +153,7 @@ def _orientations(p: Part, allow: bool, ctx: _Ctx, quality_w: float = 0.5):
     """Erlaubte Lagen. quality_w 0 = nur Packdichte, 1 = nur die besten Lagen nach SLS-Regeln."""
     if not allow or getattr(p, "lock_orient", False):
         return [(p.rot_x, p.rot_y, p.rot_z)]
-    key = ("orients", id(p.mesh), tuple(p.scale), round(quality_w, 2))
+    key = ("orients", mesh_uid(p.mesh), tuple(p.scale), round(quality_w, 2))
     if key in ctx.cache:
         return ctx.cache[key]
     seen, cand = set(), []
