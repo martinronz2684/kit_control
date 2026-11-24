@@ -270,7 +270,12 @@ Item {
                     onClicked: { packPop.close(); backend.fillChamber(pg.sel, { gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate }) }
                     ToolTip.visible: hovered; ToolTip.text: "Das ausgewählte Teil so oft kopieren, wie es in den idealen Bereich passt"
                 }
-                KButton { text: "Flach"; onClicked: { packPop.close(); backend.arrange("rows") }; ToolTip.visible: hovered; ToolTip.text: "Alles nebeneinander auf die Platte legen" }
+                KButton {
+                    text: "Flach"
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Alles nebeneinander auf die Platte legen"
+                    onClicked: { packPop.close(); backend.arrange("rows") }
+                }
             }
             RowLayout {
                 spacing: 8
