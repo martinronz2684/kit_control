@@ -201,17 +201,17 @@ Item {
                         spacing: 24
                         Row {
                             spacing: 8
-                            Switch { id: contourFirst; onToggled: pp.apply(); checked: pp.prof.contour_first !== false }
+                            KSwitch { id: contourFirst; onToggled: pp.apply(); checked: pp.prof.contour_first !== false }
                             Text { text: "Kontur vor Füllung"; color: win.cInk; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         }
                         Row {
                             spacing: 8
-                            Switch { id: optPath; onToggled: pp.apply(); checked: pp.prof.optimize_path === true }
+                            KSwitch { id: optPath; onToggled: pp.apply(); checked: pp.prof.optimize_path === true }
                             Text { text: "Laserwege optimieren"; color: win.cInk; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         }
                         Row {
                             spacing: 8
-                            Switch { id: keepThin; onToggled: pp.apply(); checked: pp.prof.keep_thin !== false }
+                            KSwitch { id: keepThin; onToggled: pp.apply(); checked: pp.prof.keep_thin !== false }
                             Text { text: "Dünne Wände erhalten"; color: win.cInk; font.pixelSize: 13; anchors.verticalCenter: parent.verticalCenter }
                         }
                     }
@@ -245,7 +245,7 @@ Item {
                     RowLayout {
                         Layout.topMargin: 6
                         Caption { text: "Heizstrahler"; Layout.fillWidth: true }
-                        Switch { id: lampSwitch; onToggled: pp.apply(); checked: pp.prof.lamps !== null && pp.prof.lamps !== undefined }
+                        KSwitch { id: lampSwitch; onToggled: pp.apply(); checked: pp.prof.lamps !== null && pp.prof.lamps !== undefined }
                     }
                     GridLayout {
                         visible: lampSwitch.checked

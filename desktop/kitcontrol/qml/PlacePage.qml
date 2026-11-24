@@ -53,7 +53,7 @@ Item {
             }
             Text {
                 anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.margins: 14
-                width: parent.width * 0.5; elide: Text.ElideRight
+                width: parent.width - 28; elide: Text.ElideRight
                 text: "Bauteil ziehen: verschieben · daneben ziehen: drehen · rechte Maustaste: schieben · Mausrad: zoomen"
                 color: "#59606b"; font.pixelSize: 11
             }
@@ -142,8 +142,17 @@ Item {
             Card {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
-                ColumnLayout {
+                clip: true
+                Flickable {
+                    id: selFlick
                     anchors.fill: parent; anchors.margins: 14
+                    contentHeight: selCol.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
+                    clip: true
+                    ScrollBar.vertical: ScrollBar { policy: selFlick.contentHeight > selFlick.height ? ScrollBar.AlwaysOn : ScrollBar.AsNeeded }
+                ColumnLayout {
+                    id: selCol
+                    width: selFlick.width - (selFlick.contentHeight > selFlick.height ? 10 : 0)
                     spacing: 10
                     Caption { text: pg.cur ? "Ausgewählt: " + pg.cur.name : "Kein Bauteil ausgewählt" }
                     GridLayout {
@@ -188,7 +197,6 @@ Item {
                         KButton { text: "Duplizieren"; Layout.fillWidth: true; onClicked: backend.duplicatePart(pg.sel) }
                         KButton { text: "Entfernen"; kind: "ghost"; Layout.fillWidth: true; onClicked: backend.removePart(pg.sel) }
                     }
-                    Item { Layout.fillHeight: true }
                     Repeater {
                         model: backend.notes
                         delegate: Rectangle {
@@ -212,6 +220,7 @@ Item {
                         KButton { text: "Alles entfernen"; kind: "ghost"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: confirm.ask("Alle Bauteile aus dem Bauraum entfernen?", function() { backend.clearParts() }) }
                         KButton { text: "STL exportieren"; kind: "ghost"; Layout.fillWidth: true; enabled: pg.parts.length > 0; onClicked: exportStl.open() }
                     }
+                }
                 }
             }
         }

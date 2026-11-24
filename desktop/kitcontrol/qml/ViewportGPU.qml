@@ -139,7 +139,7 @@ Item {
     }
 
     Text {
-        anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 14
+        anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 14
         text: "hellgrau: idealer Bereich " + vg.idealXY + " × " + vg.idealXY + " × " + vg.idealZ + " mm · bläulich: Bauraum " + vg.plate + " × " + vg.plate + " × " + vg.machineZ + " mm"
         color: "#6b737d"; font.pixelSize: 11
     }
