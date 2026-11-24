@@ -31,6 +31,24 @@ def mesh_cache(mesh: np.ndarray) -> dict:
 
 
 _UID = [0]
+_SHARED: dict = {}                 # Inhalt (Hash) -> Netz: gleiche Datei mehrfach geladen = ein Netz
+
+
+def share_mesh(mesh: np.ndarray) -> np.ndarray:
+    """Gleiche Netze (z. B. dieselbe STL mehrfach hinzugefügt) zu einem Objekt zusammenführen – dann
+    teilen sich alle Kopien Anzeige, Vereinfachung und Packberechnung (sonst alles einzeln, sehr langsam)."""
+    import hashlib
+    import weakref
+    key = (mesh.shape, hashlib.blake2b(np.ascontiguousarray(mesh, dtype=np.float32).tobytes(), digest_size=16).hexdigest())
+    ref = _SHARED.get(key)
+    m = ref() if ref is not None else None
+    if m is not None:
+        return m
+    try:
+        _SHARED[key] = weakref.ref(mesh)
+    except TypeError:
+        return mesh
+    return mesh
 
 
 def mesh_uid(mesh: np.ndarray) -> int:
@@ -75,7 +93,7 @@ class Part:
     @classmethod
     def load(cls, path: str, name: str | None = None) -> "Part":
         import os
-        return cls(name or os.path.splitext(os.path.basename(path))[0], stl.load(path))
+        return cls(name or os.path.splitext(os.path.basename(path))[0], share_mesh(stl.load(path)))
 
     def _oriented(self) -> np.ndarray:
         """Gedreht und skaliert, Mitte der Grundfläche im Ursprung, Unterseite auf z = 0."""

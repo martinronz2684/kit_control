@@ -381,7 +381,8 @@ class AppCore:
         self.scene.parts = []
         for d in data["parts"]:
             mesh = np.frombuffer(base64.b64decode(d["mesh"]), dtype="<f4").astype(np.float64).reshape(-1, 3, 3)
-            p = Part(d["name"], mesh)
+            from kitslice.scene import share_mesh
+            p = Part(d["name"], share_mesh(mesh))
             for k in PART_KEYS:
                 if k in d:
                     setattr(p, k, tuple(d[k]) if k == "scale" else d[k])

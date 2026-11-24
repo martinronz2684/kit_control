@@ -376,6 +376,26 @@ def settle(scene: Scene, movers, gap: float, h: float = 0.5, floor: float = 0.0,
     return total
 
 
+def empty_height(parts, step: float = 0.1) -> float:
+    """Exakt gemessene Höhe ohne jedes Bauteil (Schichten, in denen der Laser nichts zu tun hätte)."""
+    iv = []
+    for p in parts:
+        t = p.light(6000)
+        iv.append(np.stack([t[:, :, 2].min(axis=1), t[:, :, 2].max(axis=1)], axis=1))
+    if not iv:
+        return 0.0
+    iv = np.concatenate(iv)
+    top = float(iv[:, 1].max())
+    n = int(math.ceil(top / step))
+    diff = np.zeros(n + 2, int)
+    a = np.clip(np.floor(iv[:, 0] / step).astype(int), 0, n)
+    b = np.clip(np.ceil(iv[:, 1] / step).astype(int), 0, n)
+    np.add.at(diff, a, 1)
+    np.add.at(diff, b + 1, -1)
+    cov = np.cumsum(diff)[:n] > 0
+    return float((~cov).sum() * step)
+
+
 def _empty_layers(occ: np.ndarray) -> int:
     a = occ.any(axis=(0, 1))
     nz = np.nonzero(a)[0]
@@ -591,7 +611,7 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
         progress(1.0)
     return {"ok": bool(total_h <= height + 1e-6), "height": round(total_h, 1),
             "density": round(float(dens) * 100, 1), "passes": tried,
-            "empty_mm": round(float(empty), 1)}
+            "empty_mm": round(empty_height(scene.parts), 1)}
 
 
 def fill(scene: Scene, part: Part, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
