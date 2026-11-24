@@ -256,7 +256,7 @@ class AppCore:
                     best, bi = tmin, i
         return bi
 
-    def move_part(self, i: int, x: float, y: float, record: bool) -> None:
+    def move_part(self, i: int, x: float, y: float, record: bool, z=None) -> None:
         """Ziehen mit der Maus: nur am Anfang einen Rückgängig-Schritt anlegen."""
         if not 0 <= i < len(self.scene.parts):
             return
@@ -264,6 +264,8 @@ class AppCore:
             self._push()
         p = self.scene.parts[i]
         p.x, p.y = float(x), float(y)
+        if z is not None:
+            p.z_lift = max(0.0, float(z))
         self.job = None
 
     def lay_flat(self, i: int) -> None:

@@ -221,6 +221,11 @@ class Backend(QObject):
     def pickPart(self, ax, ay, az, bx, by, bz):
         return self.core.pick((ax, ay, az), (bx, by, bz))
 
+    @Slot(int, float, float, float)
+    def movePart3(self, i, x, y, z):
+        self.core.move_part(i, x, y, True, z)
+        self._parts_changed()
+
     @Slot(int, float, float, bool)
     def movePart(self, i, x, y, record):
         self.core.move_part(i, x, y, record)

@@ -40,6 +40,7 @@ Item {
                 ignoreUnknownSignals: true
                 function onPicked(i) { backend.selected = i }
                 function onMoved(i, x, y, first) { backend.movePart(i, x, y, first) }
+                function onMoved3(i, x, y, z) { backend.movePart3(i, x, y, z) }
             }
 
             // Ansichten
@@ -54,7 +55,7 @@ Item {
             Text {
                 anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.margins: 14
                 width: parent.width - 28; elide: Text.ElideRight
-                text: "Bauteil ziehen: verschieben · daneben ziehen: drehen · rechte Maustaste: schieben · Mausrad: zoomen"
+                text: "Bauteil ziehen: verschieben (von oben auf der Platte, von vorne/seitlich auch in der Höhe) · daneben ziehen: drehen · rechte Maustaste: schieben · Mausrad: zoomen"
                 color: "#59606b"; font.pixelSize: 11
             }
 

@@ -37,6 +37,9 @@ def volume(p: Part) -> float:
 TILT = 10.0          # Grad: große flache Teile leicht kippen (gegen Verzug / Curling)
 
 
+_QCACHE: dict = {}
+
+
 def quality(p: Part, rot) -> dict:
     """Bewertet eine Lage nach SLS-Ausrichtungsregeln (kleiner = besser, 0 = ideal).
       flat   große ebene Flächen waagerecht (Verzug/Curling)
@@ -46,6 +49,14 @@ def quality(p: Part, rot) -> dict:
       down   nach unten zeigende Flächen (rauer)
       tall   Bauhöhe des Teils (Zeit, Wärme)
     """
+    key = (id(p.mesh), tuple(rot), tuple(p.scale))
+    if key in _QCACHE:
+        return _QCACHE[key]
+    _QCACHE[key] = r = _quality(p, rot)
+    return r
+
+
+def _quality(p: Part, rot) -> dict:
     t = p.transform(p.simple(6000), rot)
     n = np.cross(t[:, 1] - t[:, 0], t[:, 2] - t[:, 0])
     a = np.linalg.norm(n, axis=1)
@@ -288,63 +299,39 @@ def _colmap(p: Part, h: float):
     return o, bot, top
 
 
-def _dilate_map(o, bot, top, r: int):
-    """Säulenkarte seitlich um r Zellen (Kreis) aufblasen: Mindestabstand auch schräg/seitlich."""
+def _kernel(gap: float, h: float):
+    """Versätze (dx, dy) mit seitlichem Abstand < gap und dem dort nötigen senkrechten Abstand."""
+    r = int(math.ceil(gap / h))
+    out = []
+    for dx in range(-r, r + 1):
+        for dy in range(-r, r + 1):
+            L = h * math.hypot(dx, dy)
+            if L < gap - 0.5 * h:
+                out.append((dx, dy, math.sqrt(max(0.0, gap * gap - L * L))))
+    return r, out
+
+
+def _clearance_map(o, bot, top, gap, h):
+    """Säulenkarte um den Mindestabstand aufgeblasen: je Zelle tiefste Unterseite − Abstand und höchste
+    Oberseite + Abstand aller Teilpunkte in Reichweite (seitlich und schräg exakt)."""
+    r, ker = _kernel(gap, h)
     n = np.array(bot.shape) + 2 * r
     B = np.full(n, np.inf)
     T = np.full(n, -np.inf)
-    for dx in range(-r, r + 1):
-        for dy in range(-r, r + 1):
-            if dx * dx + dy * dy > (r + 0.5) ** 2:
-                continue
-            sl = (slice(r + dx, r + dx + bot.shape[0]), slice(r + dy, r + dy + bot.shape[1]))
-            np.minimum(B[sl], bot, out=B[sl])
-            np.maximum(T[sl], top, out=T[sl])
+    for dx, dy, vg in ker:
+        sl = (slice(r + dx, r + dx + bot.shape[0]), slice(r + dy, r + dy + bot.shape[1]))
+        np.minimum(B[sl], bot - vg, out=B[sl])
+        np.maximum(T[sl], top + vg, out=T[sl])
     return o - r, B, T
 
 
-def _pair_drop(o, bot, top, z, qo, qbot, qtop, qz, gap, h, rmax):
-    """Wie weit darf P (Säulenkarte o/bot/top, Höhe z) nach unten, ohne Q näher als gap zu kommen?
-    Seitlicher Abstand je Zellversatz exakt berücksichtigt (konservativ um eine Zelle)."""
-    d = np.inf
-    pb, pt = bot + z, top + z
-    pdef = np.isfinite(bot)
-    qb_all, qt_all = qbot + qz, qtop + qz
-    for dx in range(-rmax, rmax + 1):
-        for dy in range(-rmax, rmax + 1):
-            L = max(0.0, h * math.hypot(dx, dy) - h * 1.415)
-            if L >= gap:
-                continue
-            vg = math.sqrt(gap * gap - L * L)
-            # Zelle (i, j) von P gegen Zelle (i+dx, j+dy) von Q
-            s0 = o + np.array([dx, dy]) - qo                  # Index in Q von P-Zelle (0,0)
-            a0 = np.maximum(0, -s0)
-            a1 = np.minimum(np.array(bot.shape), np.array(qbot.shape) - s0)
-            if (a1 <= a0).any():
-                continue
-            ps = (slice(a0[0], a1[0]), slice(a0[1], a1[1]))
-            qs = (slice(a0[0] + s0[0], a1[0] + s0[0]), slice(a0[1] + s0[1], a1[1] + s0[1]))
-            m = pdef[ps] & np.isfinite(qbot[qs])
-            if not m.any():
-                continue
-            b, t = pb[ps][m], pt[ps][m]
-            qb, qt = qb_all[qs][m], qt_all[qs][m]
-            below = qt + vg <= b + 1e-6
-            above = qb >= t + vg - 1e-6
-            if (~below & ~above).any():
-                return 0.0                                   # schon an der Grenze
-            if below.any():
-                d = min(d, float((b[below] - qt[below] - vg).min()))
-    return d
-
-
-def settle(scene: Scene, movers, gap: float, h: float = 0.5, floor: float = 0.0, passes: int = 4) -> float:
+def settle(scene: Scene, movers, gap: float, h: float = 0.5, floor: float = 0.0, passes: int = 6) -> float:
     """Exaktes Absenken: jedes Teil so weit nach unten, bis es den Mindestabstand zu einem Teil darunter
-    (schräg/seitlich exakt gerechnet) oder die Bauplatte erreicht. Liefert die gesamte Absenkung in mm."""
+    (seitlich und schräg exakt) oder die Bauplatte erreicht. Liefert die gesamte Absenkung in mm."""
     if not movers:
         return 0.0
-    rmax = int(math.ceil(gap / h)) + 2
     maps = {id(q): _colmap(q, h) for q in scene.parts}
+    clear = {id(q): _clearance_map(*maps[id(q)], gap, h) for q in scene.parts}
     mover_ids = {id(q) for q in movers}
     total = 0.0
     for _ in range(passes):
@@ -353,14 +340,31 @@ def settle(scene: Scene, movers, gap: float, h: float = 0.5, floor: float = 0.0,
             if id(p) not in mover_ids:
                 continue
             o, bot, top = maps[id(p)]
-            d = float((bot[np.isfinite(bot)] + p.z_lift).min() - floor)
+            pdef = np.isfinite(bot)
+            pb, pt = bot + p.z_lift, top + p.z_lift
+            d = float(pb[pdef].min() - floor)
             for q in scene.parts:
                 if q is p or d <= 0.05:
                     continue
-                qo, qbot, qtop = maps[id(q)]
-                if ((qo + np.array(qbot.shape) + rmax) < o).any() or ((o + np.array(bot.shape) + rmax) < qo).any():
+                qo, QB, QT = clear[id(q)]
+                a0 = np.maximum(o, qo)
+                a1 = np.minimum(o + np.array(bot.shape), qo + np.array(QB.shape))
+                if (a1 <= a0).any():
                     continue
-                d = min(d, _pair_drop(o, bot, top, p.z_lift, qo, qbot, qtop, q.z_lift, gap, h, rmax))
+                ps = (slice(a0[0] - o[0], a1[0] - o[0]), slice(a0[1] - o[1], a1[1] - o[1]))
+                qs = (slice(a0[0] - qo[0], a1[0] - qo[0]), slice(a0[1] - qo[1], a1[1] - qo[1]))
+                m = pdef[ps] & np.isfinite(QB[qs])
+                if not m.any():
+                    continue
+                b, t = pb[ps][m], pt[ps][m]
+                qb, qt = QB[qs][m] + q.z_lift, QT[qs][m] + q.z_lift
+                below = qt <= b + 1e-6
+                above = qb >= t - 1e-6
+                if (~below & ~above).any():
+                    d = 0.0                          # seitlich schon an der Grenze
+                    break
+                if below.any():
+                    d = min(d, float((b[below] - qt[below]).min()))
             if d > 0.05:
                 p.z_lift = float(p.z_lift - d)
                 moved += d
@@ -374,6 +378,57 @@ def _empty_layers(occ: np.ndarray) -> int:
     a = occ.any(axis=(0, 1))
     nz = np.nonzero(a)[0]
     return int((~a[: nz.max() + 1]).sum()) if len(nz) else 0
+
+
+def _stamp(ctx, occ0, plan, skip=-1):
+    occ = occ0.copy()
+    for n, (p, rot, i, j, k, sh) in enumerate(plan):
+        if n != skip:
+            v = sh[0]
+            occ[i:i + v.shape[0], j:j + v.shape[1], k:k + v.shape[2]] |= v
+    return occ
+
+
+def _top_of(plan, skip=-1):
+    return max([k + sh[0].shape[2] for n, (p, rot, i, j, k, sh) in enumerate(plan) if n != skip] or [0])
+
+
+def _improve(ctx: _Ctx, occ0, plan, allow_rot, quality_w, deadline, cancel=None):
+    """Nachverdichten: das jeweils höchste Teil herausnehmen und an der tiefsten freien Stelle (alle Lagen)
+    neu einsetzen, solange die Bauhöhe sinkt oder oben weniger Teile liegen. Füllt Lücken unter
+    Überhängen und an Rändern, die beim ersten Einsortieren frei geblieben sind."""
+    plan = list(plan)
+    tried = set()
+    while time.time() < deadline and not (cancel and cancel()):
+        tops = [k + sh[0].shape[2] for (p, rot, i, j, k, sh) in plan]
+        order = sorted(range(len(plan)), key=lambda n: -tops[n])
+        cand = [n for n in order if (n, plan[n][2:5]) not in tried]
+        if not cand:
+            break
+        n = cand[0]
+        tried.add((n, plan[n][2:5]))
+        p, rot0, i0, j0, k0, sh0 = plan[n]
+        occ = _stamp(ctx, occ0, plan, skip=n)
+        occ_d = _dilate3(occ, ctx.g)
+        occF = np.fft.rfftn(occ_d.astype(np.float32))
+        shell = _shell_fn(occ_d)
+        rest_top = _top_of(plan, skip=n)
+        best = None
+        for rot in _orientations(p, allow_rot, ctx, quality_w):
+            sh = ctx.shape_of(p, rot)
+            if sh is None:
+                continue
+            r = _best(ctx, occF, shell, sh, rest_top)
+            if r and (best is None or r[0] < best[0]):
+                best = (r[0], rot, r[1], r[2], r[3], sh)
+        if best is None:
+            continue
+        old_total = max(rest_top, tops[n])
+        new_top = best[4] + best[5][0].shape[2]
+        if (max(rest_top, new_top), new_top) < (old_total, tops[n]):
+            plan[n] = (p, best[1], best[2], best[3], best[4], best[5])
+            tried.clear()
+    return plan
 
 
 def _fixed_occ(ctx: _Ctx, parts) -> np.ndarray:
@@ -474,12 +529,12 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     best = None
     tried = k = 0
     while True:
-        if k and time.time() - t0 > time_budget:
+        if k and time.time() - t0 > 0.6 * time_budget:
             break
         if k < len(orders):
             order = orders[k]
         else:
-            if time.time() - t0 > time_budget or len(movers) < 3:
+            if time.time() - t0 > 0.6 * time_budget or len(movers) < 3:
                 break
             order = list(orders[k % len(orders)])
             for _ in range(max(1, len(order) // 4)):
@@ -502,7 +557,7 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
             progress(min(0.99, max(k / (len(orders) + 1), (time.time() - t0) / max(time_budget, 0.1))))
         if len(movers) <= 1:
             break
-        if k >= len(orders) and time.time() - t0 > time_budget:
+        if k >= len(orders) and time.time() - t0 > 0.6 * time_budget:
             break
     if best is None and quality_w > 0 and not (cancel and cancel()):
         # mit den besten Lagen passt es nicht -> alle Lagen erlauben
@@ -513,6 +568,10 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     if best is None:
         return {"ok": False, "height": 0.0, "density": 0.0, "passes": tried,
                 "error": "Teile passen nicht in den idealen Bereich – Abstand verringern oder Teile verkleinern"}
+    if len(movers) > 1:
+        plan = _improve(ctx, occ0, best[1], allow_rotation, quality_w, max(t0 + time_budget, time.time() + 0.3), cancel)
+        top, occ, plan = _compact(ctx, occ0, plan)
+        best = ((top, 0), plan, _empty_layers(occ) * ctx.res)
     _apply(ctx, best[1])
     settle(scene, movers, gap, floor=floor)
     empty = best[2]

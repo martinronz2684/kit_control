@@ -23,6 +23,8 @@ Item {
     property int dragIdx: -1          // Teil, das gerade gezogen wird (nur Anzeige, gespeichert beim Loslassen)
     property real dragDx: 0
     property real dragDy: 0
+    property real dragDz: 0
+    signal moved3(int index, real x, real y, real z)
 
     function setView(name) {
         if (name === "top") { yaw = 0; elev = 90 }
@@ -67,6 +69,14 @@ Item {
             if (h.objectHit && h.objectHit.partIndex !== undefined) i = h.objectHit.partIndex
         }
         return i
+    }
+    // Bildpunkt -> Punkt auf einer senkrechten Ebene durch p0, quer zur Blickrichtung (Ansicht von vorne/seitlich)
+    function wall(mx, my, p0, n) {
+        var r = ray(mx, my), a = r[0], d = r[1].minus(r[0])
+        var den = d.x * n.x + d.y * n.y
+        if (Math.abs(den) < 1e-9) return null
+        var t = ((p0.x - a.x) * n.x + (p0.y - a.y) * n.y) / den
+        return Qt.vector3d(a.x + d.x * t, a.y + d.y * t, a.z + d.z * t)
     }
     // Bildpunkt -> Punkt auf der waagrechten Ebene z = z0 (Slicer-Koordinaten)
     function ground(mx, my, z0) {
@@ -142,7 +152,8 @@ Item {
                     pickable: true
                     geometry: MeshGeometry { key: modelData.gkey }
                     position: Qt.vector3d(modelData.pos[0] + (index === vg.dragIdx ? vg.dragDx : 0),
-                                          modelData.pos[1] + (index === vg.dragIdx ? vg.dragDy : 0), modelData.pos[2])
+                                          modelData.pos[1] + (index === vg.dragIdx ? vg.dragDy : 0),
+                                          modelData.pos[2] + (index === vg.dragIdx ? vg.dragDz : 0))
                     rotation: Qt.quaternion(modelData.quat[0], modelData.quat[1], modelData.quat[2], modelData.quat[3])
                     scale: Qt.vector3d(modelData.scale3[0], modelData.scale3[1], modelData.scale3[2])
                     materials: PrincipledMaterial {
@@ -170,6 +181,8 @@ Item {
         property real lx; property real ly
         property real px; property real py; property real pz
         property var g0: null
+        property bool upright: false
+        property var wn: null
         property bool first: true
         cursorShape: mode === 1 ? Qt.ClosedHandCursor : (mode === 2 ? Qt.SizeAllCursor : Qt.ArrowCursor)
         onPressed: (m) => {
@@ -180,8 +193,17 @@ Item {
                 if (idx >= 0) {
                     var p = vg.parts[idx]
                     px = p.x; py = p.y; pz = p.z
-                    g0 = vg.ground(m.x, m.y, pz)
-                    mode = g0 ? 1 : 0
+                    // steil von oben: auf der Platte schieben; flach von vorne/seitlich: in der Bildebene
+                    // (links/rechts und hoch/runter = Höhe über Platte)
+                    upright = vg.elev < 35
+                    if (upright) {
+                        var r0 = vg.ray(m.x, m.y), dd = r0[1].minus(r0[0])
+                        var len = Math.sqrt(dd.x * dd.x + dd.y * dd.y)
+                        wn = len > 1e-9 ? Qt.vector3d(dd.x / len, dd.y / len, 0) : Qt.vector3d(0, 1, 0)
+                        g0 = vg.wall(m.x, m.y, Qt.vector3d(px, py, pz), wn)
+                    } else
+                        g0 = vg.ground(m.x, m.y, pz)
+                    mode = g0 ? 1 : 2
                     first = true
                 } else mode = 2
             } else {
@@ -191,11 +213,11 @@ Item {
         }
         onPositionChanged: (m) => {
             if (mode === 1) {
-                var g = vg.ground(m.x, m.y, pz)
+                var g = upright ? vg.wall(m.x, m.y, Qt.vector3d(px, py, pz), wn) : vg.ground(m.x, m.y, pz)
                 if (!g) return
-                var dx = g.x - g0.x, dy = g.y - g0.y
-                if (first && Math.abs(dx) + Math.abs(dy) < 0.3) return
-                vg.dragIdx = idx; vg.dragDx = dx; vg.dragDy = dy      // flüssig nur in der Anzeige verschieben
+                var dx = g.x - g0.x, dy = g.y - g0.y, dz = upright ? Math.max(-pz, g.z - g0.z) : 0
+                if (first && Math.abs(dx) + Math.abs(dy) + Math.abs(dz) < 0.3) return
+                vg.dragIdx = idx; vg.dragDx = dx; vg.dragDy = dy; vg.dragDz = dz   // flüssig nur in der Anzeige
                 first = false
             } else if (mode === 2) {
                 vg.yaw -= (m.x - lx) * 0.4
@@ -209,8 +231,9 @@ Item {
         onReleased: {
             if (mode === 1 && vg.dragIdx >= 0) {
                 var i = vg.dragIdx, x = Math.round((px + vg.dragDx) * 10) / 10, y = Math.round((py + vg.dragDy) * 10) / 10
-                vg.dragIdx = -1; vg.dragDx = 0; vg.dragDy = 0
-                vg.moved(i, x, y, true)
+                var z = Math.round((pz + vg.dragDz) * 10) / 10
+                vg.dragIdx = -1; vg.dragDx = 0; vg.dragDy = 0; vg.dragDz = 0
+                vg.moved3(i, x, y, z)
             }
             mode = 0; idx = -1
         }
