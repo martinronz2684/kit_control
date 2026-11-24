@@ -140,7 +140,109 @@ def _screenshots(app, engine, backend, out):
         img = root.grabWindow()
         img.save(os.path.join(out, names[i] + ".png"))
         QTimer.singleShot(100, shoot)
+
+    # danach: alle Seiten in mehreren Fenstergrößen auf Darstellungsfehler prüfen
+    checks = []
+    for (w, h) in ((1100, 700), (1280, 760), (1366, 768), (1920, 1040)):
+        for pg in range(5):
+            checks.append((w, h, pg, False))
+        checks.append((w, h, 0, True))                   # Auto-Anordnen-Fenster
+    found = []
+
+    def check():
+        if not checks:
+            uniq = list(dict.fromkeys(found))
+            with open(os.path.join(out, "layout.txt"), "w", encoding="utf-8") as f:
+                f.write("\n".join(uniq) or "keine Darstellungsfehler gefunden")
+            for t in uniq:
+                print("LAYOUT " + t, flush=True)
+            print(f"LAYOUT {len(uniq)} Auffälligkeiten", flush=True)
+            app.exit(0)
+            return
+        w, h, pg, pop = checks[0]
+        if root.property("width") != w or root.property("height") != h or root.property("page") != pg:
+            root.setProperty("width", w); root.setProperty("height", h); root.setProperty("page", pg)
+            backend.selected = 0
+            QTimer.singleShot(700, check)
+            return
+        from PySide6.QtCore import QObject
+        popup = root.findChild(QObject, "packPop")
+        if pop and popup is not None and not popup.property("opened"):
+            popup.setProperty("visible", True)
+            QTimer.singleShot(500, check)
+            return
+        checks.pop(0)
+        where = f"{w}×{h} {names[pg]}" + (" Anordnen-Fenster" if pop else "")
+        found.extend(_layout_check(root, where))
+        if w == 1100:
+            root.grabWindow().save(os.path.join(out, f"klein-{names[pg]}{'-fenster' if pop else ''}.png"))
+        if popup is not None and pop:
+            popup.setProperty("visible", False)
+        QTimer.singleShot(150, check)
+
+    _shoot = shoot
+
+    def shoot_then_check():
+        if steps:
+            return _shoot()
+        check()
+    shoot = shoot_then_check  # noqa: F811
     QTimer.singleShot(1500, shoot)
+
+
+def _layout_check(root, where: str) -> list:
+    """Sucht Darstellungsfehler: Texte, die sich überlappen (z. B. Schrift über einer Taste), Texte, die über
+    ihren Platz hinausragen, ohne gekürzt zu werden, und Elemente außerhalb des Fensters."""
+    from PySide6.QtCore import QRectF
+    from PySide6.QtQuick import QQuickItem
+    texts, out = [], []
+    W, H = root.width(), root.height()
+
+    def walk(it, anc, clip):
+        if not it.isVisible() or it.opacity() < 0.05:
+            return
+        cls = it.metaObject().className()
+        r = it.mapRectToScene(QRectF(0, 0, it.width(), it.height()))
+        if it.clip():
+            clip = clip.intersected(r)
+        if cls.startswith("QQuickText") and not cls.startswith("QQuickTextInput") and not cls.startswith("QQuickTextEdit"):
+            t = (it.property("text") or "").strip()
+            if t and it.width() > 1 and it.height() > 1:
+                cr = it.property("contentWidth") or 0
+                elide = it.property("elide") or 0
+                wrap = it.property("wrapMode") or 0
+                if not elide and not wrap and cr > it.width() + 2:
+                    out.append(f"{where}: Text ragt über seinen Platz: „{t[:40]}“ ({cr:.0f} > {it.width():.0f} px)")
+                # tatsächlich bemalte Fläche (nicht die ganze Breite eines linksbündigen Felds)
+                cw = min(cr, it.width()) if cr else it.width()
+                al = int(it.property("horizontalAlignment") or 1)
+                x0 = r.x() + (it.width() - cw if al == 2 else (it.width() - cw) / 2 if al == 4 else 0)
+                tr = QRectF(x0, r.y(), cw, min(r.height(), (it.property("contentHeight") or r.height()))).intersected(clip)
+                if tr.width() > 1 and tr.height() > 1:
+                    texts.append((tr, t, anc))
+        if r.width() > 2 and r.height() > 2 and (r.right() > W + 2 or r.bottom() > H + 2) and cls.startswith("QQuick") \
+                and not anc_clipped(it):
+            nm = it.property("text") or it.objectName() or cls
+            out.append(f"{where}: außerhalb des Fensters: {str(nm)[:40]} ({r.right():.0f}, {r.bottom():.0f})")
+        for c in it.childItems():
+            walk(c, anc + (id(it),), clip)
+
+    def anc_clipped(it):
+        p = it.parentItem()
+        while p is not None:
+            if p.clip():
+                return True
+            p = p.parentItem()
+        return False
+    walk(root.contentItem().parentItem() or root.contentItem(), (), QRectF(0, 0, W, H))
+    for a in range(len(texts)):
+        for b in range(a + 1, len(texts)):
+            ra, ta, _ = texts[a]
+            rb, tb, _ = texts[b]
+            i = ra.intersected(rb)
+            if i.width() > 2 and i.height() > 2 and i.width() * i.height() > 0.15 * min(ra.width() * ra.height(), rb.width() * rb.height()):
+                out.append(f"{where}: Texte überlappen: „{ta[:30]}“ / „{tb[:30]}“")
+    return out
 
 
 def _selftest_mouse(app, engine, backend, out):

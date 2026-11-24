@@ -52,7 +52,8 @@ jobs:
           KIT_UPDATE_REPO: invalid/none
         run: |
           cd desktop
-          timeout 120 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--screenshots', '../shots']; sys.exit(main())" || true
+          timeout 300 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--screenshots', '../shots']; sys.exit(main())" > shots.log 2>&1 || true
+          grep "^LAYOUT" shots.log | head -60 | while IFS= read -r l; do echo "::warning title=Layout::$l"; done
           ls -la ../shots || true
       - name: Maus und Anordnen mit echter 3D-Darstellung prüfen
         shell: bash
@@ -70,7 +71,7 @@ jobs:
         if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
-          mkdir -p ../screens && cp shots/*.png ../screens/ 2>/dev/null || true
+          mkdir -p ../screens && cp shots/*.png shots/*.txt desktop/*.log ../screens/ 2>/dev/null || true
           cd ../screens
           git init -q -b screens
           git config user.name "github-actions"

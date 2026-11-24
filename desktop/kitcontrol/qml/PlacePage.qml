@@ -241,6 +241,7 @@ Item {
 
     Popup {
         id: packPop
+        objectName: "packPop"
         anchors.centerIn: parent
         width: 440
         modal: true
