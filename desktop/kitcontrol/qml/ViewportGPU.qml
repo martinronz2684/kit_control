@@ -147,6 +147,7 @@ Item {
                 materials: DefaultMaterial { diffuseColor: "#cfd4da"; lighting: DefaultMaterial.NoLighting }
             }
             Model {
+                visible: false                  // waagrechte Höhenlinien im Korb aus (stören beim Ansehen)
                 geometry: LineGeometry { segments: vg.cageRings() }
                 materials: DefaultMaterial { diffuseColor: "#3a3f46"; lighting: DefaultMaterial.NoLighting }
             }

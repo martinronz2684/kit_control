@@ -121,7 +121,7 @@ Canvas {
         // Korbgitter an den Seiten (dezent)
         g.strokeStyle = "rgba(205,210,216,0.12)"; g.lineWidth = 1
         g.beginPath()
-        for (var zz = 10; zz < z1; zz += 10) {
+        for (var zz = 10; zz < 0; zz += 10) {   // Höhenlinien aus
             line(P(-hx, -hx, zz), P(hx, -hx, zz)); line(P(hx, -hx, zz), P(hx, hx, zz))
             line(P(hx, hx, zz), P(-hx, hx, zz)); line(P(-hx, hx, zz), P(-hx, -hx, zz))
         }
