@@ -95,6 +95,17 @@ def _offset_once(p: np.ndarray, d: float, miter: float):
     return p + m * k[:, None], t
 
 
+def _dedupe(p: np.ndarray, eps: float = 1e-7) -> np.ndarray:
+    """Doppelte aufeinanderfolgende Punkte entfernen (Kanten der Länge 0 ergäben NaN beim Versatz)."""
+    if len(p) < 2:
+        return p
+    d = np.hypot(*(_nx(p) - p).T)
+    keep = d > eps
+    if keep.all():
+        return p
+    return p[keep]
+
+
 def offset_loop(p: np.ndarray, d: float, miter: float = 4.0):
     """Ein ausgerichtetes Polygon um d mm zum Material hin versetzen (d > 0 = nach innen).
     Kanten, die durch den Versatz verschwinden würden (Richtung kehrt sich um), werden entfernt und neu
@@ -107,9 +118,12 @@ def offset_loop(p: np.ndarray, d: float, miter: float = 4.0):
     if d > 0 and a0 > 0 and 2 * a0 / max(perimeter(p), 1e-12) < d * 0.95:
         return None
     for _ in range(len(p)):
+        p = _dedupe(p)
         if len(p) < 3:
             return None
         q, t = _offset_once(p, d, miter)
+        if not np.isfinite(q).all():
+            return None
         qe = _nx(q) - q
         bad = np.einsum("ij,ij->i", qe, t) <= 0           # Kante zeigt nach dem Versatz rückwärts
         if not bad.any():

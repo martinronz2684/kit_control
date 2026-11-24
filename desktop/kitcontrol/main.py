@@ -23,6 +23,10 @@ def main() -> int:
     from PySide6.QtQml import QQmlApplicationEngine
 
     from kitcontrol.backend import Backend
+    try:
+        from kitcontrol import geometry  # noqa: F401  (registriert MeshGeometry/LineGeometry für QML)
+    except Exception as e:               # ohne Qt Quick 3D bleibt die einfache Ansicht
+        print("3D-Ansicht ohne Grafikkarte:", e, file=sys.stderr)
 
     selftest = "--selftest" in sys.argv
     files = [a for a in sys.argv[1:] if not a.startswith("--")]

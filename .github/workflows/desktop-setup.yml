@@ -53,7 +53,7 @@ jobs:
             --paths . --paths .. \
             --add-data "kitcontrol/qml;kitcontrol/qml" \
             --add-data "kitcontrol/assets;kitcontrol/assets" \
-            --hidden-import kitctl.pjob \
+            --hidden-import kitctl.pjob --hidden-import kitcontrol.geometry --hidden-import PySide6.QtQuick3D \
             --exclude-module tkinter \
             --exclude-module PySide6.Qt3DCore --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtMultimedia \
             --distpath ../dist --workpath ../build \

@@ -88,24 +88,71 @@ def _section(verts, faces, z):
             continue
         adj.setdefault(k[0], []).append(k[1])
         adj.setdefault(k[1], []).append(k[0])
-    loops = []
+    loops, open_chains = [], []
     seen = set()
-    for start in adj:
-        if start in seen:
-            continue
+
+    def walk(start):
         chain = [start]
         seen.add(start)
         prev, cur = None, start
         while True:
             nxt = [v for v in adj[cur] if v != prev and v not in seen]
             if not nxt:
-                break
+                return chain, start in adj[cur] and len(chain) > 2
             prev, cur = cur, nxt[0]
             seen.add(cur)
             chain.append(cur)
-        if len(chain) >= 3:
-            loops.append(np.array([pts[k] for k in chain]))
+
+    # zuerst offene Ketten von ihren Enden aus (nicht-geschlossene Netze), dann die geschlossenen Ringe
+    ends = [k for k, v in adj.items() if len(v) == 1]
+    for start in ends + list(adj):
+        if start in seen:
+            continue
+        chain, closed = walk(start)
+        if len(chain) < 2:
+            continue
+        arr = np.array([pts[k] for k in chain])
+        if closed:
+            if len(arr) >= 3:
+                loops.append(arr)
+        else:
+            open_chains.append(arr)
+    loops += _join_open(open_chains)
     return loops
+
+
+def _join_open(chains, tol: float = 0.3):
+    """Offene Ketten (Löcher im Netz) über nahe Enden verbinden. Was sich nicht schließen lässt, wird verworfen –
+    sonst entstünde eine Verbindungslinie quer über die Schicht (Schraffurstrich durch den Bauraum)."""
+    out = []
+    chains = [c for c in chains if len(c) >= 2]
+    while chains:
+        cur = chains.pop()
+        changed = True
+        while changed:
+            changed = False
+            if np.hypot(*(cur[-1] - cur[0])) <= tol and len(cur) >= 3:
+                break
+            best, bd, how = None, tol, None
+            for i, c in enumerate(chains):
+                for h, d in (("ee", np.hypot(*(cur[-1] - c[0]))), ("er", np.hypot(*(cur[-1] - c[-1]))),
+                             ("se", np.hypot(*(cur[0] - c[-1]))), ("sr", np.hypot(*(cur[0] - c[0])))):
+                    if d <= bd:
+                        best, bd, how = i, d, h
+            if best is not None:
+                c = chains.pop(best)
+                if how == "ee":
+                    cur = np.vstack([cur, c])
+                elif how == "er":
+                    cur = np.vstack([cur, c[::-1]])
+                elif how == "se":
+                    cur = np.vstack([c, cur])
+                else:
+                    cur = np.vstack([c[::-1], cur])
+                changed = True
+        if len(cur) >= 3 and np.hypot(*(cur[-1] - cur[0])) <= tol:
+            out.append(cur)
+    return out
 
 
 @dataclass
@@ -184,7 +231,7 @@ def build_layers(sections, s: SliceSettings, progress=None, cancel=None, base: i
     def loops_of(i):
         if i not in prepared:
             sec = sections[i] if 0 <= i < n else []
-            lp = [G.simplify(l, s.min_vector_mm) for l in sec]
+            lp = [G.simplify(l, s.min_vector_mm) for l in sec if np.isfinite(l).all()]
             prepared[i] = G.orient([l for l in lp if len(l) >= 3]) if lp else []
         return prepared[i]
 
@@ -234,8 +281,9 @@ def build_layers(sections, s: SliceSettings, progress=None, cancel=None, base: i
                 contours = _nearest_order(contours, (0.0, 0.0), lambda c: c[0], lambda c: c[0])
                 last = contours[-1][0] if contours and s.contour_first else (0.0, 0.0)
                 hatch_parts = _nearest_order(hatch_parts, last, lambda h: h[0][:2], lambda h: h[-1][2:])
-            L.contours = contours
+            L.contours = [c for c in contours if len(c) >= 2 and np.isfinite(c).all()]
             L.hatches = np.concatenate(hatch_parts) if hatch_parts else np.zeros((0, 4))
+            L.hatches = L.hatches[np.isfinite(L.hatches).all(axis=1)]
             L.contour_first = s.contour_first
         layers.append(L)
         if progress and (i % 10 == 0 or i == o1 - 1):

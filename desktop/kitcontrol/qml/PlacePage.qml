@@ -19,17 +19,27 @@ Item {
             Layout.fillHeight: true
             clip: true
 
-            Viewport3D {
+            // 3D-Ansicht: auf der Grafikkarte (Qt Quick 3D), sonst die einfache Ansicht als Ersatz
+            Loader {
                 id: view3d
                 anchors.fill: parent
                 anchors.margins: 6
-                parts: pg.parts
-                sel: pg.sel
-                plate: backend.plateMm
-                idealXY: backend.ideal.xy
-                idealZ: backend.ideal.z
-                onPicked: (i) => backend.selected = i
-                onMoved: (i, x, y, first) => backend.movePart(i, x, y, first)
+                source: backend.gpuView ? "ViewportGPU.qml" : "Viewport3D.qml"
+                onStatusChanged: if (status === Loader.Error && source.toString().indexOf("GPU") >= 0) source = "Viewport3D.qml"
+                onLoaded: {
+                    item.parts = Qt.binding(function() { return pg.parts })
+                    item.sel = Qt.binding(function() { return pg.sel })
+                    item.plate = backend.plateMm
+                    item.idealXY = backend.ideal.xy
+                    item.idealZ = backend.ideal.z
+                }
+                function setView(n) { if (item) item.setView(n) }
+            }
+            Connections {
+                target: view3d.item
+                ignoreUnknownSignals: true
+                function onPicked(i) { backend.selected = i }
+                function onMoved(i, x, y, first) { backend.movePart(i, x, y, first) }
             }
 
             // Ansichten

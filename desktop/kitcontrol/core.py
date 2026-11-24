@@ -84,6 +84,24 @@ def decimate(tris: np.ndarray, max_tris: int) -> list:
     return np.round(t.astype(np.float64), 3).ravel().tolist()
 
 
+def quat(R: np.ndarray) -> list:
+    """Rotationsmatrix -> Quaternion [w, x, y, z]."""
+    t = np.trace(R)
+    if t > 0:
+        s = np.sqrt(t + 1.0) * 2
+        w, x, y, z = 0.25 * s, (R[2, 1] - R[1, 2]) / s, (R[0, 2] - R[2, 0]) / s, (R[1, 0] - R[0, 1]) / s
+    elif R[0, 0] > R[1, 1] and R[0, 0] > R[2, 2]:
+        s = np.sqrt(1.0 + R[0, 0] - R[1, 1] - R[2, 2]) * 2
+        w, x, y, z = (R[2, 1] - R[1, 2]) / s, 0.25 * s, (R[0, 1] + R[1, 0]) / s, (R[0, 2] + R[2, 0]) / s
+    elif R[1, 1] > R[2, 2]:
+        s = np.sqrt(1.0 + R[1, 1] - R[0, 0] - R[2, 2]) * 2
+        w, x, y, z = (R[0, 2] - R[2, 0]) / s, (R[0, 1] + R[1, 0]) / s, 0.25 * s, (R[1, 2] + R[2, 1]) / s
+    else:
+        s = np.sqrt(1.0 + R[2, 2] - R[0, 0] - R[1, 1]) * 2
+        w, x, y, z = (R[1, 0] - R[0, 1]) / s, (R[0, 2] + R[2, 0]) / s, (R[1, 2] + R[2, 1]) / s, 0.25 * s
+    return [float(w), float(x), float(y), float(z)]
+
+
 class AppCore:
     def __init__(self):
         self.scene = Scene()
@@ -284,7 +302,13 @@ class AppCore:
                 if len(t) > 60000:
                     t = t[:: len(t) // 60000 + 1]
                 self._outline_cache[key] = hull(t[:, :2])
+            from kitslice.scene import _rotation
+            origin = p.transform(np.zeros((1, 3)))[0]          # wohin der Original-Nullpunkt wandert
             out.append({
+                "gkey": f"m{id(p.mesh)}",
+                "quat": quat(_rotation(p.rot_x, p.rot_y, p.rot_z)),
+                "pos": [float(p.x + origin[0]), float(p.y + origin[1]), float(p.z_lift + origin[2])],
+                "scale3": [float(v) for v in p.scale],
                 "mesh_key": f"{id(p.mesh)}:{p.rot_x}:{p.rot_y}:{p.rot_z}:{p.scale[0]}",
                 "z": round(float(p.z_lift), 2),
                 "index": i, "name": p.name, "x": round(float(p.x), 2), "y": round(float(p.y), 2),

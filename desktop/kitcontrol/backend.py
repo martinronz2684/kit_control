@@ -61,7 +61,14 @@ class Backend(QObject):
 
     @Property("QVariant", notify=partsChanged)
     def parts(self):
-        return self.core.parts_info()
+        info = self.core.parts_info()
+        try:                                     # Netze für die 3D-Ansicht auf der Grafikkarte bereitstellen
+            from kitcontrol import geometry
+            for p, d in zip(self.core.scene.parts, info):
+                geometry.register(d["gkey"], p.mesh)
+        except Exception:
+            pass
+        return info
 
     @Property("QVariant", notify=partsChanged)
     def problems(self):
@@ -97,6 +104,17 @@ class Backend(QObject):
             self.partsChanged.emit()
 
     selected = Property(int, _get_sel, _set_sel, notify=partsChanged)
+
+    @Property(bool, constant=True)
+    def gpuView(self):
+        """3D-Ansicht auf der Grafikkarte, außer KIT_NO_GPU=1 oder Qt Quick 3D fehlt."""
+        if os.environ.get("KIT_NO_GPU") == "1":
+            return False
+        try:
+            import kitcontrol.geometry  # noqa: F401
+            return True
+        except Exception:
+            return False
 
     @Property(float, constant=True)
     def plateMm(self):

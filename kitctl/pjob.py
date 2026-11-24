@@ -185,6 +185,8 @@ def build_central(layers, layer_mm: float, max_empty: int = 20, contour_first=Tr
     inf_code = struct.pack("<H", INFILL)
 
     def recs(codes, xy):
+        if not np.isfinite(xy).all():          # Sicherheitsnetz: nie ungültige Koordinaten an den Laser geben
+            raise ValueError("ungültige Koordinate im Druckjob")
         a = np.empty(len(codes), dtype=dt)
         a["c"] = codes
         a["x"] = np.rint(xy[:, 0] * 1000).astype(np.int32)
