@@ -68,7 +68,7 @@ def _section(verts, faces, z):
     pts = {}
     for a, b in ((0, 1), (1, 2), (2, 0)):
         cross = above[:, a] != above[:, b]
-        va, vb = faces[:, a], faces[:, b]
+        va, vb = faces[:, a].astype(np.int64), faces[:, b].astype(np.int64)   # int64: Schlüssel laufen sonst über
         lo, hi = np.minimum(va, vb), np.maximum(va, vb)
         key = lo * (len(verts) + 1) + hi
         edges.append(np.where(cross, key, -1))

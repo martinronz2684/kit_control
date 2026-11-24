@@ -162,6 +162,20 @@ class StrategyTest(unittest.TestCase):
             profiles.validate(dict(base, core_spacing_um=50))
 
 
+class BigMeshTest(unittest.TestCase):
+    def test_many_vertices_closed_contours(self):
+        # > 46341 Eckpunkte: Kantenschlüssel passen nicht mehr in int32 (früher zerfielen die Konturen)
+        u, v = np.meshgrid(np.linspace(0, np.pi, 180), np.linspace(0, 2 * np.pi, 360))
+        P = np.stack([np.sin(u) * np.cos(v) * 15, np.sin(u) * np.sin(v) * 15, np.cos(u) * 15 + 15], -1)
+        a, b, c, d = P[:-1, :-1], P[1:, :-1], P[1:, 1:], P[:-1, 1:]
+        T = np.concatenate([np.stack([a, b, c], -2).reshape(-1, 3, 3), np.stack([a, c, d], -2).reshape(-1, 3, 3)])
+        sc = Scene([Part("kugel", T), Part("kugel2", T, x=40.0)])
+        _, m, L = make_job(sc, profiles.validate(profiles.get("pa12")))
+        mid = L[len(L) // 2]
+        self.assertEqual(len(mid.contours), 2)
+        self.assertGreater(len(mid.hatches), 100)
+
+
 class ThinWallTest(unittest.TestCase):
     def test_thin_wall_kept(self):
         sc = Scene([Part("wand", box(30, 0.3, 2))])
