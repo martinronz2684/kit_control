@@ -8,7 +8,7 @@ Item {
     property int count: m.layers ? slider.to : 0
     property bool done: backend.sliceState === "done"
 
-    function show() { if (vp.done) view.layer = backend.layer(Math.round(slider.value)) }
+    function show() { if (vp.done) view.layerData = backend.layer(Math.round(slider.value)) }
 
     Connections {
         target: backend
@@ -17,9 +17,9 @@ Item {
                 var d = backend.layer(1)
                 slider.to = Math.max(1, d.count || 1)
                 slider.value = 1
-                view.layer = d
+                view.layerData = d
             } else if (backend.sliceState !== "running") {
-                view.layer = ({})
+                view.layerData = ({})
             }
         }
     }
@@ -79,7 +79,7 @@ Item {
                     }
                     KButton { text: "▶"; implicitWidth: 40; onClicked: { slider.increase(); vp.show() } }
                     Text {
-                        text: "Schicht " + Math.round(slider.value) + " / " + Math.round(slider.to) + (view.layer.z !== undefined ? "  ·  z " + view.layer.z.toFixed(2) + " mm" : "")
+                        text: "Schicht " + Math.round(slider.value) + " / " + Math.round(slider.to) + (view.layerData.z !== undefined ? "  ·  z " + view.layerData.z.toFixed(2) + " mm" : "")
                         color: win.cInk; font.pixelSize: 13
                         Layout.preferredWidth: 220
                     }

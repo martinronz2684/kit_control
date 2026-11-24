@@ -16,7 +16,7 @@ Item {
             backend.requestPiLayer(job.id, k.layer)
         }
     }
-    Connections { target: backend; function onPiLayerReady(d) { liveView.layer = d } }
+    Connections { target: backend; function onPiLayerReady(d) { liveView.layerData = d } }
 
     RowLayout {
         anchors.fill: parent

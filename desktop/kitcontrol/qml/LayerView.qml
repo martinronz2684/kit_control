@@ -3,9 +3,9 @@ import QtQuick
 // Zeichnet eine Schicht: Konturen hell, Schraffur Petrol. data = {contour: [x0,y0,x1,y1,…], infill: […]}
 Canvas {
     id: lv
-    property var layer: ({})
+    property var layerData: ({})
     property real plateMm: 110
-    onLayerChanged: requestPaint()
+    onLayerDataChanged: requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
     onPaint: {
@@ -32,7 +32,7 @@ Canvas {
             }
             g.stroke()
         }
-        lines(lv.layer.infill, "rgba(38,148,184,0.85)", Math.max(0.5, 0.12 * k))
-        lines(lv.layer.contour, "#d8f3fc", 1.3)
+        lines(lv.layerData.infill, "rgba(38,148,184,0.85)", Math.max(0.5, 0.12 * k))
+        lines(lv.layerData.contour, "#d8f3fc", 1.3)
     }
 }
