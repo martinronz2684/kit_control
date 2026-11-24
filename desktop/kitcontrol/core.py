@@ -226,6 +226,36 @@ class AppCore:
             setattr(p, key, float(value))
         p._cache = None
 
+    def pick(self, a, b) -> int:
+        """Strahl von a nach b (Slicer-Koordinaten) -> Index des vordersten getroffenen Teils, sonst -1."""
+        a = np.asarray(a, float)
+        d = np.asarray(b, float) - a
+        best, bi = np.inf, -1
+        for i, p in enumerate(self.scene.parts):
+            lo, hi = (np.asarray(v, float) for v in p.bbox())
+            with np.errstate(divide="ignore", invalid="ignore"):
+                t1, t2 = (lo - 1 - a) / d, (hi + 1 - a) / d
+            tn, tf = np.nanmax(np.minimum(t1, t2)), np.nanmin(np.maximum(t1, t2))
+            if not tf >= max(tn, 0) or tn >= best:
+                continue
+            t = p.light(6000)
+            v0, e1, e2 = t[:, 0], t[:, 1] - t[:, 0], t[:, 2] - t[:, 0]
+            h = np.cross(d, e2)
+            det = np.einsum("ij,ij->i", e1, h)
+            ok = np.abs(det) > 1e-12
+            inv = np.where(ok, 1.0 / np.where(ok, det, 1.0), 0.0)
+            sv = a - v0
+            u = np.einsum("ij,ij->i", sv, h) * inv
+            q = np.cross(sv, e1)
+            v = (q @ d) * inv
+            tt = np.einsum("ij,ij->i", e2, q) * inv
+            hit = ok & (u >= 0) & (v >= 0) & (u + v <= 1) & (tt > 0)
+            if hit.any():
+                tmin = float(tt[hit].min())
+                if tmin < best:
+                    best, bi = tmin, i
+        return bi
+
     def move_part(self, i: int, x: float, y: float, record: bool) -> None:
         """Ziehen mit der Maus: nur am Anfang einen Rückgängig-Schritt anlegen."""
         if not 0 <= i < len(self.scene.parts):

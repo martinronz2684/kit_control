@@ -113,6 +113,8 @@ def _dilate3(a: np.ndarray, g: int) -> np.ndarray:
 
 class _Ctx:
     def __init__(self, area, height, gap, wall, floor, res):
+        if gap >= 1.0:                           # Raster so wählen, dass der Abstand genau aufgeht
+            res = min(res, max(1.0, gap / max(1, round(gap / res))))
         self.res = res
         inner = area - 2 * wall
         self.nx = self.ny = max(1, int(math.floor(inner / res)))
@@ -301,14 +303,48 @@ def _dilate_map(o, bot, top, r: int):
     return o - r, B, T
 
 
+def _pair_drop(o, bot, top, z, qo, qbot, qtop, qz, gap, h, rmax):
+    """Wie weit darf P (Säulenkarte o/bot/top, Höhe z) nach unten, ohne Q näher als gap zu kommen?
+    Seitlicher Abstand je Zellversatz exakt berücksichtigt (konservativ um eine Zelle)."""
+    d = np.inf
+    pb, pt = bot + z, top + z
+    pdef = np.isfinite(bot)
+    qb_all, qt_all = qbot + qz, qtop + qz
+    for dx in range(-rmax, rmax + 1):
+        for dy in range(-rmax, rmax + 1):
+            L = max(0.0, h * math.hypot(dx, dy) - h * 1.415)
+            if L >= gap:
+                continue
+            vg = math.sqrt(gap * gap - L * L)
+            # Zelle (i, j) von P gegen Zelle (i+dx, j+dy) von Q
+            s0 = o + np.array([dx, dy]) - qo                  # Index in Q von P-Zelle (0,0)
+            a0 = np.maximum(0, -s0)
+            a1 = np.minimum(np.array(bot.shape), np.array(qbot.shape) - s0)
+            if (a1 <= a0).any():
+                continue
+            ps = (slice(a0[0], a1[0]), slice(a0[1], a1[1]))
+            qs = (slice(a0[0] + s0[0], a1[0] + s0[0]), slice(a0[1] + s0[1], a1[1] + s0[1]))
+            m = pdef[ps] & np.isfinite(qbot[qs])
+            if not m.any():
+                continue
+            b, t = pb[ps][m], pt[ps][m]
+            qb, qt = qb_all[qs][m], qt_all[qs][m]
+            below = qt + vg <= b + 1e-6
+            above = qb >= t + vg - 1e-6
+            if (~below & ~above).any():
+                return 0.0                                   # schon an der Grenze
+            if below.any():
+                d = min(d, float((b[below] - qt[below] - vg).min()))
+    return d
+
+
 def settle(scene: Scene, movers, gap: float, h: float = 0.5, floor: float = 0.0, passes: int = 4) -> float:
-    """Exaktes Absenken: jedes Teil so weit nach unten, bis es den Mindestabstand zum Teil darunter
-    (bzw. die Bauplatte) erreicht – ohne Rasterzuschlag in Z. Liefert die gesamte Absenkung in mm."""
+    """Exaktes Absenken: jedes Teil so weit nach unten, bis es den Mindestabstand zu einem Teil darunter
+    (schräg/seitlich exakt gerechnet) oder die Bauplatte erreicht. Liefert die gesamte Absenkung in mm."""
     if not movers:
         return 0.0
-    r = int(math.ceil(gap / h)) + 1
+    rmax = int(math.ceil(gap / h)) + 2
     maps = {id(q): _colmap(q, h) for q in scene.parts}
-    dil = {id(q): _dilate_map(*maps[id(q)], r) for q in scene.parts}
     mover_ids = {id(q) for q in movers}
     total = 0.0
     for _ in range(passes):
@@ -317,32 +353,14 @@ def settle(scene: Scene, movers, gap: float, h: float = 0.5, floor: float = 0.0,
             if id(p) not in mover_ids:
                 continue
             o, bot, top = maps[id(p)]
-            pb = bot + p.z_lift
-            pt = top + p.z_lift
-            defined = np.isfinite(bot)
-            d = float(pb[defined].min() - floor)
+            d = float((bot[np.isfinite(bot)] + p.z_lift).min() - floor)
             for q in scene.parts:
-                if q is p or d <= 1e-6:
+                if q is p or d <= 0.05:
                     continue
-                qo, QB, QT = dil[id(q)]
-                a0 = np.maximum(o, qo)
-                a1 = np.minimum(o + np.array(bot.shape), qo + np.array(QB.shape))
-                if (a1 <= a0).any():
+                qo, qbot, qtop = maps[id(q)]
+                if ((qo + np.array(qbot.shape) + rmax) < o).any() or ((o + np.array(bot.shape) + rmax) < qo).any():
                     continue
-                ps = (slice(a0[0] - o[0], a1[0] - o[0]), slice(a0[1] - o[1], a1[1] - o[1]))
-                qs = (slice(a0[0] - qo[0], a1[0] - qo[0]), slice(a0[1] - qo[1], a1[1] - qo[1]))
-                m = defined[ps] & np.isfinite(QB[qs])
-                if not m.any():
-                    continue
-                b, t = pb[ps][m], pt[ps][m]
-                qb, qt = QB[qs][m] + q.z_lift, QT[qs][m] + q.z_lift
-                below = qt <= b + 1e-6
-                above = qb >= t - 1e-6
-                if (~below & ~above).any():          # schon zu nah/verschränkt: nicht bewegen
-                    d = 0.0
-                    break
-                if below.any():
-                    d = min(d, float((b[below] - qt[below]).min() - gap))
+                d = min(d, _pair_drop(o, bot, top, p.z_lift, qo, qbot, qtop, q.z_lift, gap, h, rmax))
             if d > 0.05:
                 p.z_lift = float(p.z_lift - d)
                 moved += d
@@ -391,7 +409,44 @@ def _layer_spread(occ: np.ndarray) -> float:
     return float(a.std() / max(a.mean(), 1e-9))
 
 
+def _state(parts):
+    return [(p, p.rot_x, p.rot_y, p.rot_z, p.x, p.y, p.z_lift) for p in parts]
+
+
+def _restore(st):
+    for p, rx, ry, rz, x, y, z in st:
+        p.rot_x, p.rot_y, p.rot_z, p.x, p.y, p.z_lift = rx, ry, rz, x, y, z
+        p._cache = None
+
+
 def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
+              only=None, area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0,
+              time_budget: float = 8.0, progress=None, cancel=None, floor: float = 0.0,
+              quality_w: float = 0.5) -> dict:
+    """„Ausgewogen“ (0 < quality_w < 1): Lagen nach SLS-Regeln nur nehmen, wenn sie die Bauhöhe kaum erhöhen
+    (höchstens 15 %), sonst die dichteste Anordnung. Bauhöhe hat Vorrang."""
+    if not (0 < quality_w < 1) or not allow_rotation:
+        return _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget,
+                          progress, cancel, floor, quality_w)
+    parts = list(scene.parts)
+    start = _state(parts)
+    rq = _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget / 2,
+                    (lambda f: progress(f / 2)) if progress else None, cancel, floor, quality_w)
+    sq = _state(parts)
+    _restore(start)
+    rd = _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget / 2,
+                    (lambda f: progress(0.5 + f / 2)) if progress else None, cancel, floor, 0.0)
+    if rq.get("ok") and not rq.get("relaxed") and (not rd.get("ok") or rq["height"] <= rd["height"] * 1.15 + 1.0):
+        _restore(sq)
+        rq["passes"] = rq.get("passes", 0) + rd.get("passes", 0)
+        return rq
+    rd["passes"] = rq.get("passes", 0) + rd.get("passes", 0)
+    if rq.get("ok"):
+        rd["relaxed"] = True
+    return rd
+
+
+def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
               only=None, area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0,
               time_budget: float = 8.0, progress=None, cancel=None, floor: float = 0.0,
               quality_w: float = 0.5) -> dict:
@@ -436,6 +491,8 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
         if cancel and cancel():
             break
         tried += 1
+        if r is None and quality_w > 0 and best is None and k >= 2:
+            break                                    # mit den besten Lagen passt es nicht
         if r:
             top, occ, plan = _compact(ctx, occ0, r[2])
             key = (top, round(_layer_spread(occ), 2))
@@ -449,7 +506,7 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
             break
     if best is None and quality_w > 0 and not (cancel and cancel()):
         # mit den besten Lagen passt es nicht -> alle Lagen erlauben
-        r = auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget / 2,
+        r = _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget / 2,
                       progress, cancel, floor, 0.0)
         r["relaxed"] = True
         return r

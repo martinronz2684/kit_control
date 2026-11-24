@@ -20,6 +20,9 @@ Item {
     property real tz: 40
     signal picked(int index)
     signal moved(int index, real x, real y, bool first)
+    property int dragIdx: -1          // Teil, das gerade gezogen wird (nur Anzeige, gespeichert beim Loslassen)
+    property real dragDx: 0
+    property real dragDy: 0
 
     function setView(name) {
         if (name === "top") { yaw = 0; elev = 90 }
@@ -50,6 +53,20 @@ Item {
             s.push(-hx, -hx, z, hx, -hx, z, hx, -hx, z, hx, hx, z, hx, hx, z, -hx, hx, z, -hx, hx, z, -hx, -hx, z)
         }
         return s
+    }
+    // Bildpunkt -> Strahl in Slicer-Koordinaten [a, b]
+    function ray(mx, my) {
+        var a = v3.mapTo3DScene(Qt.vector3d(mx, my, 0)), b = v3.mapTo3DScene(Qt.vector3d(mx, my, 1000))
+        return [Qt.vector3d(a.x, -a.z, a.y), Qt.vector3d(b.x, -b.z, b.y)]
+    }
+    function pickAt(mx, my) {
+        var r = ray(mx, my)
+        var i = (typeof backend !== "undefined" && backend) ? backend.pickPart(r[0].x, r[0].y, r[0].z, r[1].x, r[1].y, r[1].z) : -1
+        if (i < 0) {
+            var h = v3.pick(mx, my)
+            if (h.objectHit && h.objectHit.partIndex !== undefined) i = h.objectHit.partIndex
+        }
+        return i
     }
     // Bildpunkt -> Punkt auf der waagrechten Ebene z = z0 (Slicer-Koordinaten)
     function ground(mx, my, z0) {
@@ -124,7 +141,8 @@ Item {
                     property int partIndex: index
                     pickable: true
                     geometry: MeshGeometry { key: modelData.gkey }
-                    position: Qt.vector3d(modelData.pos[0], modelData.pos[1], modelData.pos[2])
+                    position: Qt.vector3d(modelData.pos[0] + (index === vg.dragIdx ? vg.dragDx : 0),
+                                          modelData.pos[1] + (index === vg.dragIdx ? vg.dragDy : 0), modelData.pos[2])
                     rotation: Qt.quaternion(modelData.quat[0], modelData.quat[1], modelData.quat[2], modelData.quat[3])
                     scale: Qt.vector3d(modelData.scale3[0], modelData.scale3[1], modelData.scale3[2])
                     materials: PrincipledMaterial {
@@ -157,8 +175,7 @@ Item {
         onPressed: (m) => {
             lx = m.x; ly = m.y
             if (m.button === Qt.LeftButton) {
-                var r = v3.pick(m.x, m.y)
-                idx = r.objectHit && r.objectHit.partIndex !== undefined ? r.objectHit.partIndex : -1
+                idx = vg.pickAt(m.x, m.y)
                 vg.picked(idx)
                 if (idx >= 0) {
                     var p = vg.parts[idx]
@@ -178,7 +195,7 @@ Item {
                 if (!g) return
                 var dx = g.x - g0.x, dy = g.y - g0.y
                 if (first && Math.abs(dx) + Math.abs(dy) < 0.3) return
-                vg.moved(idx, Math.round((px + dx) * 10) / 10, Math.round((py + dy) * 10) / 10, first)
+                vg.dragIdx = idx; vg.dragDx = dx; vg.dragDy = dy      // flüssig nur in der Anzeige verschieben
                 first = false
             } else if (mode === 2) {
                 vg.yaw -= (m.x - lx) * 0.4
@@ -189,8 +206,15 @@ Item {
             }
             lx = m.x; ly = m.y
         }
-        onReleased: { mode = 0; idx = -1 }
-        onDoubleClicked: (m) => { if (!v3.pick(m.x, m.y).objectHit) vg.setView("iso") }
+        onReleased: {
+            if (mode === 1 && vg.dragIdx >= 0) {
+                var i = vg.dragIdx, x = Math.round((px + vg.dragDx) * 10) / 10, y = Math.round((py + vg.dragDy) * 10) / 10
+                vg.dragIdx = -1; vg.dragDx = 0; vg.dragDy = 0
+                vg.moved(i, x, y, true)
+            }
+            mode = 0; idx = -1
+        }
+        onDoubleClicked: (m) => { if (vg.pickAt(m.x, m.y) < 0) vg.setView("iso") }
         onWheel: (w) => { vg.dist = Math.max(60, Math.min(1500, vg.dist * (w.angleDelta.y > 0 ? 1 / 1.12 : 1.12))) }
     }
 }

@@ -201,7 +201,7 @@ class Backend(QObject):
             if not r.get("ok"):
                 return r.get("error") or f"Angeordnet, aber höher als der ideale Bereich ({r.get('height')} mm)"
             return f"Angeordnet: Bauhöhe {r['height']} mm, Packdichte {r['density']} %, leere Schichten {r.get('empty_mm', 0)} mm ({r['passes']} Durchläufe)" + (
-                " – nur mit allen Lagen passend, Ausrichtungsregeln gelockert" if r.get("relaxed") else "")
+                " – Ausrichtungsregeln gelockert, weil sie die Bauhöhe deutlich erhöht hätten" if r.get("relaxed") else "")
         self._pack_job(fn, msg)
 
     @Slot(int, "QVariant")
@@ -216,6 +216,10 @@ class Backend(QObject):
     @Slot()
     def cancelPack(self):
         self._pack_cancel = True
+
+    @Slot(float, float, float, float, float, float, result=int)
+    def pickPart(self, ax, ay, az, bx, by, bz):
+        return self.core.pick((ax, ay, az), (bx, by, bz))
 
     @Slot(int, float, float, bool)
     def movePart(self, i, x, y, record):
