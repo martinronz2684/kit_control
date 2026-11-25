@@ -40,7 +40,7 @@ Item {
                     spacing: 10
                     RowLayout {
                         Caption { text: "Kit Control"; Layout.fillWidth: true }
-                        KButton { text: backend.searching ? "Sucht …" : "Suchen"; kind: "ghost"; enabled: !backend.searching; onClicked: backend.discover() }
+                        KButton { text: backend.searching ? win.t("Sucht …") : win.t("Suchen"); kind: "ghost"; enabled: !backend.searching; onClicked: backend.discover() }
                     }
                     Repeater {
                         model: backend.devices
@@ -59,8 +59,8 @@ Item {
                     }
                     RowLayout {
                         spacing: 8
-                        KField { id: hostField; Layout.fillWidth: true; placeholderText: "IP-Adresse des Pi"; text: backend.host; onAccepted: backend.connectHost(text) }
-                        KButton { text: "Verbinden"; onClicked: backend.connectHost(hostField.text) }
+                        KField { id: hostField; Layout.fillWidth: true; placeholderText: win.t("IP-Adresse des Pi"); text: backend.host; onAccepted: backend.connectHost(text) }
+                        KButton { text: win.t("Verbinden"); onClicked: backend.connectHost(hostField.text) }
                     }
                 }
             }
@@ -72,18 +72,18 @@ Item {
                     id: sendCol
                     anchors.fill: parent; anchors.margins: 14
                     spacing: 10
-                    Caption { text: "Job senden" }
+                    Caption { text: win.t("Job senden") }
                     Body {
                         color: win.cMut; font.pixelSize: 12
                         text: backend.sliceState === "done"
-                              ? (win.meta.layers + " Schichten · " + win.meta.height_mm.toFixed(1) + " mm · ca. " + win.fmtTime(backend.estimate.seconds) + " · " + backend.profile.name)
-                              : "Noch kein geslicter Job – unter „Vorschau“ slicen."
+                              ? (win.meta.layers + win.t(" Schichten · ") + win.meta.height_mm.toFixed(1) + win.t(" mm · ca. ") + win.fmtTime(backend.estimate.seconds) + " · " + backend.profile.name)
+                              : win.t("Noch kein geslicter Job – unter „Vorschau“ slicen.")
                     }
-                    KButton { text: "Nur übertragen"; Layout.fillWidth: true; enabled: backend.connected && backend.sliceState === "done"; onClicked: backend.send(false) }
+                    KButton { text: win.t("Nur übertragen"); Layout.fillWidth: true; enabled: backend.connected && backend.sliceState === "done"; onClicked: backend.send(false) }
                     KButton {
-                        text: "Übertragen und starten"; kind: "pri"; Layout.fillWidth: true
+                        text: win.t("Übertragen und starten"); kind: "pri"; Layout.fillWidth: true
                         enabled: pr.live && backend.sliceState === "done" && k.printing !== true
-                        onClicked: confirm.ask("Job zum Kit übertragen und den Druck sofort starten? Der Kit heizt dann auf.", function() { backend.send(true) })
+                        onClicked: confirm.ask(win.t("Job zum Kit übertragen und den Druck sofort starten? Der Kit heizt dann auf."), function() { backend.send(true) })
                     }
                 }
             }
@@ -95,8 +95,8 @@ Item {
                     anchors.fill: parent; anchors.margins: 14
                     spacing: 8
                     RowLayout {
-                        Caption { text: "Jobs am Kit"; Layout.fillWidth: true }
-                        KButton { text: "Aktualisieren"; kind: "ghost"; enabled: backend.connected; onClicked: backend.refreshJobs() }
+                        Caption { text: win.t("Jobs am Kit"); Layout.fillWidth: true }
+                        KButton { text: win.t("Aktualisieren"); kind: "ghost"; enabled: backend.connected; onClicked: backend.refreshJobs() }
                     }
                     ListView {
                         Layout.fillWidth: true; Layout.fillHeight: true
@@ -110,12 +110,12 @@ Item {
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 1
                                     Text { text: modelData.name; color: win.cInk; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
-                                    Text { text: (modelData.layers ? modelData.layers + " Schichten · " + modelData.height_mm + " mm" : (modelData.error || "")) ; color: win.cMut; font.pixelSize: 11 }
+                                    Text { text: (modelData.layers ? modelData.layers + win.t(" Schichten · ") + modelData.height_mm + win.t(" mm") : (modelData.error || "")) ; color: win.cMut; font.pixelSize: 11 }
                                 }
                                 KButton {
-                                    text: "Starten"; kind: "ghost"
+                                    text: win.t("Starten"); kind: "ghost"
                                     enabled: pr.live && k.printing !== true && !modelData.error
-                                    onClicked: confirm.ask("„" + modelData.name + "“ jetzt drucken?", function() { backend.cmd({ cmd: "job_start", id: modelData.id }) })
+                                    onClicked: confirm.ask("„" + modelData.name + win.t("“ jetzt drucken?"), function() { backend.cmd({ cmd: "job_start", id: modelData.id }) })
                                 }
                             }
                         }
@@ -140,7 +140,7 @@ Item {
                         spacing: 12
                         Rectangle { width: 10; height: 10; radius: 5; color: !pr.live ? win.cRed : (k.printing ? win.cAcc : win.cOk) }
                         Text {
-                            text: !backend.connected ? "Nicht verbunden" : (!k.connected ? (k.message || "Kit nicht am Pi angeschlossen") : (k.state_name || "–"))
+                            text: !backend.connected ? win.t("Nicht verbunden") : (!k.connected ? (k.message || win.t("Kit nicht am Pi angeschlossen")) : (k.state_name || "–"))
                             color: win.cInk; font.pixelSize: 20; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight
                         }
                         Text { visible: k.printing === true; text: (k.percent || 0) + " %"; color: "#5cc3e3"; font.pixelSize: 26; font.weight: Font.DemiBold }
@@ -151,23 +151,23 @@ Item {
                     }
                     RowLayout {
                         spacing: 34
-                        Stat { label: "Schicht"; value: k.printing ? (k.layer || 0) + (pr.job && pr.job.layers ? " / " + pr.job.layers : "") : "–" }
-                        Stat { label: "Druckzeit"; value: k.printing ? win.fmtTime(k.elapsed_s) : "–" }
+                        Stat { label: win.t("Schicht"); value: k.printing ? (k.layer || 0) + (pr.job && pr.job.layers ? " / " + pr.job.layers : "") : "–" }
+                        Stat { label: win.t("Druckzeit"); value: k.printing ? win.fmtTime(k.elapsed_s) : "–" }
                         Stat {
                             visible: k.countdown_on === true
-                            label: "Aufheizen noch"
+                            label: win.t("Aufheizen noch")
                             value: win.fmtCountdown(k.countdown_s)
                             tint: win.cHeat
                         }
                         Stat {
                             visible: k.countdown_on !== true
-                            label: "Restzeit (geschätzt)"
+                            label: win.t("Restzeit (geschätzt)")
                             value: !k.printing ? "–"
                                  : (k.layer > 3 && pr.job && pr.job.layers) ? win.fmtTime(k.elapsed_s / k.layer * Math.max(0, pr.job.layers - k.layer))
                                  : (k.percent > 2 ? win.fmtTime(k.elapsed_s / k.percent * (100 - k.percent)) : "–")
                             tint: win.cAcc
                         }
-                        Stat { label: "Job"; value: pr.job ? pr.job.name : "–" }
+                        Stat { label: win.t("Job"); value: pr.job ? pr.job.name : "–" }
                     }
                 }
             }
@@ -190,7 +190,7 @@ Item {
                             anchors.centerIn: parent
                             width: parent.width - 24
                             wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter
-                            text: "Hier erscheint während des Drucks die aktuelle Schicht"
+                            text: win.t("Hier erscheint während des Drucks die aktuelle Schicht")
                             color: win.cMut; font.pixelSize: 13
                         }
                     }
@@ -211,11 +211,11 @@ Item {
                             id: tc
                             anchors.fill: parent; anchors.margins: 14
                             columns: 2; rowSpacing: 12; columnSpacing: 10
-                            Stat { label: "Oberfläche"; value: win.num(k.surface) + " °C"; tint: win.cHeat }
-                            Stat { label: "Kammer"; value: win.num(k.chamber) + " °C" }
-                            Text { text: "Soll Druck " + win.num(k.target_surface_print, 0) + " °C"; color: win.cMut; font.pixelSize: 11 }
-                            Text { text: "Soll Druck " + win.num(k.target_chamber_print, 0) + " °C"; color: win.cMut; font.pixelSize: 11 }
-                            Text { text: "Laser " + win.num(k.laser_speed, 0) + " mm/s"; color: win.cMut; font.pixelSize: 11; Layout.columnSpan: 2 }
+                            Stat { label: win.t("Oberfläche"); value: win.num(k.surface) + " °C"; tint: win.cHeat }
+                            Stat { label: win.t("Kammer"); value: win.num(k.chamber) + " °C" }
+                            Text { text: win.t("Soll Druck ") + win.num(k.target_surface_print, 0) + " °C"; color: win.cMut; font.pixelSize: 11 }
+                            Text { text: win.t("Soll Druck ") + win.num(k.target_chamber_print, 0) + " °C"; color: win.cMut; font.pixelSize: 11 }
+                            Text { text: win.t("Laser ") + win.num(k.laser_speed, 0) + win.t(" mm/s"); color: win.cMut; font.pixelSize: 11; Layout.columnSpan: 2 }
                         }
                     }
 
@@ -226,21 +226,21 @@ Item {
                             id: ctl
                             anchors.fill: parent; anchors.margins: 14
                             spacing: 8
-                            Caption { text: "Steuerung" }
+                            Caption { text: win.t("Steuerung") }
                             RowLayout {
                                 spacing: 8
-                                KButton { text: "Aufheizen"; kind: "hot"; Layout.fillWidth: true; enabled: pr.live && k.printing !== true; onClicked: backend.cmd({ cmd: "warmup", on: true }) }
-                                KButton { text: "Heizen aus"; Layout.fillWidth: true; enabled: pr.live; onClicked: backend.cmd({ cmd: "warmup", on: false }) }
+                                KButton { text: win.t("Aufheizen"); kind: "hot"; Layout.fillWidth: true; enabled: pr.live && k.printing !== true; onClicked: backend.cmd({ cmd: "warmup", on: true }) }
+                                KButton { text: win.t("Heizen aus"); Layout.fillWidth: true; enabled: pr.live; onClicked: backend.cmd({ cmd: "warmup", on: false }) }
                             }
                             KButton {
-                                text: "Zum Abkühlen springen"; Layout.fillWidth: true; enabled: pr.live && k.printing === true
-                                onClicked: confirm.ask("Sintern beenden und abkühlen? Der Druck endet nach der aktuellen Schicht.", function() { backend.cmd({ cmd: "stop_sintering" }) })
+                                text: win.t("Zum Abkühlen springen"); Layout.fillWidth: true; enabled: pr.live && k.printing === true
+                                onClicked: confirm.ask(win.t("Sintern beenden und abkühlen? Der Druck endet nach der aktuellen Schicht."), function() { backend.cmd({ cmd: "stop_sintering" }) })
                             }
                             KButton {
-                                text: "Druck abbrechen"; kind: "red"; Layout.fillWidth: true; enabled: pr.live && k.printing === true
-                                onClicked: confirm.ask("Druck wirklich abbrechen?", function() { backend.cmd({ cmd: "abort_print" }) })
+                                text: win.t("Druck abbrechen"); kind: "red"; Layout.fillWidth: true; enabled: pr.live && k.printing === true
+                                onClicked: confirm.ask(win.t("Druck wirklich abbrechen?"), function() { backend.cmd({ cmd: "abort_print" }) })
                             }
-                            KButton { text: "Temperaturprotokolle"; kind: "ghost"; Layout.fillWidth: true; onClicked: backend.openFolder("logs") }
+                            KButton { text: win.t("Temperaturprotokolle"); kind: "ghost"; Layout.fillWidth: true; onClicked: backend.openFolder("logs") }
                         }
                     }
 
@@ -250,7 +250,7 @@ Item {
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 14
                             spacing: 6
-                            Caption { text: "Meldungen" }
+                            Caption { text: win.t("Meldungen") }
                             ListView {
                                 Layout.fillWidth: true; Layout.fillHeight: true
                                 clip: true; spacing: 6
@@ -269,7 +269,7 @@ Item {
                                     }
                                 }
                             }
-                            Text { visible: !(k.errors && k.errors.length) && !(k.warnings && k.warnings.length); text: pr.live ? "Keine Fehler oder Warnungen" : "–"; color: win.cMut; font.pixelSize: 12 }
+                            Text { visible: !(k.errors && k.errors.length) && !(k.warnings && k.warnings.length); text: pr.live ? win.t("Keine Fehler oder Warnungen") : "–"; color: win.cMut; font.pixelSize: 12 }
                         }
                     }
                 }

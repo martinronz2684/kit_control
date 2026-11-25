@@ -30,6 +30,7 @@ class Backend(QObject):
     devicesChanged = Signal()
     jobsChanged = Signal()
     updateChanged = Signal()
+    settingsChanged = Signal()
     piLayerReady = Signal("QVariant")
     message = Signal(str, str)          # Text, Art: info | ok | error
 
@@ -82,10 +83,69 @@ class Backend(QObject):
     def partMesh(self, i):
         return self.core.display_mesh(i)
 
-    @Property("QVariant", constant=True)
+    @Property("QVariant", notify=settingsChanged)
     def ideal(self):
         from kitslice.scene import IDEAL_XY, IDEAL_Z
         return {"xy": IDEAL_XY, "z": IDEAL_Z}
+
+    # -- Einstellungen (Zahnrad unten links) --------------------------------------
+    DEFAULTS = {"lang": "de", "ideal_xy": 90.0, "ideal_z": 110.0, "pack_gap": 3.0, "pack_wall": 2.0,
+                "check_updates": True, "auto_connect": True, "kit_laser_speed": 200.0}
+
+    @Property("QVariant", notify=settingsChanged)
+    def settings(self):
+        st = dict(self.DEFAULTS)
+        st.update({k: v for k, v in self.core.settings.items() if k in self.DEFAULTS})
+        st["est_learned"] = len(self.core.settings.get("est_history", []))
+        st["est_factor"] = float(self.core.settings.get("est_factor", 1.0))
+        return st
+
+    @Slot(str, "QVariant")
+    def setSetting(self, key, value):
+        if key not in self.DEFAULTS:
+            return
+        d = self.DEFAULTS[key]
+        try:
+            value = type(d)(value) if not isinstance(d, bool) else bool(value)
+        except (TypeError, ValueError):
+            return
+        self.core.save_settings(**{key: value})
+        if key in ("ideal_xy", "ideal_z"):
+            from kitslice.scene import set_ideal
+            set_ideal(float(self.core.settings.get("ideal_xy", 90.0)), float(self.core.settings.get("ideal_z", 110.0)))
+            self.partsChanged.emit()
+        if key == "kit_laser_speed":
+            self.sliceChanged.emit()
+        self.settingsChanged.emit()
+
+    @Slot()
+    def resetIdeal(self):
+        self.core.save_settings(ideal_xy=90.0, ideal_z=110.0)
+        from kitslice.scene import set_ideal
+        set_ideal(90.0, 110.0)
+        self.partsChanged.emit()
+        self.settingsChanged.emit()
+
+    @Slot()
+    def resetEstimate(self):
+        self.core.save_settings(est_history=[], est_factor=1.0)
+        self.sliceChanged.emit()
+        self.settingsChanged.emit()
+        self.message.emit("Druckzeit-Lernwerte zurückgesetzt", "ok")
+
+    @Property(str, notify=settingsChanged)
+    def lang(self):
+        return self.core.settings.get("lang", "de")
+
+    @Property("QVariant", constant=True)
+    def translations(self):
+        from kitcontrol import i18n
+        return i18n.EN
+
+    @Slot(str, result=str)
+    def translate(self, text):
+        from kitcontrol import i18n
+        return i18n.translate(text, self.core.settings.get("lang", "de"))
 
     @Property(bool, notify=partsChanged)
     def canUndo(self):
@@ -687,8 +747,9 @@ class Backend(QObject):
 
     @Slot(str)
     def openFolder(self, which):
+        from kitcontrol.core import data_dir
         d = {"logs": os.path.join(documents_dir(), "Temperaturprotokolle"),
-             "profiles": PR.profile_dir()}.get(which, documents_dir())
+             "profiles": PR.profile_dir(), "data": data_dir()}.get(which, documents_dir())
         os.makedirs(d, exist_ok=True)
         if sys.platform == "win32":
             os.startfile(d)  # noqa: S606

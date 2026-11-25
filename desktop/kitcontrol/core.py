@@ -112,6 +112,8 @@ class AppCore:
         self.selected = -1
         self.settings = self._load_settings()
         self.profile_id = self.settings.get("profile", "pa12")
+        from kitslice.scene import set_ideal
+        set_ideal(float(self.settings.get("ideal_xy", 90.0)), float(self.settings.get("ideal_z", 110.0)))
         try:
             PR.get(self.profile_id)
         except KeyError:
@@ -345,7 +347,9 @@ class AppCore:
 
     def density(self) -> dict:
         from kitslice.packing import volume
-        from kitslice.scene import IDEAL_XY
+        from kitslice.scene import IDEAL_XY  # noqa: F401  (aktueller Wert, siehe set_ideal)
+        from kitslice import scene as _sc
+        IDEAL_XY = _sc.IDEAL_XY
         if not self.scene.parts:
             return {"height": 0.0, "density": 0.0}
         h = float(max(p.bbox()[1][2] for p in self.scene.parts))

@@ -45,13 +45,13 @@ Item {
                         spacing: 12
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
-                            text: backend.sliceState === "running" ? "Slicen läuft …" : (backend.sliceState === "error" ? "Slicen fehlgeschlagen" : "Noch nicht geslict")
+                            text: backend.sliceState === "running" ? win.t("Slicen läuft …") : (backend.sliceState === "error" ? win.t("Slicen fehlgeschlagen") : win.t("Noch nicht geslict"))
                             color: win.cInk; font.pixelSize: 18; font.weight: Font.DemiBold
                         }
                         Text {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: 420; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
-                            text: backend.sliceState === "error" ? backend.sliceError : "Mit „Slicen“ entsteht die Druckdatei – danach lassen sich alle Schichten durchblättern."
+                            text: backend.sliceState === "error" ? backend.sliceError : win.t("Mit „Slicen“ entsteht die Druckdatei – danach lassen sich alle Schichten durchblättern.")
                             color: backend.sliceState === "error" ? "#ffb4b6" : win.cMut; font.pixelSize: 13
                         }
                     }
@@ -79,7 +79,7 @@ Item {
                     }
                     KButton { text: "▶"; implicitWidth: 40; onClicked: { slider.increase(); vp.show() } }
                     Text {
-                        text: "Schicht " + Math.round(slider.value) + " / " + Math.round(slider.to) + (view.layerData.z !== undefined ? "  ·  z " + view.layerData.z.toFixed(2) + " mm" : "")
+                        text: win.t("Schicht ") + Math.round(slider.value) + " / " + Math.round(slider.to) + (view.layerData.z !== undefined ? "  ·  z " + view.layerData.z.toFixed(2) + win.t(" mm") : "")
                         color: win.cInk; font.pixelSize: 13
                         Layout.preferredWidth: 230; elide: Text.ElideRight
                     }
@@ -100,8 +100,8 @@ Item {
                     id: sc
                     anchors.fill: parent; anchors.margins: 14
                     spacing: 12
-                    Caption { text: "Druckdatei" }
-                    Body { text: "Profil: " + backend.profile.name; color: win.cMut }
+                    Caption { text: win.t("Druckdatei") }
+                    Body { text: win.t("Profil: ") + backend.profile.name; color: win.cMut }
                     ProgressBar {
                         visible: backend.sliceState === "running"
                         Layout.fillWidth: true
@@ -113,7 +113,7 @@ Item {
                     }
                     KButton {
                         Layout.fillWidth: true
-                        text: backend.sliceState === "running" ? "Abbrechen (" + Math.round(backend.sliceProgress * 100) + " %)" : (vp.done ? "Neu slicen" : "Slicen")
+                        text: backend.sliceState === "running" ? win.t("Abbrechen (") + Math.round(backend.sliceProgress * 100) + " %)" : (vp.done ? win.t("Neu slicen") : win.t("Slicen"))
                         kind: backend.sliceState === "running" ? "normal" : "pri"
                         enabled: backend.parts.length > 0
                         onClicked: backend.sliceState === "running" ? backend.cancelSlice() : backend.startSlice()
@@ -129,32 +129,32 @@ Item {
                     id: st
                     anchors.fill: parent; anchors.margins: 14
                     columns: 2; rowSpacing: 14; columnSpacing: 10
-                    Stat { label: "Schichten"; value: vp.m.layers || "–" }
-                    Stat { label: "Bauhöhe"; value: vp.m.height_mm !== undefined ? vp.m.height_mm.toFixed(1) + " mm" : "–" }
-                    Stat { label: "Pulver laden"; value: vp.m.powder_mm !== undefined ? vp.m.powder_mm.toFixed(1) + " mm" : "–"; tint: win.cAcc }
+                    Stat { label: win.t("Schichten"); value: vp.m.layers || "–" }
+                    Stat { label: win.t("Bauhöhe"); value: vp.m.height_mm !== undefined ? vp.m.height_mm.toFixed(1) + win.t(" mm") : "–" }
+                    Stat { label: win.t("Pulver laden"); value: vp.m.powder_mm !== undefined ? vp.m.powder_mm.toFixed(1) + win.t(" mm") : "–"; tint: win.cAcc }
                     Stat {
-                        label: "Druckzeit (geschätzt)"
+                        label: win.t("Druckzeit (geschätzt)")
                         value: backend.estimate.seconds !== undefined ? win.fmtTime(backend.estimate.seconds) : "–"
                         tint: win.cAcc
                     }
-                    Stat { label: "Laserweg"; value: vp.m.est_scan_m !== undefined ? Math.round(vp.m.est_scan_m) + " m" : "–" }
-                    Stat { label: "Vektoren"; value: vp.m.vectors !== undefined ? Number(vp.m.vectors).toLocaleString(Qt.locale("de_DE"), "f", 0) : "–" }
-                    Stat { label: "Rechenzeit"; value: vp.m.slice_s !== undefined ? vp.m.slice_s + " s" : "–" }
+                    Stat { label: win.t("Laserweg"); value: vp.m.est_scan_m !== undefined ? Math.round(vp.m.est_scan_m) + " m" : "–" }
+                    Stat { label: win.t("Vektoren"); value: vp.m.vectors !== undefined ? Number(vp.m.vectors).toLocaleString(Qt.locale("de_DE"), "f", 0) : "–" }
+                    Stat { label: win.t("Rechenzeit"); value: vp.m.slice_s !== undefined ? vp.m.slice_s + " s" : "–" }
                 }
             }
 
             Text {
                 visible: vp.done && backend.estimate.seconds !== undefined
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
-                text: "Ohne Aufheizen. Berechnet mit " + Math.round(backend.estimate.laser_mm_s || 0) + " mm/s"
-                      + (backend.estimate.learned > 0 ? ", an " + backend.estimate.learned + " echten Drucken angepasst." : " – wird mit jedem Druck genauer.")
+                text: win.t("Ohne Aufheizen. Berechnet mit ") + Math.round(backend.estimate.laser_mm_s || 0) + win.t(" mm/s")
+                      + (backend.estimate.learned > 0 ? win.t(", an ") + backend.estimate.learned + win.t(" echten Drucken angepasst.") : win.t(" – wird mit jedem Druck genauer."))
                 color: win.cMut; font.pixelSize: 11
             }
 
             Item { Layout.fillHeight: true }
 
-            KButton { visible: vp.done; Layout.fillWidth: true; text: "Druckdatei speichern …"; kind: "ghost"; onClicked: saveJob.open() }
-            KButton { visible: vp.done; Layout.fillWidth: true; text: "Weiter zum Drucken"; kind: "pri"; onClicked: win.page = 4 }
+            KButton { visible: vp.done; Layout.fillWidth: true; text: win.t("Druckdatei speichern …"); kind: "ghost"; onClicked: saveJob.open() }
+            KButton { visible: vp.done; Layout.fillWidth: true; text: win.t("Weiter zum Drucken"); kind: "pri"; onClicked: win.page = 4 }
         }
     }
 }

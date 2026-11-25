@@ -14,6 +14,13 @@ PREFERRED_MM = 110.0
 MAX_MM = 130.0
 IDEAL_XY = 90.0
 IDEAL_Z = 110.0
+
+
+def set_ideal(xy: float, z: float) -> None:
+    """Idealen Druckbereich ändern (Einstellungen). Wirkt auf Hinweise, Anordnen und Anzeige."""
+    global IDEAL_XY, IDEAL_Z
+    IDEAL_XY = float(min(max(xy, 20.0), PREFERRED_MM))
+    IDEAL_Z = float(min(max(z, 10.0), MAX_MM))
 GRID = 1.0           # Raster für Nesting und Kollisionsprüfung (mm)
 
 
@@ -330,11 +337,13 @@ class Scene:
                 p.z_lift = 0.0
         return ok
 
-    def nest(self, gap: float = 3.0, area: float = IDEAL_XY, height: float = IDEAL_Z,
+    def nest(self, gap: float = 3.0, area: float | None = None, height: float | None = None,
              res: float = GRID, rotations=(0, 90, 180, 270), progress=None, only=None) -> bool:
         """Teile in den idealen Bereich packen (3D-Voxelraster, siehe kitslice.packing).
         only: nur diese Teile platzieren (z. B. nach „Hinzufügen“), ohne sie zu drehen."""
         from kitslice import packing
+        area = IDEAL_XY if area is None else area
+        height = IDEAL_Z if height is None else height
         r = packing.auto_pack(self, gap=gap, wall=2.0, allow_rotation=only is None, only=only,
                               area=area, height=height, time_budget=0.0 if only is not None else 2.0,
                               progress=progress)

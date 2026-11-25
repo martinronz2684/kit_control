@@ -24,7 +24,8 @@ import numpy as np
 
 from kitslice.scene import mesh_uid
 
-from kitslice.scene import IDEAL_XY, IDEAL_Z, Part, Scene, _samples
+from kitslice import scene as _sc
+from kitslice.scene import Part, Scene, _samples
 
 UPS = [(0, 0), (90, 0), (180, 0), (270, 0), (0, 90), (0, 270)]
 ZROT = [0, 90, 180, 270]
@@ -534,11 +535,13 @@ def _restore(st):
 
 
 def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
-              only=None, area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0,
+              only=None, area: float | None = None, height: float | None = None, res: float = 2.0,
               time_budget: float = 8.0, progress=None, cancel=None, floor: float = 0.0,
               quality_w: float = 0.5) -> dict:
     """„Ausgewogen“ (0 < quality_w < 1): Lagen nach SLS-Regeln nur nehmen, wenn sie die Bauhöhe kaum erhöhen
     (höchstens 15 %), sonst die dichteste Anordnung. Bauhöhe hat Vorrang."""
+    area = _sc.IDEAL_XY if area is None else area
+    height = _sc.IDEAL_Z if height is None else height
     if not (0 < quality_w < 0.99) or not allow_rotation:
         return _auto_pack(scene, gap, wall, allow_rotation, only, area, height, res, time_budget,
                           progress, cancel, floor, quality_w)
@@ -547,10 +550,12 @@ def auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation:
 
 
 def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
-              only=None, area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0,
+              only=None, area: float | None = None, height: float | None = None, res: float = 2.0,
               time_budget: float = 8.0, progress=None, cancel=None, floor: float = 0.0,
               quality_w: float = 0.5, reorient: bool = False) -> dict:
     """Packt die Teile (oder nur `only`) in den idealen Bereich. Liefert Kennzahlen."""
+    area = _sc.IDEAL_XY if area is None else area
+    height = _sc.IDEAL_Z if height is None else height
     if not scene.parts:
         return {"ok": True, "height": 0.0, "density": 0.0, "passes": 0}
     movers = [p for p in (only if only is not None else scene.parts) if not getattr(p, "lock_pos", False)]
@@ -644,10 +649,12 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
 
 
 def fill(scene: Scene, part: Part, gap: float = 3.0, wall: float = 2.0, allow_rotation: bool = True,
-         area: float = IDEAL_XY, height: float = IDEAL_Z, res: float = 2.0, limit: int = 300,
+         area: float | None = None, height: float | None = None, res: float = 2.0, limit: int = 300,
          progress=None, cancel=None, floor: float = 0.0, quality_w: float = 0.5) -> int:
     """„Bauraum auffüllen“: das Teil selbst neu setzen und Kopien hinzufügen, solange Platz ist.
     Andere Teile bleiben liegen. Nach jeder Runde exakt absenken und die frei gewordene Höhe nachfüllen."""
+    area = _sc.IDEAL_XY if area is None else area
+    height = _sc.IDEAL_Z if height is None else height
     ctx = _Ctx(area, height, gap, wall, floor, res)
     reuse = not getattr(part, "lock_pos", False)          # Original wird zur ersten „Kopie“
     orients = _orientations(part, allow_rotation, ctx, quality_w)

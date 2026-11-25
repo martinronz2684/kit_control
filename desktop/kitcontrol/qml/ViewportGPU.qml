@@ -180,7 +180,7 @@ Item {
         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
         anchors.leftMargin: 16; anchors.rightMargin: 16; anchors.topMargin: 56
         elide: Text.ElideRight
-        text: "hellgrau: idealer Bereich " + vg.idealXY + " × " + vg.idealXY + " × " + vg.idealZ + " mm · bläulich: Bauraum " + vg.plate + " × " + vg.plate + " × " + vg.machineZ + " mm"
+        text: win.t("hellgrau: idealer Bereich ") + vg.idealXY + " × " + vg.idealXY + " × " + vg.idealZ + win.t(" mm · bläulich: Bauraum ") + vg.plate + " × " + vg.plate + " × " + vg.machineZ + win.t(" mm")
         color: "#6b737d"; font.pixelSize: 11
     }
 

@@ -29,27 +29,27 @@ Card {
         id: col
         anchors.fill: parent; anchors.margins: 14
         spacing: 8
-        Caption { text: "Laser-Kalibrierung" }
+        Caption { text: win.t("Laser-Kalibrierung") }
         Body {
             Layout.fillWidth: true; font.pixelSize: 12; color: win.cMut
-            text: !backend.connected ? "Werte im Kit erscheinen nach dem Verbinden."
-                : (sc ? "Im Kit: X " + fmt(cur("x")) + " · Y " + fmt(cur("y")) + " · Z " + fmt(cur("z"))
-                        : "Skalierung konnte nicht gelesen werden" + (win.kit && win.kit.scaling_error ? ": " + win.kit.scaling_error : ""))
-                  + (factory ? "\nWerkswerte: X " + fmt(Number(factory.x)) + " · Y " + fmt(Number(factory.y)) + " · Z " + fmt(Number(factory.z)) : "")
+            text: !backend.connected ? win.t("Werte im Kit erscheinen nach dem Verbinden.")
+                : (sc ? win.t("Im Kit: X ") + fmt(cur("x")) + " · Y " + fmt(cur("y")) + " · Z " + fmt(cur("z"))
+                        : win.t("Skalierung konnte nicht gelesen werden") + (win.kit && win.kit.scaling_error ? ": " + win.kit.scaling_error : ""))
+                  + (factory ? win.t("\nWerkswerte: X ") + fmt(Number(factory.x)) + " · Y " + fmt(Number(factory.y)) + " · Z " + fmt(Number(factory.z)) : "")
         }
         RowLayout {
             spacing: 6
-            KButton { text: "Muster"; Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: cc.ready; onClicked: backend.cmd({ cmd: "pattern", name: "pattern" }) }
-            KButton { text: "Mitte"; Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: cc.ready; onClicked: backend.cmd({ cmd: "pattern", name: "center" }) }
-            KButton { text: "Aus"; kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: cc.ready; onClicked: backend.cmd({ cmd: "exit_calibration" }) }
+            KButton { text: win.t("Muster"); Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: cc.ready; onClicked: backend.cmd({ cmd: "pattern", name: "pattern" }) }
+            KButton { text: win.t("Mitte"); Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: cc.ready; onClicked: backend.cmd({ cmd: "pattern", name: "center" }) }
+            KButton { text: win.t("Aus"); kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; enabled: cc.ready; onClicked: backend.cmd({ cmd: "exit_calibration" }) }
         }
-        Text { text: "Kalibrierteil außen messen (mm) – Nut zeigt nach hinten (Y)"; color: win.cMut; font.pixelSize: 12; Layout.topMargin: 4 }
+        Text { text: win.t("Kalibrierteil außen messen (mm) – Nut zeigt nach hinten (Y)"); color: win.cMut; font.pixelSize: 12; Layout.topMargin: 4 }
         GridLayout {
             Layout.fillWidth: true
             columns: 4; columnSpacing: 6; rowSpacing: 6
             Text { text: ""; Layout.preferredWidth: 14 }
-            Text { text: "Soll"; color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; Layout.preferredWidth: 1 }
-            Text { text: "Ist"; color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+            Text { text: win.t("Soll"); color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; Layout.preferredWidth: 1 }
+            Text { text: win.t("Ist"); color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; Layout.preferredWidth: 1 }
             Text { text: "neu"; color: win.cMut; font.pixelSize: 11; Layout.preferredWidth: 70 }
             Text { text: "X"; color: win.cInk; font.pixelSize: 13 }
             KField { id: sx; text: "40"; Layout.fillWidth: true; Layout.preferredWidth: 1 }
@@ -67,10 +67,10 @@ Card {
         Body {
             visible: cc.tooBig
             Layout.fillWidth: true; font.pixelSize: 12; color: "#ffb4b6"
-            text: "Mehr als ±5 % – das erlaubt auch Central nicht. Bitte mechanisch nachjustieren."
+            text: win.t("Mehr als ±5 % – das erlaubt auch Central nicht. Bitte mechanisch nachjustieren.")
         }
         KButton {
-            text: "Auf den Kit schreiben"
+            text: win.t("Auf den Kit schreiben")
             kind: "pri"
             Layout.fillWidth: true
             enabled: cc.ready && cc.anyNew && !cc.tooBig
@@ -79,6 +79,6 @@ Card {
                                      y: isNaN(res[1]) ? cur("y") : Math.round(res[1] * 100) / 100,
                                      z: isNaN(res[2]) ? cur("z") : Math.round(res[2] * 100) / 100 })
         }
-        KButton { text: "Kalibrierteil zum Drucken hinzufügen"; kind: "ghost"; Layout.fillWidth: true; onClicked: backend.addCalibrationPart() }
+        KButton { text: win.t("Kalibrierteil zum Drucken hinzufügen"); kind: "ghost"; Layout.fillWidth: true; onClicked: backend.addCalibrationPart() }
     }
 }

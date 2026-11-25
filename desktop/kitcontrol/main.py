@@ -91,7 +91,11 @@ def main() -> int:
         timer.timeout.connect(step)
         timer.start(400)
     else:
-        backend.check_update()
+        st = backend.core.settings
+        if st.get("check_updates", True):
+            backend.check_update()
+        if st.get("auto_connect", True) and st.get("host"):
+            backend.connectHost(st["host"])                # zuletzt verwendeter Kit
         backend.discover()
     return app.exec()
 
@@ -143,10 +147,12 @@ def _screenshots(app, engine, backend, out):
 
     # danach: alle Seiten in mehreren Fenstergrößen auf Darstellungsfehler prüfen
     checks = []
-    for (w, h) in ((1120, 720), (1280, 760), (1366, 768), (1920, 1040)):
-        for pg in range(5):
-            checks.append((w, h, pg, False))
-        checks.append((w, h, 0, True))                   # Auto-Anordnen-Fenster
+    for lang in ("de", "en"):
+        for (w, h) in ((1120, 720), (1280, 760), (1366, 768), (1920, 1040)):
+            for pg in range(5):
+                checks.append((w, h, pg, None, lang))
+            checks.append((w, h, 0, "packPop", lang))       # Auto-Anordnen-Fenster
+            checks.append((w, h, 0, "settingsPop", lang))   # Einstellungen
     found = []
 
     def check():
@@ -158,35 +164,40 @@ def _screenshots(app, engine, backend, out):
                 sys.stdout.reconfigure(encoding="utf-8")
             except Exception:
                 pass
+            backend.setSetting("lang", "de")
             for t in uniq:
                 print("LAYOUT " + t, flush=True)
             print(f"LAYOUT {len(uniq)} Auffälligkeiten", flush=True)
             app.exit(0)
             return
-        w, h, pg, pop = checks[0]
+        w, h, pg, pop, lang = checks[0]
+        if backend.lang != lang:
+            backend.setSetting("lang", lang)
+            QTimer.singleShot(500, check)
+            return
         if root.property("width") != w or root.property("height") != h or root.property("page") != pg:
             root.setProperty("width", w); root.setProperty("height", h); root.setProperty("page", pg)
             backend.selected = 0
             QTimer.singleShot(700, check)
             return
         from PySide6.QtCore import QObject
-        popup = root.findChild(QObject, "packPop")
-        if pop and popup is not None and not popup.property("opened"):
+        popup = root.findChild(QObject, pop) if pop else None
+        if popup is not None and not popup.property("opened"):
             popup.setProperty("visible", True)
-            QTimer.singleShot(500, check)
+            QTimer.singleShot(600, check)
             return
         checks.pop(0)
-        where = f"{w}×{h} {names[pg]}" + (" Anordnen-Fenster" if pop else "")
+        where = f"{lang} {w}×{h} {names[pg]}" + (f" {pop}" if pop else "")
         top = None
-        if pop and popup is not None:
+        if popup is not None:
             ci = popup.property("contentItem")
             top = ci.parentItem() if ci is not None and ci.parentItem() is not None else ci
         found.extend(_layout_check(root, where, top))
-        if w == 1120:
-            root.grabWindow().save(os.path.join(out, f"klein-{names[pg]}{'-fenster' if pop else ''}.png"))
-        if popup is not None and pop:
+        if w in (1120, 1366):
+            root.grabWindow().save(os.path.join(out, f"{lang}-{w}-{names[pg]}{'-' + pop if pop else ''}.png"))
+        if popup is not None:
             popup.setProperty("visible", False)
-        QTimer.singleShot(150, check)
+        QTimer.singleShot(200, check)
 
     _shoot = shoot
 

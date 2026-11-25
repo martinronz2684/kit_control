@@ -127,14 +127,14 @@ Canvas {
         }
         g.stroke()
         g.fillStyle = "rgba(205,210,216,0.7)"; g.font = "11px sans-serif"
-        g.fillText(idealXY + " × " + idealXY + " × " + idealZ + " mm", q[7][0] + 6, q[7][1] - 4)
+        g.fillText(idealXY + " × " + idealXY + " × " + idealZ + win.t(" mm"), q[7][0] + 6, q[7][1] - 4)
         // Kanten der Maschinengrenzen
         g.strokeStyle = "rgba(80,130,160,0.65)"; g.lineWidth = 1.3
         g.beginPath()
         for (var me = 0; me < 4; me++) { line(mb[me], mb[(me + 1) % 4]); line(mb[me + 4], mb[(me + 1) % 4 + 4]); line(mb[me], mb[me + 4]) }
         g.stroke()
         g.fillStyle = "rgba(110,160,190,0.75)"
-        g.fillText("Bauraum " + plate + " × " + plate + " × " + machineZ + " mm", mb[4][0] + 6, mb[4][1] - 4)
+        g.fillText(win.t("Bauraum ") + plate + " × " + plate + " × " + machineZ + win.t(" mm"), mb[4][0] + 6, mb[4][1] - 4)
     }
 
     function hit(mx, my) {

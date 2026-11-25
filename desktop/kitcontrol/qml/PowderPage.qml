@@ -26,14 +26,14 @@ Item {
                 RowLayout {
                     anchors.fill: parent; anchors.margins: 22
                     spacing: 30
-                    Stat { label: "Pulver laden"; value: pw.m.powder_mm !== undefined ? pw.m.powder_mm.toFixed(1) + " mm" : "–"; tint: win.cAcc }
-                    Stat { label: "Bauhöhe"; value: pw.m.height_mm !== undefined ? pw.m.height_mm.toFixed(1) + " mm" : "–" }
+                    Stat { label: win.t("Pulver laden"); value: pw.m.powder_mm !== undefined ? pw.m.powder_mm.toFixed(1) + win.t(" mm") : "–"; tint: win.cAcc }
+                    Stat { label: win.t("Bauhöhe"); value: pw.m.height_mm !== undefined ? pw.m.height_mm.toFixed(1) + win.t(" mm") : "–" }
                     Body {
                         Layout.fillWidth: true
                         color: win.cMut
                         text: pw.m.powder_mm !== undefined
-                              ? "Vorrat nur so weit füllen, wie der Job braucht: Bauhöhe + 5 mm Puffer."
-                              : "Nach dem Slicen steht hier, wie viel Pulver der Job braucht (Bauhöhe + 5 mm)."
+                              ? win.t("Vorrat nur so weit füllen, wie der Job braucht: Bauhöhe + 5 mm Puffer.")
+                              : win.t("Nach dem Slicen steht hier, wie viel Pulver der Job braucht (Bauhöhe + 5 mm).")
                     }
                 }
             }
@@ -50,10 +50,10 @@ Item {
                     ColumnLayout {
                         anchors.fill: parent; anchors.margins: 20
                         spacing: 12
-                        Caption { text: "Bauplattform" }
+                        Caption { text: win.t("Bauplattform") }
                         Item { Layout.fillHeight: true }
-                        KButton { text: "▲  hoch"; Layout.fillWidth: true; implicitHeight: 54; enabled: pw.ready; onClicked: pw.mv("print", -1) }
-                        KButton { text: "▼  runter"; Layout.fillWidth: true; implicitHeight: 54; enabled: pw.ready; onClicked: pw.mv("print", 1) }
+                        KButton { text: win.t("▲  hoch"); Layout.fillWidth: true; implicitHeight: 54; enabled: pw.ready; onClicked: pw.mv("print", -1) }
+                        KButton { text: win.t("▼  runter"); Layout.fillWidth: true; implicitHeight: 54; enabled: pw.ready; onClicked: pw.mv("print", 1) }
                         Item { Layout.fillHeight: true }
                     }
                 }
@@ -64,10 +64,10 @@ Item {
                     ColumnLayout {
                         anchors.fill: parent; anchors.margins: 20
                         spacing: 12
-                        Caption { text: "Vorrat" }
+                        Caption { text: win.t("Vorrat") }
                         Item { Layout.fillHeight: true }
-                        KButton { text: "▲  hoch"; Layout.fillWidth: true; implicitHeight: 54; enabled: pw.ready; onClicked: pw.mv("reservoir", -1) }
-                        KButton { text: "▼  runter"; Layout.fillWidth: true; implicitHeight: 54; enabled: pw.ready; onClicked: pw.mv("reservoir", 1) }
+                        KButton { text: win.t("▲  hoch"); Layout.fillWidth: true; implicitHeight: 54; enabled: pw.ready; onClicked: pw.mv("reservoir", -1) }
+                        KButton { text: win.t("▼  runter"); Layout.fillWidth: true; implicitHeight: 54; enabled: pw.ready; onClicked: pw.mv("reservoir", 1) }
                         Item { Layout.fillHeight: true }
                     }
                 }
@@ -97,14 +97,14 @@ Item {
                     id: sc
                     anchors.fill: parent; anchors.margins: 14
                     spacing: 10
-                    Caption { text: "Schrittweite" }
+                    Caption { text: win.t("Schrittweite") }
                     RowLayout {
                         spacing: 8
                         Repeater {
                             model: [0.1, 1, 5, 10]
                             delegate: KButton {
                                 Layout.fillWidth: true
-                                text: String(modelData).replace(".", ",") + " mm"
+                                text: String(modelData).replace(".", ",") + win.t(" mm")
                                 leftPadding: 4; rightPadding: 4
                                 kind: pw.step === modelData ? "pri" : "normal"
                                 onClicked: pw.step = modelData
@@ -121,14 +121,14 @@ Item {
                     id: pc
                     anchors.fill: parent; anchors.margins: 14
                     spacing: 10
-                    Caption { text: "Pulvervorbereitung" }
-                    KButton { text: "Starten"; Layout.fillWidth: true; enabled: pw.ready; onClicked: backend.cmd({ cmd: "powder_prep_on" }) }
-                    KButton { text: "Beenden"; kind: "ghost"; Layout.fillWidth: true; enabled: pw.ready; onClicked: backend.cmd({ cmd: "powder_prep_off" }) }
-                    KButton { text: "Pulver auftragen (0,15 mm)"; kind: "pri"; Layout.fillWidth: true; enabled: pw.ready; onClicked: backend.cmd({ cmd: "make_layer", mm: 0.15 }) }
+                    Caption { text: win.t("Pulvervorbereitung") }
+                    KButton { text: win.t("Starten"); Layout.fillWidth: true; enabled: pw.ready; onClicked: backend.cmd({ cmd: "powder_prep_on" }) }
+                    KButton { text: win.t("Beenden"); kind: "ghost"; Layout.fillWidth: true; enabled: pw.ready; onClicked: backend.cmd({ cmd: "powder_prep_off" }) }
+                    KButton { text: win.t("Pulver auftragen (0,15 mm)"); kind: "pri"; Layout.fillWidth: true; enabled: pw.ready; onClicked: backend.cmd({ cmd: "make_layer", mm: 0.15 }) }
                 }
             }
 
-            CalibCard { Layout.fillWidth: true; ready: pw.ready }
+            Item { Layout.fillHeight: true }
 
             Rectangle {
                 Layout.fillWidth: true
@@ -138,9 +138,9 @@ Item {
                     id: hint
                     anchors.fill: parent; anchors.margins: 12
                     font.pixelSize: 12; color: win.cMut
-                    text: !backend.connected ? "Nicht mit dem Kit Control verbunden – unter „Drucken“ verbinden."
-                        : win.kit.printing === true ? "Während des Drucks gesperrt."
-                        : "Fahren wie am Display. Die Freigabe für die Bedienung vom PC erfolgt am Pi (KIT_REMOTE=1)."
+                    text: !backend.connected ? win.t("Nicht mit dem Kit Control verbunden – unter „Drucken“ verbinden.")
+                        : win.kit.printing === true ? win.t("Während des Drucks gesperrt.")
+                        : win.t("Fahren wie am Display. Die Freigabe für die Bedienung vom PC erfolgt am Pi (KIT_REMOTE=1).")
                 }
             }
         }

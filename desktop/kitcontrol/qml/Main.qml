@@ -25,79 +25,87 @@ ApplicationWindow {
     readonly property color cOk: "#2fd38a"
 
     property int page: 0
-    readonly property var pageNames: ["Platzieren", "Parameter", "Vorschau", "Pulver", "Drucken"]
+    readonly property var pageNames: [win.t("Platzieren"), win.t("Parameter"), win.t("Vorschau"), win.t("Pulver"), win.t("Drucken")]
     readonly property var pageHints: [
-        "Bauteile laden, anordnen und ausrichten",
-        "Pulverprofil wählen oder eigenes anlegen",
-        "Slicen und Schichten prüfen",
-        "Pulver vorbereiten und laden",
-        "Job zum Kit senden und Druck live verfolgen"]
+        win.t("Bauteile laden, anordnen und ausrichten"),
+        win.t("Pulverprofil wählen oder eigenes anlegen"),
+        win.t("Slicen und Schichten prüfen"),
+        win.t("Pulver vorbereiten und laden"),
+        win.t("Job zum Kit senden und Druck live verfolgen")]
     readonly property var kit: backend.kit || ({})
+    // Sprache: Texte sind deutsch geschrieben; bei Englisch über die Übersetzungstabelle (kitcontrol/i18n.py)
+    readonly property string lang: backend.lang
+    readonly property var en: backend.translations
+    function t(s) {
+        if (lang !== "en" || s === undefined || s === null) return s
+        var v = en[s]
+        return v !== undefined ? v : backend.translate(s)
+    }
     readonly property var meta: backend.sliceMeta || ({})
 
     function fmtTime(s) {
         if (s === undefined || s === null) return "–"
         var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60)
-        return h + " h " + (m < 10 ? "0" : "") + m + " min"
+        return h + " h " + (m < 10 ? "0" : "") + m + win.t(" min")
     }
     // wie Central: Aufheiz-Restzeit vom Kit, Minuten aufgerundet
     function fmtCountdown(s) {
         if (s === undefined || s === null) return "–"
         var h = Math.floor(s / 3600), m = Math.floor((s - h * 3600) / 60) + 1
-        return h > 0 ? h + " h " + m + " min" : m + " min"
+        return h > 0 ? h + " h " + m + win.t(" min") : m + win.t(" min")
     }
     function num(v, d) { return (v === undefined || v === null || v === "") ? "–" : Number(v).toFixed(d === undefined ? 1 : d) }
 
     // ---------- Dialoge ----------
     FileDialog {
         id: openStl
-        title: "Bauteile hinzufügen"
+        title: win.t("Bauteile hinzufügen")
         fileMode: FileDialog.OpenFiles
-        nameFilters: ["3D-Modelle (*.stl *.STL)"]
+        nameFilters: [win.t("3D-Modelle (*.stl *.STL)")]
         onAccepted: backend.addUrls(selectedFiles)
     }
     FileDialog {
         id: openProject
-        title: "Projekt öffnen"
-        nameFilters: ["Kit-Control-Projekt (*.kcp)"]
+        title: win.t("Projekt öffnen")
+        nameFilters: [win.t("Kit-Control-Projekt (*.kcp)")]
         onAccepted: backend.loadProject(selectedFile)
     }
     FileDialog {
         id: saveProject
-        title: "Projekt speichern"
+        title: win.t("Projekt speichern")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "kcp"
-        nameFilters: ["Kit-Control-Projekt (*.kcp)"]
+        nameFilters: [win.t("Kit-Control-Projekt (*.kcp)")]
         onAccepted: backend.saveProject(selectedFile)
     }
     FileDialog {
         id: exportStl
-        title: "Bauraum als STL exportieren"
+        title: win.t("Bauraum als STL exportieren")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "stl"
-        nameFilters: ["STL (*.stl)"]
+        nameFilters: [win.t("STL (*.stl)")]
         onAccepted: backend.exportStl(selectedFile)
     }
     FileDialog {
         id: saveJob
-        title: "Druckdatei speichern"
+        title: win.t("Druckdatei speichern")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "bin"
-        nameFilters: ["Druckdatei (*.bin)"]
+        nameFilters: [win.t("Druckdatei (*.bin)")]
         onAccepted: backend.saveJob(selectedFile)
     }
     FileDialog {
         id: importProfile
-        title: "Profil importieren"
-        nameFilters: ["Pulverprofil (*.json)"]
+        title: win.t("Profil importieren")
+        nameFilters: [win.t("Pulverprofil (*.json)")]
         onAccepted: backend.importProfile(selectedFile)
     }
     FileDialog {
         id: exportProfile
-        title: "Profil exportieren"
+        title: win.t("Profil exportieren")
         fileMode: FileDialog.SaveFile
         defaultSuffix: "json"
-        nameFilters: ["Pulverprofil (*.json)"]
+        nameFilters: [win.t("Pulverprofil (*.json)")]
         onAccepted: backend.exportProfile(backend.profileId, selectedFile)
     }
 
@@ -108,14 +116,14 @@ ApplicationWindow {
         anchors.centerIn: parent
         modal: true
         width: 440
-        title: "Bitte bestätigen"
+        title: win.t("Bitte bestätigen")
         background: Rectangle { radius: 14; color: win.cPanel; border.color: win.cLine }
         header: Text { text: confirm.title; color: win.cInk; font.pixelSize: 16; font.weight: Font.DemiBold; padding: 20; bottomPadding: 4 }
         contentItem: Body { text: confirm.text; color: win.cMut }
         footer: RowLayout {
             spacing: 10
             Item { Layout.fillWidth: true }
-            KButton { text: "Abbrechen"; kind: "ghost"; onClicked: confirm.close() }
+            KButton { text: win.t("Abbrechen"); kind: "ghost"; onClicked: confirm.close() }
             KButton { text: "OK"; kind: "pri"; Layout.rightMargin: 16; Layout.bottomMargin: 16; onClicked: { confirm.close(); if (confirm.action) confirm.action() } }
         }
         function ask(t, a) { text = t; action = a; open() }
@@ -169,7 +177,7 @@ ApplicationWindow {
                                 Text { anchors.centerIn: parent; text: index + 1; color: "white"; font.pixelSize: 12; font.weight: Font.DemiBold }
                             }
                             Text {
-                                text: modelData
+                                text: win.t(modelData)
                                 color: win.page === index ? win.cInk : "#b9bec6"
                                 font.pixelSize: 14; font.weight: win.page === index ? Font.DemiBold : Font.Normal
                                 anchors.verticalCenter: parent.verticalCenter
@@ -199,23 +207,23 @@ ApplicationWindow {
                             }
                             Text {
                                 Layout.fillWidth: true
-                                text: !backend.host ? "Kein Kit gewählt"
-                                    : !backend.connected ? "Verbinde …"
-                                    : (win.kit.connected ? (win.kit.state_name || "Kit verbunden") : "Pi ohne Kit")
+                                text: !backend.host ? win.t("Kein Kit gewählt")
+                                    : !backend.connected ? win.t("Verbinde …")
+                                    : (win.kit.connected ? (win.kit.state_name || win.t("Kit verbunden")) : win.t("Pi ohne Kit"))
                                 color: win.cInk; font.pixelSize: 13; font.weight: Font.DemiBold
                                 elide: Text.ElideRight
                             }
                         }
-                        Text { text: backend.host || "Unter „Drucken“ verbinden"; color: win.cMut; font.pixelSize: 11 }
+                        Text { text: backend.host || win.t("Unter „Drucken“ verbinden"); color: win.cMut; font.pixelSize: 11 }
                         RowLayout {
                             visible: backend.connected && win.kit.connected === true
                             spacing: 14
-                            Column { Caption { text: "Oberfläche" } Text { text: win.num(win.kit.surface) + " °C"; color: win.cHeat; font.pixelSize: 15; font.weight: Font.DemiBold } }
-                            Column { Caption { text: "Kammer" } Text { text: win.num(win.kit.chamber) + " °C"; color: win.cInk; font.pixelSize: 15; font.weight: Font.DemiBold } }
+                            Column { Caption { text: win.t("Oberfläche") } Text { text: win.num(win.kit.surface) + " °C"; color: win.cHeat; font.pixelSize: 15; font.weight: Font.DemiBold } }
+                            Column { Caption { text: win.t("Kammer") } Text { text: win.num(win.kit.chamber) + " °C"; color: win.cInk; font.pixelSize: 15; font.weight: Font.DemiBold } }
                         }
                         Text {
                             visible: win.kit.countdown_on === true
-                            text: "Aufheizen: noch " + win.fmtCountdown(win.kit.countdown_s)
+                            text: win.t("Aufheizen: noch ") + win.fmtCountdown(win.kit.countdown_s)
                             color: win.cHeat; font.pixelSize: 12
                         }
                         Rectangle {
@@ -225,10 +233,23 @@ ApplicationWindow {
                         }
                     }
                 }
-                Text {
-                    text: "Version " + backend.version
-                    color: "#4e545d"; font.pixelSize: 11
+                RowLayout {
+                    Layout.fillWidth: true
                     Layout.topMargin: 6
+                    Text {
+                        text: win.t("Version ") + backend.version
+                        color: "#4e545d"; font.pixelSize: 11
+                        Layout.fillWidth: true
+                    }
+                    // Einstellungen
+                    Rectangle {
+                        width: 30; height: 30; radius: 8
+                        color: gearMa.containsMouse ? "#1b2026" : "transparent"
+                        border.color: gearMa.containsMouse ? win.cLine : "transparent"
+                        Text { anchors.centerIn: parent; text: "⚙"; color: gearMa.containsMouse ? win.cInk : "#8a919b"; font.pixelSize: 18 }
+                        MouseArea { id: gearMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsPop.open() }
+                        ToolTip.visible: gearMa.containsMouse; ToolTip.text: win.t("Einstellungen")
+                    }
                 }
             }
         }
@@ -247,13 +268,13 @@ ApplicationWindow {
                 color: "#123441"
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 24; anchors.rightMargin: 16
-                    Body { text: "Neue Version " + backend.updateVersion + " verfügbar."; Layout.fillWidth: true }
+                    Body { text: win.t("Neue Version ") + backend.updateVersion + win.t(" verfügbar."); Layout.fillWidth: true }
                     ProgressBar {
                         visible: backend.updateProgress >= 0
                         value: backend.updateProgress
                         Layout.preferredWidth: 160
                     }
-                    KButton { text: backend.updateProgress >= 0 ? "Lädt …" : "Jetzt aktualisieren"; kind: "pri"; enabled: backend.updateProgress < 0; onClicked: backend.installUpdate() }
+                    KButton { text: backend.updateProgress >= 0 ? win.t("Lädt …") : win.t("Jetzt aktualisieren"); kind: "pri"; enabled: backend.updateProgress < 0; onClicked: backend.installUpdate() }
                 }
             }
 
@@ -268,11 +289,11 @@ ApplicationWindow {
                     Text { text: win.pageHints[win.page]; color: win.cMut; font.pixelSize: 13 }
                 }
                 Item { Layout.fillWidth: true }
-                KButton { text: "Projekt öffnen"; kind: "ghost"; onClicked: openProject.open() }
-                KButton { text: "Projekt speichern"; kind: "ghost"; enabled: backend.parts.length > 0; onClicked: saveProject.open() }
+                KButton { text: win.t("Projekt öffnen"); kind: "ghost"; onClicked: openProject.open() }
+                KButton { text: win.t("Projekt speichern"); kind: "ghost"; enabled: backend.parts.length > 0; onClicked: saveProject.open() }
                 KButton {
                     visible: win.page < 4
-                    text: "Weiter"; kind: "pri"
+                    text: win.t("Weiter"); kind: "pri"
                     onClicked: win.page = win.page + 1
                 }
             }
@@ -310,10 +331,12 @@ ApplicationWindow {
         Connections {
             target: backend
             function onMessage(text, kind) {
-                toastText.text = text; toast.kind = kind; toast.opacity = 1
+                toastText.text = win.t(text); toast.kind = kind; toast.opacity = 1
                 toastTimer.interval = kind === "error" ? 8000 : 4000
                 toastTimer.restart()
             }
         }
     }
+
+    SettingsPopup { id: settingsPop }
 }
