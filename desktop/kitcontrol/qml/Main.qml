@@ -189,18 +189,19 @@ ApplicationWindow {
                 }
                 // „Kit Control by Rat3d“
                 RowLayout {
-                    spacing: 8
-                    Layout.leftMargin: 2
-                    Layout.bottomMargin: 18
-                    Text { text: "by"; color: win.cMut2; font.pixelSize: 12; font.italic: true; Layout.alignment: Qt.AlignVCenter }
+                    spacing: 5
+                    Layout.leftMargin: 50
+                    Layout.topMargin: -4
+                    Layout.bottomMargin: 20
+                    Text { text: "by"; color: win.cDim; font.pixelSize: 10; font.italic: true; Layout.alignment: Qt.AlignVCenter }
                     Image {
                         source: assetDir + (win.light ? "/rat3d_dark.svg" : "/rat3d.svg")
-                        sourceSize: Qt.size(120, 92)
-                        Layout.preferredWidth: 60; Layout.preferredHeight: 46
+                        sourceSize: Qt.size(56, 44)
+                        Layout.preferredWidth: 26; Layout.preferredHeight: 20
                         fillMode: Image.PreserveAspectFit
                         smooth: true; mipmap: true
                     }
-                    Text { text: "Rat3d"; color: win.cMut2; font.pixelSize: 13; font.letterSpacing: 1; Layout.alignment: Qt.AlignVCenter }
+                    Text { text: "Rat3d"; color: win.cDim; font.pixelSize: 10; font.letterSpacing: 1; Layout.alignment: Qt.AlignVCenter }
                 }
 
                 Repeater {
@@ -293,12 +294,31 @@ ApplicationWindow {
                         width: 30; height: 30; radius: 8
                         color: bellMa.containsMouse ? win.cHover : "transparent"
                         border.color: bellMa.containsMouse ? win.cLine : "transparent"
-                        Text { anchors.centerIn: parent; text: "🔔"; color: win.cMut2; font.pixelSize: 15; opacity: bellMa.containsMouse ? 1 : 0.8 }
+                        // Glocke einfarbig gezeichnet (kein buntes Emoji)
+                        Canvas {
+                            id: bellIcon
+                            anchors.centerIn: parent; width: 16; height: 16
+                            property color c: bellMa.containsMouse ? win.cInk : win.cMut2
+                            onCChanged: requestPaint()
+                            onPaint: {
+                                var g = getContext("2d"); g.reset()
+                                g.strokeStyle = c; g.fillStyle = c; g.lineWidth = 1.4; g.lineJoin = "round"
+                                g.beginPath()
+                                g.moveTo(3, 12); g.lineTo(13, 12)
+                                g.moveTo(4, 12); g.lineTo(4, 7.5)
+                                g.bezierCurveTo(4, 4.2, 6, 2.6, 8, 2.6)
+                                g.bezierCurveTo(10, 2.6, 12, 4.2, 12, 7.5)
+                                g.lineTo(12, 12)
+                                g.stroke()
+                                g.beginPath(); g.arc(8, 13.6, 1.5, 0, Math.PI); g.fill()
+                                g.beginPath(); g.moveTo(8, 1.2); g.lineTo(8, 2.6); g.stroke()
+                            }
+                        }
                         Rectangle {
                             visible: win.unread > 0
                             anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 1
-                            width: Math.max(16, badge.implicitWidth + 8); height: 16; radius: 8; color: win.cAcc
-                            Text { id: badge; anchors.centerIn: parent; text: win.unread > 9 ? "9+" : win.unread; color: "white"; font.pixelSize: 10; font.weight: Font.Bold }
+                            width: Math.max(14, badge.implicitWidth + 6); height: 14; radius: 7; color: win.cMut2
+                            Text { id: badge; anchors.centerIn: parent; text: win.unread > 9 ? "9+" : win.unread; color: win.cSide; font.pixelSize: 9; font.weight: Font.Bold }
                         }
                         MouseArea { id: bellMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: msgPop.opened ? msgPop.close() : msgPop.open() }
                         ToolTip.visible: bellMa.containsMouse; ToolTip.text: win.t("Meldungen")
@@ -308,7 +328,7 @@ ApplicationWindow {
                         width: 30; height: 30; radius: 8
                         color: gearMa.containsMouse ? win.cHover : "transparent"
                         border.color: gearMa.containsMouse ? win.cLine : "transparent"
-                        Text { anchors.centerIn: parent; text: "⚙"; color: gearMa.containsMouse ? win.cInk : win.cMut2; font.pixelSize: 18 }
+                        Text { anchors.centerIn: parent; text: "\u2699\uFE0E"; color: gearMa.containsMouse ? win.cInk : win.cMut2; font.pixelSize: 18 }
                         MouseArea { id: gearMa; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: settingsPop.open() }
                         ToolTip.visible: gearMa.containsMouse; ToolTip.text: win.t("Einstellungen")
                     }

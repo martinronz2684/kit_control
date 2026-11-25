@@ -35,37 +35,10 @@ Item {
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 18
                 spacing: 12
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 12
-                // 3D-Ansicht bis zur aktuellen Schicht geschnitten
-                Rectangle {
-                    visible: backend.gpuView && vp.done
-                    Layout.fillWidth: true; Layout.fillHeight: true
-                    Layout.preferredWidth: 1
-                    radius: 10; color: win.cField; border.color: win.cLine
-                    clip: true
-                    Loader {
-                        id: prev3d
-                        anchors.fill: parent; anchors.margins: 2
-                        active: parent.visible
-                        source: "ViewportGPU.qml"
-                        onLoaded: {
-                            item.editable = false
-                            item.parts = Qt.binding(function () { return backend.parts })
-                            item.plate = backend.plateMm
-                            item.idealXY = Qt.binding(function () { return backend.ideal.xy })
-                            item.idealZ = Qt.binding(function () { return backend.ideal.z })
-                            item.cutZ = Qt.binding(function () { return view.layerData.z !== undefined ? view.layerData.z + 0.001 : 100000 })
-                        }
-                    }
-                }
                 LayerView {
                     id: view
                     Layout.fillWidth: true
                     Layout.fillHeight: true
-                    Layout.preferredWidth: 1
                     plateMm: backend.plateMm
                     Column {
                         visible: !vp.done
@@ -83,7 +56,6 @@ Item {
                             color: backend.sliceState === "error" ? win.cErrInk : win.cMut; font.pixelSize: 13
                         }
                     }
-                }
                 }
                 RowLayout {
                     enabled: vp.done
@@ -162,12 +134,12 @@ Item {
                     Stat { label: win.t("Bauhöhe"); value: vp.m.height_mm !== undefined ? vp.m.height_mm.toFixed(1) + win.t(" mm") : "–" }
                     Stat { label: win.t("Pulver laden"); value: vp.m.powder_mm !== undefined ? vp.m.powder_mm.toFixed(1) + win.t(" mm") : "–"; tint: win.cAcc }
                     Stat {
-                        label: win.t("Druckzeit (geschätzt)")
+                        label: win.t("Druckzeit")
                         value: backend.estimate.seconds !== undefined ? win.fmtTime(backend.estimate.seconds) : "–"
                         tint: win.cAcc
                     }
                     Stat {
-                        label: win.t("Fertig ca. (jetzt gestartet)")
+                        label: win.t("Fertig ca.")
                         value: backend.estimate.seconds !== undefined ? Qt.formatTime(new Date(Date.now() + (backend.estimate.seconds + vp.heatS) * 1000), "hh:mm") + win.t(" Uhr") : "–"
                         tint: win.cAcc
                     }

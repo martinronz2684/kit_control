@@ -180,7 +180,7 @@ EN: dict[str, str] = {
     "Füllung je Höhe – orange: leere Schicht": "Fill per height – orange: empty layer",
     "Schnittebene: alles darüber ausblenden": "Section plane: hide everything above",
     " Teile ausgewählt – Tasten wirken auf alle": " parts selected – buttons act on all",
-    "Fertig ca. (jetzt gestartet)": "Done approx. (if started now)", " Uhr": "",
+    "Fertig ca. (jetzt gestartet)": "Done approx. (if started now)", "Fertig ca.": "Done approx.", " Uhr": "",
     "Druckzeit ohne Aufheizen, Fertig-Uhrzeit mit ca. 1,5 h Aufheizen. Berechnet mit ": "Print time without heat-up, finish time includes approx. 1.5 h heat-up. Calculated with ",
     "Verlauf": "History", "Noch keine Drucke aufgezeichnet – beendete Drucke erscheinen hier.": "No prints recorded yet – finished prints appear here.",
     " Schichten": " layers", "abgebrochen bei ": "cancelled at ", "Design": "Theme", "Dunkel": "Dark", "Hell (Werkstatt)": "Light (workshop)",
