@@ -39,7 +39,11 @@ def main() -> int:
         os.environ["KIT_PROFILE_DIR"] = os.path.join(shots, "_profile")
     files = [a for a in sys.argv[1:] if not a.startswith("--") and a != shots]
 
-    app = QGuiApplication(sys.argv)
+    try:                                                   # Widgets nur für die Windows-Benachrichtigung (Tray)
+        from PySide6.QtWidgets import QApplication
+        app = QApplication(sys.argv)
+    except ImportError:
+        app = QGuiApplication(sys.argv)
     app.setApplicationName("Kit Control")
     app.setOrganizationName("Kit Control")
     app.setWindowIcon(QIcon(os.path.join(_base(), "assets", "mark.png")))
@@ -92,6 +96,15 @@ def main() -> int:
         timer.start(400)
     else:
         st = backend.core.settings
+        try:
+            from PySide6.QtWidgets import QSystemTrayIcon
+            if QSystemTrayIcon.isSystemTrayAvailable():
+                tray = QSystemTrayIcon(app.windowIcon(), app)
+                tray.setToolTip("Kit Control")
+                tray.show()
+                backend.tray = tray
+        except Exception:
+            pass
         if st.get("check_updates", True):
             backend.check_update()
         if st.get("auto_connect", True) and st.get("host"):

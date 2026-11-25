@@ -8,7 +8,11 @@ ApplicationWindow {
     width: 1360; height: 860
     minimumWidth: 1120; minimumHeight: 720
     visible: true
-    title: "Kit Control"
+    // Fortschritt auch im Fenstertitel / in der Taskleiste sichtbar
+    title: !backend.connected || !kit.connected ? "Kit Control"
+           : kit.printing === true ? (kit.countdown_on === true ? "Kit Control – " + t("Aufheizen: noch ") + fmtCountdown(kit.countdown_s)
+                                                               : "Kit Control – " + Math.round(kit.percent || 0) + " %" + (kit.percent > 2 ? " · " + fmtTime(kit.elapsed_s / kit.percent * (100 - kit.percent)) : ""))
+           : "Kit Control"
     color: cBg
 
     // Farben wie am Display, Akzent Petrol aus dem Logo

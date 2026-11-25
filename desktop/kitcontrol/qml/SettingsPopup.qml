@@ -160,6 +160,7 @@ Popup {
                 Caption { text: win.t("Beim Start") }
                 KCheck { text: win.t("Nach Updates suchen"); checked: sp.st.check_updates === true; onToggled: backend.setSetting("check_updates", checked) }
                 KCheck { text: win.t("Mit dem zuletzt verwendeten Kit verbinden"); checked: sp.st.auto_connect === true; onToggled: backend.setSetting("auto_connect", checked) }
+                KCheck { text: win.t("Windows-Benachrichtigungen (Druck fertig, Aufheizen fertig, Fehler)"); checked: sp.st.notify === true; onToggled: backend.setSetting("notify", checked) }
             }
 
             // Ordner / Info

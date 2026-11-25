@@ -7,6 +7,7 @@ Item {
     property var k: win.kit
     property var job: k.current_job || null
     property bool live: backend.connected && k.connected === true
+    property int tab: 0                       // 0 = Jobs am Kit, 1 = Verlauf
     property int shownLayer: 0
 
     // Aktuelle Schicht des laufenden Jobs vom Pi holen, sobald sie sich ändert
@@ -95,10 +96,44 @@ Item {
                     anchors.fill: parent; anchors.margins: 14
                     spacing: 8
                     RowLayout {
-                        Caption { text: win.t("Jobs am Kit"); Layout.fillWidth: true }
-                        KButton { text: win.t("Aktualisieren"); kind: "ghost"; enabled: backend.connected; onClicked: backend.refreshJobs() }
+                        spacing: 6
+                        KButton { text: win.t("Jobs am Kit"); kind: pr.tab === 0 ? "pri" : "ghost"; implicitHeight: 30; onClicked: pr.tab = 0 }
+                        KButton { text: win.t("Verlauf"); kind: pr.tab === 1 ? "pri" : "ghost"; implicitHeight: 30; onClicked: pr.tab = 1 }
+                        Item { Layout.fillWidth: true }
+                        KButton { visible: pr.tab === 0; text: win.t("Aktualisieren"); kind: "ghost"; implicitHeight: 30; enabled: backend.connected; onClicked: backend.refreshJobs() }
+                    }
+                    // Druckverlauf
+                    ListView {
+                        visible: pr.tab === 1
+                        Layout.fillWidth: true; Layout.fillHeight: true
+                        clip: true; spacing: 4
+                        model: backend.printHistory
+                        Text {
+                            visible: parent.count === 0; anchors.centerIn: parent; width: parent.width - 20
+                            horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
+                            text: win.t("Noch keine Drucke aufgezeichnet – beendete Drucke erscheinen hier.")
+                            color: win.cMut; font.pixelSize: 12
+                        }
+                        delegate: Rectangle {
+                            width: ListView.view.width
+                            height: 50; radius: 8; color: "#15181c"
+                            RowLayout {
+                                anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
+                                Rectangle { width: 8; height: 8; radius: 4; color: modelData.result === "fertig" ? win.cOk : win.cHeat }
+                                ColumnLayout {
+                                    Layout.fillWidth: true; spacing: 1
+                                    Text { text: modelData.name; color: win.cInk; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    Text {
+                                        text: Qt.formatDateTime(new Date(modelData.end * 1000), "dd.MM.yy hh:mm") + " · " + win.fmtTime(modelData.duration_s)
+                                              + " · " + modelData.layers + win.t(" Schichten") + (modelData.result === "fertig" ? "" : " · " + win.t("abgebrochen bei ") + modelData.percent + " %")
+                                        color: win.cMut; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true
+                                    }
+                                }
+                            }
+                        }
                     }
                     ListView {
+                        visible: pr.tab === 0
                         Layout.fillWidth: true; Layout.fillHeight: true
                         clip: true; spacing: 4
                         model: backend.piJobs
@@ -216,6 +251,7 @@ Item {
                             Text { text: win.t("Soll Druck ") + win.num(k.target_surface_print, 0) + " °C"; color: win.cMut; font.pixelSize: 11 }
                             Text { text: win.t("Soll Druck ") + win.num(k.target_chamber_print, 0) + " °C"; color: win.cMut; font.pixelSize: 11 }
                             Text { text: win.t("Laser ") + win.num(k.laser_speed, 0) + win.t(" mm/s"); color: win.cMut; font.pixelSize: 11; Layout.columnSpan: 2 }
+                            TempChart { Layout.columnSpan: 2; Layout.fillWidth: true; Layout.preferredHeight: 70 }
                         }
                     }
 

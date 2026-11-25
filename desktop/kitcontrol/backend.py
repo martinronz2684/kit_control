@@ -92,7 +92,8 @@ class Backend(QObject):
 
     # -- Einstellungen (Zahnrad unten links) --------------------------------------
     DEFAULTS = {"lang": "de", "ideal_xy": 90.0, "ideal_z": 110.0, "pack_gap": 3.0, "pack_wall": 2.0,
-                "check_updates": True, "auto_connect": True, "kit_laser_speed": 200.0}
+                "check_updates": True, "auto_connect": True, "kit_laser_speed": 200.0, "notify": True,
+                "theme": "dark"}
 
     @Property("QVariant", notify=settingsChanged)
     def settings(self):
@@ -759,6 +760,7 @@ class Backend(QObject):
                     self._kit = st
                     self._log.feed(st)
                     self._learn(prev, st)
+                    self._track(prev, st)
                     self.kitChanged.emit()
                     if changed_job:
                         self.refreshJobs()
@@ -770,6 +772,71 @@ class Backend(QObject):
                 self._connected = False
                 self.kitChanged.emit()
             time.sleep(3)
+
+    # -- Live: Temperaturverlauf, Ereignisse, Druckverlauf ------------------------
+    tempsChanged = Signal()
+    historyChanged = Signal()
+
+    def _track(self, prev, st):
+        now = time.time()
+        th = self.__dict__.setdefault("_temps", [])
+        if not th or now - th[-1][0] >= 2.0:
+            def f(v):
+                try:
+                    return round(float(v), 1)
+                except (TypeError, ValueError):
+                    return None
+            th.append((now, f(st.get("surface")), f(st.get("chamber")),
+                       f(st.get("target_surface_print")), f(st.get("target_chamber_print"))))
+            del th[:-900]                                   # ca. 30 min
+            self.tempsChanged.emit()
+        name = ((prev.get("current_job") or {}).get("name") or (st.get("current_job") or {}).get("name") or "Job")
+        if prev.get("countdown_on") and not st.get("countdown_on") and st.get("printing"):
+            self.notify("Aufheizen fertig", f"{name}: der Druck startet")
+        if prev.get("printing") and not st.get("printing"):
+            done = (prev.get("percent") or 0) >= 95
+            self.notify("Druck fertig" if done else "Druck beendet", f"{name} – {int(prev.get('percent') or 0)} %")
+            hist = self.core.settings.get("history", [])
+            hist.append({"name": name, "end": int(now), "duration_s": int(prev.get("elapsed_s") or 0),
+                         "layers": int(prev.get("layer") or 0), "percent": int(prev.get("percent") or 0),
+                         "result": "fertig" if done else "abgebrochen",
+                         "profile": (prev.get("current_job") or {}).get("profile") or ""})
+            self.core.save_settings(history=hist[-100:])
+            self.historyChanged.emit()
+        old = {e.get("code") for e in (prev.get("errors") or []) if isinstance(e, dict)}
+        for e in st.get("errors") or []:
+            if isinstance(e, dict) and e.get("code") not in old:
+                self.notify("Fehler am Kit", f"{e.get('code', '')} {e.get('title', '')}".strip())
+
+    @Property("QVariantList", notify=tempsChanged)
+    def tempHistory(self):
+        th = self.__dict__.get("_temps", [])
+        t0 = th[-1][0] if th else 0
+        return [[round(t - t0, 1), a, b, c, d] for t, a, b, c, d in th]
+
+    @Property("QVariantList", notify=historyChanged)
+    def printHistory(self):
+        return list(reversed(self.core.settings.get("history", [])))
+
+    @Slot()
+    def clearHistory(self):
+        self.core.save_settings(history=[])
+        self.historyChanged.emit()
+
+    tray = None
+
+    @Slot(str, str)
+    def notify(self, title, text):
+        """Windows-Benachrichtigung (abschaltbar in den Einstellungen)."""
+        from kitcontrol import i18n
+        lang = self.core.settings.get("lang", "de")
+        title, text = i18n.translate(title, lang), i18n.translate(text, lang)
+        self.message.emit(f"{title}: {text}", "info")
+        if self.tray is not None and self.core.settings.get("notify", True):
+            try:
+                self.tray.showMessage(title, text, self.tray.icon(), 10000)
+            except Exception:
+                pass
 
     def _learn(self, prev, st):
         """Laufzeit echter Drucke merken: Lasergeschwindigkeit und Schätzfaktor nachführen."""
