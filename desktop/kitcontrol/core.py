@@ -476,6 +476,34 @@ class AppCore:
             self._outline_cache[key] = np.round(p.transform(p.simple(max_tris)), 3).ravel().tolist()
         return self._outline_cache[key]
 
+    def layer_fill(self, step: float = 1.0) -> list:
+        """Belegung je Höhe (Anteil des idealen Bereichs in %, je `step` mm) – zeigt leere oder sehr volle Schichten."""
+        from kitslice import scene as _sc
+        from kitslice.scene import _columns
+        if not self.scene.parts:
+            return []
+        res = 1.0
+        top = max(float(p.bbox()[1][2]) for p in self.scene.parts)
+        n = int(np.ceil(top / step)) + 1
+        diff = np.zeros(n + 2)
+        for p in self.scene.parts:
+            key = ("fill", p.rot_x, p.rot_y, p.rot_z, tuple(p.scale), p.x, p.y, p.z_lift)
+            cc = p.__dict__.setdefault("_fillcache", {})
+            if key not in cc:
+                cc.clear()
+                cols = _columns(p.light(6000), res)
+                lohi = np.array(list(cols.values()), float) if cols else np.zeros((0, 2))
+                cc[key] = lohi
+            lohi = cc[key]
+            if not len(lohi):
+                continue
+            a = np.clip(np.floor(lohi[:, 0] / step).astype(int), 0, n)
+            b = np.clip(np.ceil(lohi[:, 1] / step).astype(int), 0, n)
+            np.add.at(diff, a, res * res)
+            np.add.at(diff, b, -res * res)
+        area = np.cumsum(diff)[:n - 1]
+        return [round(float(v) / (_sc.IDEAL_XY ** 2) * 100, 1) for v in area]
+
     def part_status(self) -> dict:
         """Je Teil: overlap / outside (für Farben in der 3D-Ansicht)."""
         st = {}

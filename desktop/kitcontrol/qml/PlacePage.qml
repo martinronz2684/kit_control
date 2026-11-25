@@ -80,8 +80,74 @@ Item {
                     item.plate = backend.plateMm
                     item.idealXY = Qt.binding(function () { return backend.ideal.xy })
                     item.idealZ = Qt.binding(function () { return backend.ideal.z })
+                    if (item.cutZ !== undefined)
+                        item.cutZ = Qt.binding(function () { return cutPanel.cutOn ? cutSlider.value : 100000 })
                 }
                 function setView(n) { if (item) item.setView(n) }
+            }
+
+            // Schnitt und Füllung je Höhe (rechts in der Ansicht)
+            Item {
+                id: cutPanel
+                visible: backend.gpuView && pg.parts.length > 0
+                anchors.right: parent.right; anchors.top: parent.top; anchors.bottom: parent.bottom
+                anchors.topMargin: 84; anchors.bottomMargin: 40; anchors.rightMargin: 12
+                width: 62
+                readonly property var fill: backend.layerFill || []
+                readonly property real top: Math.max(1, fill.length)
+                property bool cutOn: false
+                Text {
+                    id: cutTitle
+                    anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter
+                    text: cutPanel.cutOn ? cutSlider.value.toFixed(0) + " mm" : win.t("Schnitt")
+                    color: cutPanel.cutOn ? win.cAcc : win.cMut; font.pixelSize: 11
+                }
+                // Füllung je Höhe: Balken von rechts, oben = höchste Schicht
+                Canvas {
+                    id: fillChart
+                    anchors.top: cutTitle.bottom; anchors.bottom: parent.bottom; anchors.topMargin: 6
+                    anchors.left: parent.left; width: 34
+                    onPaint: {
+                        var g = getContext("2d"); g.reset()
+                        var f = cutPanel.fill, n = f.length
+                        g.fillStyle = "rgba(255,255,255,0.04)"; g.fillRect(0, 0, width, height)
+                        if (!n) return
+                        var mx = 1
+                        for (var i = 0; i < n; i++) mx = Math.max(mx, f[i])
+                        var h = height / n
+                        for (var k = 0; k < n; k++) {
+                            var v = f[k] / mx, y = height - (k + 1) * h
+                            g.fillStyle = f[k] < 0.5 ? "rgba(227,150,47,0.9)" : "rgba(38,148,184," + (0.35 + 0.6 * v) + ")"
+                            g.fillRect(width - v * width, y, Math.max(1, v * width), Math.max(1, h - (h > 3 ? 1 : 0)))
+                        }
+                    }
+                    Connections { target: cutPanel; function onFillChanged() { fillChart.requestPaint() } }
+                    onHeightChanged: requestPaint()
+                    ToolTip.visible: fillMa.containsMouse
+                    ToolTip.text: win.t("Füllung je Höhe – orange: leere Schicht")
+                    MouseArea { id: fillMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                }
+                Slider {
+                    id: cutSlider
+                    anchors.top: fillChart.top; anchors.bottom: fillChart.bottom
+                    anchors.left: fillChart.right; anchors.leftMargin: 2; anchors.right: parent.right
+                    orientation: Qt.Vertical
+                    from: 0; to: cutPanel.top; value: cutPanel.top; stepSize: 0.5
+                    background: Rectangle {
+                        x: cutSlider.leftPadding + cutSlider.availableWidth / 2 - 2; y: cutSlider.topPadding
+                        width: 4; height: cutSlider.availableHeight; radius: 2; color: "#232830"
+                    }
+                    handle: Rectangle {
+                        x: cutSlider.leftPadding + cutSlider.availableWidth / 2 - width / 2
+                        y: cutSlider.topPadding + cutSlider.visualPosition * (cutSlider.availableHeight - height)
+                        width: 18; height: 18; radius: 9; color: win.cInk; border.color: win.cAcc; border.width: 3
+                    }
+                    ToolTip.visible: hovered || pressed
+                    ToolTip.text: win.t("Schnittebene: alles darüber ausblenden")
+                    onMoved: cutPanel.cutOn = value < to - 0.01
+                    onToChanged: if (!cutPanel.cutOn || value > to) value = to
+                    onPressedChanged: if (!pressed) cutPanel.cutOn = value < to - 0.01
+                }
             }
             Connections {
                 target: view3d.item

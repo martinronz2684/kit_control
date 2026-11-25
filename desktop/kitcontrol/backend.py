@@ -166,6 +166,13 @@ class Backend(QObject):
     selected = Property(int, _get_sel, _set_sel, notify=partsChanged)
 
     @Property("QVariantList", notify=partsChanged)
+    def layerFill(self):
+        try:
+            return self.core.layer_fill()
+        except Exception:
+            return []
+
+    @Property("QVariantList", notify=partsChanged)
     def selection(self):
         return self.core.targets()
 

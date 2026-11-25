@@ -24,6 +24,8 @@ Item {
     signal groupMoved(int lead, real dx, real dy, real dz)
     signal contextMenu(int index, real x, real y)
     signal boxSelected(var indices, bool add)
+    property bool editable: true                   // false: nur ansehen (Vorschau)
+    property real cutZ: 100000                     // Schnitthöhe in mm (darüber ausgeblendet)
     property bool dragGroup: false                 // mehrere ausgewählte Teile werden gemeinsam gezogen
     property rect band: Qt.rect(0, 0, 0, 0)        // Auswahlrahmen (Umschalt + Ziehen)
     signal moved(int index, real x, real y, bool first)
@@ -158,6 +160,13 @@ Item {
                 materials: DefaultMaterial { diffuseColor: "#3a3f46"; lighting: DefaultMaterial.NoLighting }
             }
 
+            Model {
+                visible: vg.cutZ < 10000
+                source: "#Rectangle"
+                position: Qt.vector3d(0, 0, vg.cutZ)
+                scale: Qt.vector3d(vg.idealXY / 100, vg.idealXY / 100, 1)
+                materials: DefaultMaterial { diffuseColor: "#2694b8"; opacity: 0.18; lighting: DefaultMaterial.NoLighting; cullMode: Material.NoCulling }
+            }
             Repeater3D {
                 model: vg.parts
                 delegate: Model {
@@ -170,17 +179,18 @@ Item {
                                           modelData.pos[2] + (moving ? vg.dragDz : 0))
                     rotation: Qt.quaternion(modelData.quat[0], modelData.quat[1], modelData.quat[2], modelData.quat[3])
                     scale: Qt.vector3d(modelData.scale3[0], modelData.scale3[1], modelData.scale3[2])
-                    materials: PrincipledMaterial {
+                    materials: CustomMaterial {
                         // Farben mit Bedeutung: rot = überlappt, orange = außerhalb des idealen Bereichs,
-                        // grau-blau = gesperrt; ausgewählt jeweils heller
+                        // grau-blau = gesperrt; ausgewählt jeweils heller. Schnittebene: cut.frag
                         readonly property bool hi: modelData.picked || index === vg.sel
-                        baseColor: modelData.status === "overlap" ? (hi ? "#f39a9d" : "#d9464c")
+                        property color baseColor: modelData.status === "overlap" ? (hi ? "#f39a9d" : "#d9464c")
                                  : modelData.status === "outside" ? (hi ? "#f7c987" : "#e3962f")
                                  : (modelData.lock_pos || modelData.lock_orient) ? (hi ? "#b9cbd3" : "#6f8792")
                                  : (hi ? "#8adaf2" : "#2a9cc2")
-                        roughness: 0.5
-                        metalness: 0.0
+                        property real cutZ: vg.cutZ
+                        shadingMode: CustomMaterial.Shaded
                         cullMode: Material.NoCulling
+                        fragmentShader: "cut.frag"
                     }
                 }
             }
@@ -238,6 +248,7 @@ Item {
                     vg.band = Qt.rect(m.x, m.y, 0, 0)
                     return
                 }
+                if (idx >= 0 && !vg.editable) idx = -1
                 if (idx >= 0) {
                     var p = vg.parts[idx]
                     if (!p.picked) vg.picked(idx)

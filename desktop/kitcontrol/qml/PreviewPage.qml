@@ -7,6 +7,7 @@ Item {
     property var m: backend.sliceMeta || ({})
     property int count: m.layers ? slider.to : 0
     property bool done: backend.sliceState === "done"
+    readonly property int heatS: 5400      // Aufheizen typisch ~1,5 h (für die Fertig-Uhrzeit)
 
     function show() { if (vp.done) view.layerData = backend.layer(Math.round(slider.value)) }
 
@@ -34,10 +35,37 @@ Item {
             ColumnLayout {
                 anchors.fill: parent; anchors.margins: 18
                 spacing: 12
+                RowLayout {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    spacing: 12
+                // 3D-Ansicht bis zur aktuellen Schicht geschnitten
+                Rectangle {
+                    visible: backend.gpuView && vp.done
+                    Layout.fillWidth: true; Layout.fillHeight: true
+                    Layout.preferredWidth: 1
+                    radius: 10; color: "#0d1013"; border.color: win.cLine
+                    clip: true
+                    Loader {
+                        id: prev3d
+                        anchors.fill: parent; anchors.margins: 2
+                        active: parent.visible
+                        source: "ViewportGPU.qml"
+                        onLoaded: {
+                            item.editable = false
+                            item.parts = Qt.binding(function () { return backend.parts })
+                            item.plate = backend.plateMm
+                            item.idealXY = Qt.binding(function () { return backend.ideal.xy })
+                            item.idealZ = Qt.binding(function () { return backend.ideal.z })
+                            item.cutZ = Qt.binding(function () { return view.layerData.z !== undefined ? view.layerData.z + 0.001 : 100000 })
+                        }
+                    }
+                }
                 LayerView {
                     id: view
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    Layout.preferredWidth: 1
                     plateMm: backend.plateMm
                     Column {
                         visible: !vp.done
@@ -55,6 +83,7 @@ Item {
                             color: backend.sliceState === "error" ? "#ffb4b6" : win.cMut; font.pixelSize: 13
                         }
                     }
+                }
                 }
                 RowLayout {
                     enabled: vp.done
@@ -137,6 +166,11 @@ Item {
                         value: backend.estimate.seconds !== undefined ? win.fmtTime(backend.estimate.seconds) : "–"
                         tint: win.cAcc
                     }
+                    Stat {
+                        label: win.t("Fertig ca. (jetzt gestartet)")
+                        value: backend.estimate.seconds !== undefined ? Qt.formatTime(new Date(Date.now() + (backend.estimate.seconds + vp.heatS) * 1000), "hh:mm") + win.t(" Uhr") : "–"
+                        tint: win.cAcc
+                    }
                     Stat { label: win.t("Laserweg"); value: vp.m.est_scan_m !== undefined ? Math.round(vp.m.est_scan_m) + " m" : "–" }
                     Stat { label: win.t("Vektoren"); value: vp.m.vectors !== undefined ? Number(vp.m.vectors).toLocaleString(Qt.locale("de_DE"), "f", 0) : "–" }
                     Stat { label: win.t("Rechenzeit"); value: vp.m.slice_s !== undefined ? vp.m.slice_s + " s" : "–" }
@@ -146,7 +180,7 @@ Item {
             Text {
                 visible: vp.done && backend.estimate.seconds !== undefined
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
-                text: win.t("Ohne Aufheizen. Berechnet mit ") + Math.round(backend.estimate.laser_mm_s || 0) + win.t(" mm/s")
+                text: win.t("Druckzeit ohne Aufheizen, Fertig-Uhrzeit mit ca. 1,5 h Aufheizen. Berechnet mit ") + Math.round(backend.estimate.laser_mm_s || 0) + win.t(" mm/s")
                       + (backend.estimate.learned > 0 ? win.t(", an ") + backend.estimate.learned + win.t(" echten Drucken angepasst.") : win.t(" – wird mit jedem Druck genauer."))
                 color: win.cMut; font.pixelSize: 11
             }
