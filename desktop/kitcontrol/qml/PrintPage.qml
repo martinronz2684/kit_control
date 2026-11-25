@@ -156,6 +156,12 @@ Item {
                                     enabled: pr.live && k.printing !== true && !modelData.error
                                     onClicked: confirm.ask("„" + modelData.name + win.t("“ jetzt drucken?"), function() { backend.cmd({ cmd: "job_start", id: modelData.id }) })
                                 }
+                                KButton {
+                                    text: "✕"; kind: "ghost"; implicitWidth: 34; leftPadding: 0; rightPadding: 0
+                                    enabled: backend.connected && !(k.printing === true && pr.job && pr.job.id === modelData.id)
+                                    ToolTip.visible: hovered; ToolTip.text: win.t("Vom Kit löschen")
+                                    onClicked: confirm.ask("„" + modelData.name + win.t("“ vom Kit löschen?"), function() { backend.deletePiJob(modelData.id) })
+                                }
                             }
                         }
                     }

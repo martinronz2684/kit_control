@@ -121,7 +121,9 @@ EN: dict[str, str] = {
     "Noch kein geslicter Job – unter „Vorschau“ slicen.": "No sliced job yet – slice under “Preview”.",
     "Nur übertragen": "Transfer only", "Übertragen und starten": "Transfer and start",
     "Job zum Kit übertragen und den Druck sofort starten? Der Kit heizt dann auf.": "Transfer the job to the Kit and start printing right away? The Kit will heat up.",
-    "Jobs am Kit": "Jobs on the Kit", "Aktualisieren": "Refresh", "“ jetzt drucken?": "” now?",
+    "Jobs am Kit": "Jobs on the Kit", "Vom Kit löschen": "Delete from the Kit", "“ vom Kit löschen?": "” – delete from the Kit?",
+    "Job am Kit gelöscht": "Job deleted on the Kit",
+    "Das Kit Control kann noch keine Jobs vom PC löschen – bitte am Pi updaten": "This Kit Control can't delete jobs from the PC yet – please update the Pi", "Aktualisieren": "Refresh", "“ jetzt drucken?": "” now?",
     "Nicht verbunden": "Not connected", "Kit nicht am Pi angeschlossen": "Kit not connected to the Pi",
     "Schicht": "Layer", "Druckzeit": "Print time", "Aufheizen noch": "Heating up", "Restzeit (geschätzt)": "Remaining (estimated)",
     "Job": "Job", "Hier erscheint während des Drucks die aktuelle Schicht": "The current layer appears here while printing",
@@ -210,6 +212,7 @@ PATTERNS: list[tuple[re.Pattern, str]] = [(re.compile(a), b) for a, b in [
 ]]
 
 PREFIXES: list[tuple[str, str]] = [
+    ("Löschen fehlgeschlagen: ", "Delete failed: "),
     ("Anordnen fehlgeschlagen: ", "Arranging failed: "), ("Speichern fehlgeschlagen: ", "Saving failed: "),
     ("Projekt lässt sich nicht öffnen: ", "Cannot open project: "), ("Export fehlgeschlagen: ", "Export failed: "),
     ("Import fehlgeschlagen: ", "Import failed: "), ("Senden fehlgeschlagen: ", "Sending failed: "),

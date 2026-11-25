@@ -876,6 +876,27 @@ class Backend(QObject):
         if host:
             threading.Thread(target=run, daemon=True).start()
 
+    @Slot(str)
+    def deletePiJob(self, job_id):
+        host = self._host
+
+        def run():
+            try:
+                r = Pi(host, timeout=8).delete_job(job_id)
+            except Exception as e:
+                r = {"ok": False, "error": str(e)}
+            if r.get("ok"):
+                self._jobs = [j for j in self._jobs if j.get("id") != job_id]
+                self.jobsChanged.emit()
+                self.message.emit("Job am Kit gelöscht", "ok")
+            elif "not found" in str(r.get("error", "")):
+                self.message.emit("Das Kit Control kann noch keine Jobs vom PC löschen – bitte am Pi updaten", "error")
+            else:
+                self.message.emit("Löschen fehlgeschlagen: " + str(r.get("error", "")), "error")
+            self.refreshJobs()
+        if host and job_id:
+            threading.Thread(target=run, daemon=True).start()
+
     @Slot(bool)
     def send(self, start):
         if not self._host:

@@ -1357,5 +1357,36 @@ Window {
             MouseArea { anchors.fill: parent; onClicked: toast.visible = false }
         }
 
+        // ---------- Start: gleiches Bild wie der Bootbildschirm, dann weich ausblenden ----------
+        Rectangle {
+            id: intro
+            anchors.fill: parent; z: 100; color: "#000000"
+            readonly property real sc: 400 / 913          // wie Plymouth: Logo = halbe Breite
+            Image {
+                id: introLogo
+                source: "../branding/logo.png"; width: 400; height: 200 * intro.sc
+                x: (parent.width - width) / 2; y: parent.height / 2 - height / 2 - 40
+                smooth: true; mipmap: true
+            }
+            Image {
+                id: introBy
+                source: "../branding/by-rat3d.png"; width: 295 * intro.sc * 0.62; height: 80 * intro.sc * 0.62
+                x: (parent.width - width) / 2; y: introLogo.y + introLogo.height + 18
+                smooth: true; mipmap: true
+            }
+            Rectangle {
+                width: parent.width * 0.28; height: 3; x: (parent.width - width) / 2; y: introBy.y + introBy.height + 40
+                color: "#26ffffff"; radius: 1.5
+                Rectangle { width: parent.width; height: parent.height; radius: 1.5; color: win.cBlue }
+            }
+            MouseArea { anchors.fill: parent }          // Tipps während des Einblendens nicht durchreichen
+            SequentialAnimation on opacity {
+                running: true
+                PauseAnimation { duration: 700 }
+                NumberAnimation { to: 0; duration: 450; easing.type: Easing.InOutQuad }
+                ScriptAction { script: intro.visible = false }
+            }
+        }
+
     }
 }

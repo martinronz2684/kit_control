@@ -3,7 +3,7 @@
   Suche:     UDP-Broadcast "KITCONTROL-HTTP?" an Port 8767 -> "KITCONTROL-HTTP <port> <name>"
   Zustand:   GET  http://<pi>:8080/api/state            (einmalig)
              GET  http://<pi>:8080/api/events           (Server-Sent Events, jede Sekunde)
-  Jobs:      GET  /api/jobs, GET /api/jobs/<id>/layer/<n>
+  Jobs:      GET  /api/jobs, GET /api/jobs/<id>/layer/<n>, DELETE /api/jobs/<id>
   Senden:    POST /api/jobs  Rumpf = Druckdatei, Kopfzeilen X-Job-Name, X-Job-Profile (JSON, base64),
              X-Job-Start: 1 = nach dem Übertragen gleich starten
 """
@@ -64,6 +64,17 @@ class Pi:
 
     def layer(self, job_id: str, n: int) -> dict:
         return self._get(f"/api/jobs/{urllib.parse.quote(job_id)}/layer/{int(n)}")
+
+    def delete_job(self, job_id: str) -> dict:
+        req = urllib.request.Request(self.base + f"/api/jobs/{urllib.parse.quote(job_id, safe='')}", method="DELETE")
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as r:
+                return json.loads(r.read())
+        except urllib.error.HTTPError as e:
+            try:
+                return json.loads(e.read())
+            except ValueError:
+                return {"ok": False, "error": f"HTTP {e.code}"}
 
     def events(self):
         """Zustände als Generator (blockiert; in einem eigenen Thread verwenden)."""

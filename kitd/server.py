@@ -5,6 +5,7 @@
     GET  /api/events       Server-Sent Events, ein Zustand pro Sekunde
     POST /api/cmd          {"cmd": "...", ...} -> {"ok": true} / {"ok": false, "error": "..."}  (nur am Gerät)
     POST /api/jobs         Druckdatei von der PC-App (Kit Control Desktop), optional sofort starten
+    DELETE /api/jobs/<id>  Job aus der Bibliothek löschen (PC-App; nicht während er übertragen wird)
 
 Lesen (Zustand, Jobs, Schichtvorschau) geht aus dem Netz, damit die PC-App den Druck live verfolgen kann.
 Bedienbefehle bleiben am Gerät (KIT_REMOTE=1 erlaubt sie aus dem Netz). Jobs annehmen: KIT_NET_JOBS=0
@@ -586,6 +587,31 @@ class Handler(BaseHTTPRequestHandler):
                 if not r.get("ok"):
                     res["start_error"] = r.get("error", "Start fehlgeschlagen")
         return self._json(res)
+
+    def do_DELETE(self):
+        """Job aus der Bibliothek löschen – von der PC-App, gleiche Freigabe wie beim Senden."""
+        import urllib.parse
+        from kitd import jobs
+        parts = self.path.split("/")      # /api/jobs/<id>
+        if len(parts) != 4 or parts[1:3] != ["api", "jobs"]:
+            return self._json({"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
+        if not NET_JOBS:
+            return self._json({"ok": False, "error": "Jobs aus dem Netz sind am Pi abgeschaltet"}, HTTPStatus.FORBIDDEN)
+        try:
+            from kitd.bridge import _allowed
+            if not _allowed(self.client_address[0]):
+                return self._json({"ok": False, "error": "Gerät nicht erlaubt"}, HTTPStatus.FORBIDDEN)
+        except ImportError:
+            pass
+        job_id = urllib.parse.unquote(parts[3])
+        try:
+            if (WORKER.snapshot().get("transfer") or {}).get("id") == job_id:
+                raise ValueError("Job wird gerade übertragen")
+            jobs.get(job_id)
+            jobs.delete(job_id)
+            return self._json({"ok": True})
+        except (ValueError, OSError) as e:
+            return self._json({"ok": False, "error": str(e)})
 
     def do_POST(self):
         if self.path == "/api/jobs":
