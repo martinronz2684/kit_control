@@ -66,7 +66,7 @@ Card {
         }
         Body {
             visible: cc.tooBig
-            Layout.fillWidth: true; font.pixelSize: 12; color: "#ffb4b6"
+            Layout.fillWidth: true; font.pixelSize: 12; color: win.cErrInk
             text: win.t("Mehr als ±5 % – das erlaubt auch Central nicht. Bitte mechanisch nachjustieren.")
         }
         KButton {

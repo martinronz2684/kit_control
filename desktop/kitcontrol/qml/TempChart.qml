@@ -38,6 +38,6 @@ Canvas {
         line(1, "#ff8f3d", false)
         g.fillStyle = "rgba(160,168,178,0.8)"; g.font = "10px sans-serif"
         g.fillText(Math.round(hi) + " °C", 4, 11); g.fillText(Math.round(lo) + " °C", 4, height - 4)
-        g.fillText(Math.round((t1 - t0) / 60) + " min", width - 34, height - 4)
+        g.fillText(Math.round((t1 - t0) / 60) + win.t(" min"), width - 34, height - 4)
     }
 }

@@ -65,7 +65,7 @@ Item {
                     delegate: Rectangle {
                         width: ListView.view.width
                         height: 62; radius: 10
-                        color: modelData.id === backend.profileId ? "#16313c" : (pm.containsMouse ? "#181c21" : "#15181c")
+                        color: modelData.id === backend.profileId ? win.cSel : (pm.containsMouse ? win.cHover : win.cRow)
                         border.color: modelData.id === backend.profileId ? win.cAcc : win.cLine
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 10
@@ -74,7 +74,7 @@ Item {
                                 Text { text: modelData.name; color: win.cInk; font.pixelSize: 14; font.weight: Font.DemiBold; elide: Text.ElideRight; Layout.fillWidth: true }
                                 Rectangle {
                                     visible: modelData.builtin === true
-                                    radius: 6; color: "#1d2228"; implicitWidth: vt.implicitWidth + 12; implicitHeight: 18
+                                    radius: 6; color: win.cTrack; implicitWidth: vt.implicitWidth + 12; implicitHeight: 18
                                     Text { id: vt; anchors.centerIn: parent; text: win.t("Vorlage"); color: win.cMut; font.pixelSize: 10 }
                                 }
                             }
@@ -128,11 +128,11 @@ Item {
                         visible: pp.ro
                         Layout.fillWidth: true
                         implicitHeight: roText.implicitHeight + 20
-                        radius: 10; color: "#16252c"; border.color: "#1f4757"
+                        radius: 10; color: win.cInfoBg; border.color: win.cInfoLine
                         Body {
                             id: roText; anchors.fill: parent; anchors.margins: 10
                             text: win.t("Vorlage aus Sintratec Central – Werte unverändert übernommen. Zum Anpassen als eigenes Profil speichern; die Felder lassen sich dafür bearbeiten.")
-                            color: "#a9d7e7"; font.pixelSize: 12
+                            color: win.cInfoInk; font.pixelSize: 12
                         }
                     }
 
@@ -254,7 +254,7 @@ Item {
                         }
                     }
 
-                    Text { visible: pp.err !== ""; text: "⚠ " + pp.err; color: "#ffb4b6"; font.pixelSize: 13; Layout.topMargin: 4; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                    Text { visible: pp.err !== ""; text: "⚠ " + pp.err; color: win.cErrInk; font.pixelSize: 13; Layout.topMargin: 4; Layout.fillWidth: true; wrapMode: Text.WordWrap }
 
                     RowLayout {
                         Layout.maximumWidth: edCol.width

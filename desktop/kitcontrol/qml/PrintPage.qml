@@ -48,7 +48,7 @@ Item {
                         delegate: Rectangle {
                             Layout.fillWidth: true
                             Layout.preferredHeight: 42; radius: 9
-                            color: modelData.host === backend.host ? "#16313c" : (dm.containsMouse ? "#181c21" : "#15181c")
+                            color: modelData.host === backend.host ? win.cSel : (dm.containsMouse ? win.cHover : win.cRow)
                             border.color: modelData.host === backend.host ? win.cAcc : win.cLine
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 12
@@ -116,7 +116,7 @@ Item {
                         }
                         delegate: Rectangle {
                             width: ListView.view.width
-                            height: 50; radius: 8; color: "#15181c"
+                            height: 50; radius: 8; color: win.cRow
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
                                 Rectangle { width: 8; height: 8; radius: 4; color: modelData.result === "fertig" ? win.cOk : win.cHeat }
@@ -139,7 +139,7 @@ Item {
                         model: backend.piJobs
                         delegate: Rectangle {
                             width: ListView.view.width
-                            height: 50; radius: 8; color: "#15181c"
+                            height: 50; radius: 8; color: win.cRow
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 6
                                 ColumnLayout {
@@ -181,7 +181,7 @@ Item {
                         Text { visible: k.printing === true; text: (k.percent || 0) + " %"; color: "#5cc3e3"; font.pixelSize: 26; font.weight: Font.DemiBold }
                     }
                     Rectangle {
-                        Layout.fillWidth: true; Layout.preferredHeight: 8; radius: 4; color: "#1d2228"
+                        Layout.fillWidth: true; Layout.preferredHeight: 8; radius: 4; color: win.cTrack
                         Rectangle { width: parent.width * Math.min(1, (k.percent || 0) / 100); height: parent.height; radius: 4; color: win.cAcc; Behavior on width { NumberAnimation { duration: 400 } } }
                     }
                     RowLayout {
@@ -295,12 +295,12 @@ Item {
                                     width: ListView.view.width
                                     implicitHeight: mc.implicitHeight + 14
                                     radius: 8
-                                    color: modelData.kind === "Fehler" ? "#2a1215" : "#2a2112"
+                                    color: modelData.kind === "Fehler" ? win.cErrBg : "#2a2112"
                                     ColumnLayout {
                                         id: mc
                                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 7
                                         spacing: 1
-                                        Text { text: modelData.code + " · " + modelData.title; color: modelData.kind === "Fehler" ? "#ffb4b6" : "#ffd59a"; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                                        Text { text: modelData.code + " · " + modelData.title; color: modelData.kind === "Fehler" ? win.cErrInk : win.cWarnInk; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                         Text { text: modelData.text; color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                     }
                                 }

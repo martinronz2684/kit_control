@@ -13,11 +13,11 @@ TextField {
     color: win.cInk
     font.pixelSize: 13
     selectByMouse: true
-    placeholderTextColor: "#59606b"
+    placeholderTextColor: win.cDim
     leftPadding: 10; rightPadding: 10
     background: Rectangle {
         radius: 8
-        color: kf.readOnly ? "#111418" : "#0f1215"
+        color: kf.readOnly ? win.cField : win.cSide
         border.color: kf.activeFocus ? win.cAcc : win.cLine
         border.width: 1
     }

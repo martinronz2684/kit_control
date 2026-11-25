@@ -12,7 +12,8 @@ Popup {
     height: Math.min(spCol.implicitHeight + 2 * padding, parent.height - 60)
     modal: true
     padding: 22
-    background: Rectangle { radius: 14; color: win.cPanel; border.color: win.cLine }
+    background: GlassBg {}
+        Overlay.modal: Backdrop {}
     readonly property var st: backend.settings || ({})
     readonly property bool ready: backend.connected && win.kit.connected === true && win.kit.printing !== true
     function num(t) { var v = Number(String(t).replace(",", ".")); return isFinite(v) ? v : NaN }
@@ -46,6 +47,17 @@ Popup {
                     Layout.fillWidth: true; spacing: 8
                     KButton { text: "Deutsch"; Layout.fillWidth: true; Layout.preferredWidth: 1; kind: sp.st.lang === "de" ? "pri" : "normal"; onClicked: backend.setSetting("lang", "de") }
                     KButton { text: "English"; Layout.fillWidth: true; Layout.preferredWidth: 1; kind: sp.st.lang === "en" ? "pri" : "normal"; onClicked: backend.setSetting("lang", "en") }
+                }
+            }
+
+            // Design
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 6
+                Caption { text: win.t("Design") }
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 8
+                    KButton { text: win.t("Dunkel"); Layout.fillWidth: true; Layout.preferredWidth: 1; kind: sp.st.theme !== "light" ? "pri" : "normal"; onClicked: backend.setSetting("theme", "dark") }
+                    KButton { text: win.t("Hell (Werkstatt)"); Layout.fillWidth: true; Layout.preferredWidth: 1; kind: sp.st.theme === "light" ? "pri" : "normal"; onClicked: backend.setSetting("theme", "light") }
                 }
             }
 

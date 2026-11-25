@@ -38,10 +38,10 @@ Item {
             implicitHeight: 34
             contentItem: RowLayout {
                 spacing: 10
-                Text { text: mi.text; color: mi.enabled ? win.cInk : "#59606b"; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+                Text { text: mi.text; color: mi.enabled ? win.cInk : win.cDim; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
                 Text { text: mi.action && mi.action.shortcut ? String(mi.action.shortcut) : ""; color: win.cMut; font.pixelSize: 11 }
             }
-            background: Rectangle { radius: 6; color: mi.highlighted ? "#16313c" : "transparent"; anchors.fill: parent; anchors.margins: 3 }
+            background: Rectangle { radius: 6; color: mi.highlighted ? win.cSel : "transparent"; anchors.fill: parent; anchors.margins: 3 }
         }
         Action { text: partMenu.any && pg.nSel > 1 ? pg.nSel + win.t(" Teile ausgewählt") : (pg.cur ? pg.cur.name : win.t("Kein Bauteil ausgewählt")); enabled: false }
         MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: win.cLine } }
@@ -54,7 +54,7 @@ Item {
         Action { text: pg.cur && pg.cur.lock_orient ? win.t("Lage entsperren") : win.t("Lage sperren"); enabled: partMenu.any; onTriggered: backend.lockSelected("lock_orient", !(pg.cur && pg.cur.lock_orient)) }
         MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: win.cLine } }
         Action { text: win.t("Alles auswählen"); shortcut: "Ctrl+A"; enabled: pg.parts.length > 0; onTriggered: backend.selectAll() }
-        Action { text: win.t("Entfernen"); shortcut: "Entf"; enabled: partMenu.any; onTriggered: backend.removeSelected() }
+        Action { text: win.t("Entfernen"); shortcut: win.t("Entf"); enabled: partMenu.any; onTriggered: backend.removeSelected() }
     }
 
     RowLayout {
@@ -99,7 +99,7 @@ Item {
                 Text {
                     id: cutTitle
                     anchors.top: parent.top; anchors.horizontalCenter: parent.horizontalCenter
-                    text: cutPanel.cutOn ? cutSlider.value.toFixed(0) + " mm" : win.t("Schnitt")
+                    text: cutPanel.cutOn ? cutSlider.value.toFixed(0) + win.t(" mm") : win.t("Schnitt")
                     color: cutPanel.cutOn ? win.cAcc : win.cMut; font.pixelSize: 11
                 }
                 // Füllung je Höhe: Balken von rechts, oben = höchste Schicht
@@ -135,7 +135,7 @@ Item {
                     from: 0; to: cutPanel.maxZ; value: cutPanel.maxZ; stepSize: 0.5
                     background: Rectangle {
                         x: cutSlider.leftPadding + cutSlider.availableWidth / 2 - 2; y: cutSlider.topPadding
-                        width: 4; height: cutSlider.availableHeight; radius: 2; color: "#232830"
+                        width: 4; height: cutSlider.availableHeight; radius: 2; color: win.cTrack
                     }
                     handle: Rectangle {
                         x: cutSlider.leftPadding + cutSlider.availableWidth / 2 - width / 2
@@ -177,7 +177,7 @@ Item {
                 anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.margins: 14
                 width: parent.width - 28; elide: Text.ElideRight
                 text: win.t("Bauteil ziehen: verschieben (von oben auf der Platte, von vorne/seitlich auch in der Höhe) · daneben ziehen: drehen · rechte Maustaste: schieben · Mausrad: zoomen")
-                color: "#59606b"; font.pixelSize: 11
+                color: win.cDim; font.pixelSize: 11
             }
 
             // Leerer Bauraum
@@ -247,8 +247,8 @@ Item {
                             readonly property bool expanded: groupList.open[modelData.key] === true && modelData.count > 1
                             Rectangle {
                                 width: parent.width; height: 46; radius: 9
-                                color: modelData.picked ? "#16313c" : (gma.containsMouse ? "#181c21" : "transparent")
-                                border.color: modelData.anyPicked && !modelData.picked ? "#1f4757" : "transparent"
+                                color: modelData.picked ? win.cSel : (gma.containsMouse ? win.cHover : "transparent")
+                                border.color: modelData.anyPicked && !modelData.picked ? win.cInfoLine : "transparent"
                                 Behavior on color { ColorAnimation { duration: 100 } }
                                 MouseArea {
                                     id: gma; anchors.fill: parent; hoverEnabled: true
@@ -270,7 +270,7 @@ Item {
                                         MouseArea { anchors.fill: parent; anchors.margins: -6; onClicked: { var o = Object.assign({}, groupList.open); o[modelData.key] = !o[modelData.key]; groupList.open = o } }
                                     }
                                     Rectangle {
-                                        width: 36; height: 36; radius: 7; color: "#0d1013"
+                                        width: 36; height: 36; radius: 7; color: win.cField
                                         border.color: modelData.status === "overlap" ? "#d9464c" : (modelData.status === "outside" ? "#e3962f" : win.cLine)
                                         Image { anchors.fill: parent; anchors.margins: 2; source: modelData.thumb; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
                                     }
@@ -283,13 +283,13 @@ Item {
                                     Row {
                                         spacing: 0
                                         Rectangle {
-                                            width: 24; height: 24; radius: 6; color: mMa.containsMouse ? "#22272e" : "#15191d"; border.color: win.cLine
+                                            width: 24; height: 24; radius: 6; color: mMa.containsMouse ? win.cHover : win.cField; border.color: win.cLine
                                             Text { anchors.centerIn: parent; text: "−"; color: win.cInk; font.pixelSize: 14 }
                                             MouseArea { id: mMa; anchors.fill: parent; hoverEnabled: true; onClicked: backend.groupRemove(modelData.key) }
                                         }
                                         Text { width: 30; height: 24; text: "× " + modelData.count; color: win.cInk; font.pixelSize: 12; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
                                         Rectangle {
-                                            width: 24; height: 24; radius: 6; color: pMa.containsMouse ? "#22272e" : "#15191d"; border.color: win.cLine
+                                            width: 24; height: 24; radius: 6; color: pMa.containsMouse ? win.cHover : win.cField; border.color: win.cLine
                                             Text { anchors.centerIn: parent; text: "+"; color: win.cInk; font.pixelSize: 14 }
                                             MouseArea { id: pMa; anchors.fill: parent; hoverEnabled: true; onClicked: backend.groupAdd(modelData.key) }
                                         }
@@ -302,7 +302,7 @@ Item {
                                 delegate: Rectangle {
                                     readonly property var part: pg.parts[modelData] || ({})
                                     width: grp.width; height: 28; radius: 6
-                                    color: part.picked ? "#132a33" : (sma.containsMouse ? "#161a1f" : "transparent")
+                                    color: part.picked ? win.cSel : (sma.containsMouse ? win.cHover : "transparent")
                                     RowLayout {
                                         anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 8
                                         Text { text: (part.lock_pos || part.lock_orient ? "🔒 " : "") + "#" + (index + 1); color: win.cMut; font.pixelSize: 11 }
@@ -394,8 +394,8 @@ Item {
                         delegate: Rectangle {
                             Layout.fillWidth: true
                             implicitHeight: nt.implicitHeight + 16
-                            radius: 8; color: "#2a2312"; border.color: "#5c4a22"
-                            Body { id: nt; anchors.fill: parent; anchors.margins: 8; text: "ⓘ " + win.t(modelData); color: "#ffd59a"; font.pixelSize: 12 }
+                            radius: 8; color: win.cWarnBg; border.color: win.cWarnLine
+                            Body { id: nt; anchors.fill: parent; anchors.margins: 8; text: "ⓘ " + win.t(modelData); color: win.cWarnInk; font.pixelSize: 12 }
                         }
                     }
                     Repeater {
@@ -403,8 +403,8 @@ Item {
                         delegate: Rectangle {
                             Layout.fillWidth: true
                             implicitHeight: pt.implicitHeight + 16
-                            radius: 8; color: "#2a1215"; border.color: "#5c2226"
-                            Body { id: pt; anchors.fill: parent; anchors.margins: 8; text: "⚠ " + win.t(modelData); color: "#ffb4b6"; font.pixelSize: 12 }
+                            radius: 8; color: win.cErrBg; border.color: win.cErrLine
+                            Body { id: pt; anchors.fill: parent; anchors.margins: 8; text: "⚠ " + win.t(modelData); color: win.cErrInk; font.pixelSize: 12 }
                         }
                     }
                     RowLayout {
@@ -425,7 +425,8 @@ Item {
         width: 440
         modal: true
         padding: 22
-        background: Rectangle { radius: 14; color: win.cPanel; border.color: win.cLine }
+        background: GlassBg {}
+        Overlay.modal: Backdrop {}
         property real gap: backend.settings.pack_gap
         property real wall: backend.settings.pack_wall
         property bool rotate: true
@@ -443,13 +444,13 @@ Item {
                 visible: backend.lockedCount > 0
                 Layout.fillWidth: true
                 implicitHeight: lockRow.implicitHeight + 16
-                radius: 8; color: "#2a2312"; border.color: "#5c4a22"
+                radius: 8; color: win.cWarnBg; border.color: win.cWarnLine
                 RowLayout {
                     id: lockRow
                     anchors.fill: parent; anchors.margins: 8
                     spacing: 10
                     Body {
-                        Layout.fillWidth: true; color: "#ffd59a"; font.pixelSize: 12
+                        Layout.fillWidth: true; color: win.cWarnInk; font.pixelSize: 12
                         text: backend.lockedCount + win.t(" Teile sind gesperrt (🔒) und werden nicht bewegt bzw. gedreht – das kann viel Bauhöhe kosten.")
                     }
                     KButton { text: win.t("Sperren aufheben"); onClicked: backend.unlockAll() }

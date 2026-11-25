@@ -44,7 +44,7 @@ Item {
                     visible: backend.gpuView && vp.done
                     Layout.fillWidth: true; Layout.fillHeight: true
                     Layout.preferredWidth: 1
-                    radius: 10; color: "#0d1013"; border.color: win.cLine
+                    radius: 10; color: win.cField; border.color: win.cLine
                     clip: true
                     Loader {
                         id: prev3d
@@ -80,7 +80,7 @@ Item {
                             anchors.horizontalCenter: parent.horizontalCenter
                             width: 420; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap
                             text: backend.sliceState === "error" ? backend.sliceError : win.t("Mit „Slicen“ entsteht die Druckdatei – danach lassen sich alle Schichten durchblättern.")
-                            color: backend.sliceState === "error" ? "#ffb4b6" : win.cMut; font.pixelSize: 13
+                            color: backend.sliceState === "error" ? win.cErrInk : win.cMut; font.pixelSize: 13
                         }
                     }
                 }
@@ -97,7 +97,7 @@ Item {
                         onMoved: vp.show()
                         background: Rectangle {
                             x: slider.leftPadding; y: slider.topPadding + slider.availableHeight / 2 - 2
-                            width: slider.availableWidth; height: 4; radius: 2; color: "#232830"
+                            width: slider.availableWidth; height: 4; radius: 2; color: win.cTrack
                             Rectangle { width: slider.visualPosition * parent.width; height: 4; radius: 2; color: win.cAcc }
                         }
                         handle: Rectangle {
@@ -135,7 +135,7 @@ Item {
                         visible: backend.sliceState === "running"
                         Layout.fillWidth: true
                         value: backend.sliceProgress
-                        background: Rectangle { implicitHeight: 6; radius: 3; color: "#232830" }
+                        background: Rectangle { implicitHeight: 6; radius: 3; color: win.cTrack }
                         contentItem: Item {
                             Rectangle { width: parent.width * backend.sliceProgress; height: 6; radius: 3; color: win.cAcc }
                         }

@@ -14,7 +14,7 @@ CheckBox {
         x: kc.leftPadding
         anchors.verticalCenter: parent.verticalCenter
         width: 18; height: 18; radius: 5
-        color: kc.checked ? win.cAcc : "#0f1215"
+        color: kc.checked ? win.cAcc : win.cSide
         border.color: kc.checked ? win.cAcc : (kc.hovered ? "#4a5560" : win.cLine)
         border.width: 1.5
         opacity: kc.enabled ? 1 : 0.4

@@ -8,19 +8,20 @@ Canvas {
     onLayerDataChanged: requestPaint()
     onWidthChanged: requestPaint()
     onHeightChanged: requestPaint()
+    Connections { target: win; function onLightChanged() { lv.requestPaint() } }
     onPaint: {
         var g = getContext("2d")
         g.reset()
         var k = Math.min(width, height) / (plateMm * 1.08), cx = width / 2, cy = height / 2
         var half = plateMm / 2 * k
-        g.fillStyle = "#0f1317"
+        g.fillStyle = win.light ? "#f8fafb" : "#0f1317"
         g.fillRect(cx - half, cy - half, 2 * half, 2 * half)
-        g.strokeStyle = "#1b2026"; g.lineWidth = 1
+        g.strokeStyle = win.cHover; g.lineWidth = 1
         for (var v = -50; v <= 50; v += 10) {
             g.beginPath(); g.moveTo(cx + v * k, cy - half); g.lineTo(cx + v * k, cy + half); g.stroke()
             g.beginPath(); g.moveTo(cx - half, cy + v * k); g.lineTo(cx + half, cy + v * k); g.stroke()
         }
-        g.strokeStyle = "#2c3640"; g.lineWidth = 1.5
+        g.strokeStyle = win.light ? "#b9c3cc" : "#2c3640"; g.lineWidth = 1.5
         g.strokeRect(cx - half, cy - half, 2 * half, 2 * half)
         function lines(a, col, w) {
             if (!a || a.length < 4) return
@@ -33,6 +34,6 @@ Canvas {
             g.stroke()
         }
         lines(lv.layerData.infill, "rgba(38,148,184,0.85)", Math.max(0.5, 0.12 * k))
-        lines(lv.layerData.contour, "#d8f3fc", 1.3)
+        lines(lv.layerData.contour, win.light ? "#0f4f68" : "#d8f3fc", 1.3)
     }
 }

@@ -168,6 +168,25 @@ EN: dict[str, str] = {
     "Anordnen abgebrochen – Anordnung unverändert": "Arranging cancelled – arrangement unchanged",
     "Teile passen nicht in den idealen Bereich – Abstand verringern oder Teile verkleinern": "Parts do not fit into the ideal area – reduce the spacing or scale the parts down",
     "Während des Drucks gesperrt": "Locked while printing",
+    # Startseite, Meldungen, Auswahl, Schnitt, Verlauf, Design
+    "Willkommen bei Kit Control": "Welcome to Kit Control",
+    "Neues Projekt beginnen oder ein zuletzt geöffnetes fortsetzen.": "Start a new project or continue a recent one.",
+    "Bauteile hinzufügen …": "Add parts …", "Projekt öffnen …": "Open project …", "Leeres Projekt": "Empty project",
+    "Zuletzt geöffnet": "Recently opened", " Teile": " parts",
+    "Tipp: STL-Dateien oder Projekte (.kcp) einfach ins Fenster ziehen.": "Tip: simply drop STL files or projects (.kcp) into the window.",
+    "Leeren": "Clear", "Keine Meldungen": "No messages", " Teile ausgewählt": " parts selected",
+    "Kein Bauteil ausgewählt": "No part selected", "Position entsperren": "Unlock position", "Lage entsperren": "Unlock orientation",
+    "Alles auswählen": "Select all", "Entf": "Del", "Schnitt": "Section",
+    "Füllung je Höhe – orange: leere Schicht": "Fill per height – orange: empty layer",
+    "Schnittebene: alles darüber ausblenden": "Section plane: hide everything above",
+    " Teile ausgewählt – Tasten wirken auf alle": " parts selected – buttons act on all",
+    "Fertig ca. (jetzt gestartet)": "Done approx. (if started now)", " Uhr": "",
+    "Druckzeit ohne Aufheizen, Fertig-Uhrzeit mit ca. 1,5 h Aufheizen. Berechnet mit ": "Print time without heat-up, finish time includes approx. 1.5 h heat-up. Calculated with ",
+    "Verlauf": "History", "Noch keine Drucke aufgezeichnet – beendete Drucke erscheinen hier.": "No prints recorded yet – finished prints appear here.",
+    " Schichten": " layers", "abgebrochen bei ": "cancelled at ", "Design": "Theme", "Dunkel": "Dark", "Hell (Werkstatt)": "Light (workshop)",
+    "Windows-Benachrichtigungen (Druck fertig, Aufheizen fertig, Fehler)": "Windows notifications (print done, heat-up done, errors)",
+    "Temperaturverlauf erscheint nach dem Verbinden": "Temperature history appears after connecting",
+    "Aufheizen fertig": "Heat-up done", "Druck fertig": "Print finished", "Druck beendet": "Print ended", "Fehler am Kit": "Error on the Kit",
 }
 
 # Meldungen mit Zahlen/Namen: (regulärer Ausdruck, englische Vorlage)
@@ -183,6 +202,8 @@ PATTERNS: list[tuple[re.Pattern, str]] = [(re.compile(a), b) for a, b in [
     (r"^Temperatur (.+): 0–(.+) °C$", r"Temperature \1: 0–\2 °C"),
     (r"^Lasergeschwindigkeit (.+) mm/s$", r"Laser speed \1 mm/s"),
     (r"^(\d+) Kopien hinzugefügt$", r"\1 copies added"),
+    (r"^(.+): der Druck startet$", r"\1: the print is starting"),
+    (r"^Kein Platz für weitere Kopien$", "No room for more copies"),
 ]]
 
 PREFIXES: list[tuple[str, str]] = [

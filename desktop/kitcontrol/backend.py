@@ -339,6 +339,12 @@ class Backend(QObject):
     @Slot("QVariant")
     def addUrls(self, urls):
         paths = [_path(u) for u in (urls or [])]
+        kcp = [p for p in paths if p.lower().endswith(".kcp")]
+        if kcp:                                             # Projekt hineingezogen: öffnen
+            self.loadProject(QUrl.fromLocalFile(kcp[0]).toString())
+            paths = [p for p in paths if not p.lower().endswith(".kcp")]
+            if not paths:
+                return
         paths = [p for p in paths if p.lower().endswith(".stl")]
         if not paths:
             self.message.emit("Bitte STL-Dateien wählen", "error")
@@ -489,9 +495,16 @@ class Backend(QObject):
             if not p.lower().endswith(".kcp"):
                 p += ".kcp"
             self.core.save_project(p)
+            self.recentChanged.emit()
             self.message.emit("Projekt gespeichert", "ok")
         except (OSError, ValueError) as e:
             self.message.emit(f"Speichern fehlgeschlagen: {e}", "error")
+
+    recentChanged = Signal()
+
+    @Property("QVariantList", notify=recentChanged)
+    def recentProjects(self):
+        return [r for r in self.core.settings.get("recent", []) if os.path.exists(r.get("path", ""))]
 
     @Slot("QVariant")
     def loadProject(self, url):
@@ -499,6 +512,7 @@ class Backend(QObject):
             self.core.load_project(_path(url))
             self.profilesChanged.emit()
             self._parts_changed()
+            self.recentChanged.emit()
         except (OSError, ValueError, KeyError) as e:
             self.message.emit(f"Projekt lässt sich nicht öffnen: {e}", "error")
 

@@ -10,7 +10,7 @@ Canvas {
     property real idealXY: 90
     property real idealZ: 110
     property real machineZ: 110
-    readonly property string bedFill: "#15212a"
+    readonly property string bedFill: win.cInfoBg
     property real yaw: -32
     property real elev: 26
     property real zoom: 1.0

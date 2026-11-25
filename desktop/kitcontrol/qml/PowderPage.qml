@@ -133,7 +133,7 @@ Item {
             Rectangle {
                 Layout.fillWidth: true
                 implicitHeight: hint.implicitHeight + 24
-                radius: 12; color: "#15181c"; border.color: win.cLine
+                radius: 12; color: win.cRow; border.color: win.cLine
                 Body {
                     id: hint
                     anchors.fill: parent; anchors.margins: 12

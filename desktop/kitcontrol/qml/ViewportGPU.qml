@@ -105,7 +105,7 @@ Item {
         anchors.fill: parent
         camera: cam                     // ohne feste Kamera liefern pick()/mapTo3DScene() nichts -> kein Anklicken/Ziehen
         environment: SceneEnvironment {
-            clearColor: "#13161a"
+            clearColor: win.c3d
             backgroundMode: SceneEnvironment.Color
             antialiasingMode: SceneEnvironment.MSAA
             antialiasingQuality: SceneEnvironment.High
@@ -139,20 +139,20 @@ Item {
                 source: "#Rectangle"
                 scale: Qt.vector3d(vg.plate / 100, vg.plate / 100, 1)
                 position: Qt.vector3d(0, 0, -0.05)
-                materials: DefaultMaterial { diffuseColor: "#15212a"; lighting: DefaultMaterial.NoLighting }
+                materials: DefaultMaterial { diffuseColor: win.light ? "#dde8ee" : "#16252c"; lighting: DefaultMaterial.NoLighting }
             }
             Model {
                 geometry: LineGeometry { segments: vg.grid() }
-                materials: DefaultMaterial { diffuseColor: "#22333f"; lighting: DefaultMaterial.NoLighting }
+                materials: DefaultMaterial { diffuseColor: win.light ? "#c9d6de" : "#22333f"; lighting: DefaultMaterial.NoLighting }
             }
             // Maschinengrenzen (bläulich) und idealer Bereich (hellgrauer Korb)
             Model {
                 geometry: LineGeometry { segments: vg.box(vg.plate / 2, vg.plate / 2, vg.machineZ) }
-                materials: DefaultMaterial { diffuseColor: "#5a8aa6"; lighting: DefaultMaterial.NoLighting }
+                materials: DefaultMaterial { diffuseColor: win.light ? "#4c86a6" : "#5a8aa6"; lighting: DefaultMaterial.NoLighting }
             }
             Model {
                 geometry: LineGeometry { segments: vg.box(vg.idealXY / 2, vg.idealXY / 2, vg.idealZ) }
-                materials: DefaultMaterial { diffuseColor: "#cfd4da"; lighting: DefaultMaterial.NoLighting }
+                materials: DefaultMaterial { diffuseColor: win.light ? "#6d7884" : "#cfd4da"; lighting: DefaultMaterial.NoLighting }
             }
             Model {
                 visible: false                  // waagrechte Höhenlinien im Korb aus (stören beim Ansehen)
@@ -204,7 +204,7 @@ Item {
         anchors.leftMargin: 16; anchors.rightMargin: 16; anchors.topMargin: 56
         elide: Text.ElideRight
         text: win.t("hellgrau: idealer Bereich ") + vg.idealXY + " × " + vg.idealXY + " × " + vg.idealZ + win.t(" mm · bläulich: Bauraum ") + vg.plate + " × " + vg.plate + " × " + vg.machineZ + win.t(" mm")
-        color: "#6b737d"; font.pixelSize: 11
+        color: win.cMut2; font.pixelSize: 11
     }
 
     function centerOf(i) {

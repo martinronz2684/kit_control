@@ -160,12 +160,14 @@ def _screenshots(app, engine, backend, out):
 
     # danach: alle Seiten in mehreren Fenstergrößen auf Darstellungsfehler prüfen
     checks = []
-    for lang in ("de", "en"):
-        for (w, h) in ((1120, 720), (1280, 760), (1366, 768), (1920, 1040)):
+    for lang in ("de", "en", "de-light"):
+        sizes = ((1366, 768),) if lang.endswith("light") else ((1120, 720), (1280, 760), (1366, 768), (1920, 1040))
+        for (w, h) in sizes:
             for pg in range(5):
                 checks.append((w, h, pg, None, lang))
             checks.append((w, h, 0, "packPop", lang))       # Auto-Anordnen-Fenster
             checks.append((w, h, 0, "settingsPop", lang))   # Einstellungen
+            checks.append((w, h, 0, "msgPop", lang))        # Meldungsverlauf
     found = []
 
     def check():
@@ -178,15 +180,19 @@ def _screenshots(app, engine, backend, out):
             except Exception:
                 pass
             backend.setSetting("lang", "de")
+            backend.setSetting("theme", "dark")
             for t in uniq:
                 print("LAYOUT " + t, flush=True)
             print(f"LAYOUT {len(uniq)} Auffälligkeiten", flush=True)
             app.exit(0)
             return
         w, h, pg, pop, lang = checks[0]
-        if backend.lang != lang:
-            backend.setSetting("lang", lang)
-            QTimer.singleShot(500, check)
+        theme = "light" if lang.endswith("light") else "dark"
+        ln = lang.split("-")[0]
+        if backend.lang != ln or backend.settings.get("theme") != theme:
+            backend.setSetting("lang", ln)
+            backend.setSetting("theme", theme)
+            QTimer.singleShot(600, check)
             return
         if root.property("width") != w or root.property("height") != h or root.property("page") != pg:
             root.setProperty("width", w); root.setProperty("height", h); root.setProperty("page", pg)

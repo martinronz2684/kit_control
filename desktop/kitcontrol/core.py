@@ -554,6 +554,13 @@ class AppCore:
         return self.scene.notes()
 
     # -- Projekt ---------------------------------------------------------------
+    def _remember_recent(self, path: str) -> None:
+        import time as _t
+        rec = [r for r in self.settings.get("recent", []) if r.get("path") != path]
+        rec.insert(0, {"path": path, "name": os.path.splitext(os.path.basename(path))[0], "time": int(_t.time()),
+                       "parts": len(self.scene.parts)})
+        self.save_settings(recent=rec[:8])
+
     def save_project(self, path: str) -> None:
         data = {"format": "kitcontrol-project", "version": 1, "profile": self.profile_id, "parts": []}
         for p in self.scene.parts:
@@ -563,6 +570,7 @@ class AppCore:
             })
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f)
+        self._remember_recent(path)
 
     def load_project(self, path: str) -> None:
         with open(path, encoding="utf-8") as f:
@@ -587,6 +595,7 @@ class AppCore:
                 pass
         self.selected = 0 if self.scene.parts else -1
         self.multi = []
+        self._remember_recent(path)
 
     def export_stl(self, path: str) -> None:
         stl.save_binary(self.scene.merged(), path)

@@ -12,7 +12,7 @@ Switch {
         x: 0
         anchors.verticalCenter: parent.verticalCenter
         radius: 11
-        color: ks.checked ? win.cAcc : "#262b33"
+        color: ks.checked ? win.cAcc : win.cLine
         border.color: ks.checked ? win.cAcc : "#3a414b"
         Behavior on color { ColorAnimation { duration: 120 } }
         Rectangle {
