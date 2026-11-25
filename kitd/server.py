@@ -745,8 +745,11 @@ class Handler(BaseHTTPRequestHandler):
             WORKER.want_demo = bool(cmd.get("on"))
             return self._json({"ok": True})
         if cmd.get("cmd") in ("reboot", "poweroff"):
-            if WORKER.snapshot().get("transfer"):
+            st = WORKER.snapshot()
+            if st.get("transfer"):
                 return self._json({"ok": False, "error": "Es wird gerade ein Job zum Kit übertragen"})
+            if cmd["cmd"] == "poweroff" and st.get("printing"):
+                return self._json({"ok": False, "error": "Während des Drucks nicht ausschalten – erst nach dem Druck"})
             if DEMO:
                 return self._json({"ok": True})
             import subprocess

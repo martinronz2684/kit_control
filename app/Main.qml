@@ -1174,7 +1174,7 @@ Window {
                     }
                     Item { width: 1; height: Math.max(0, parent.height - 4 * 44 - 3 * (16 + 32) - 10 * 6) }
                     KButton { width: parent.width; height: 44; text: "Neustart"; onClicked: win.ask("Neu starten?", "Der Kit Controller startet neu. Ein laufender Druck läuft auf dem Kit weiter.", function () { win.send({ cmd: "reboot" }) }) }
-                    KButton { width: parent.width; height: 44; kind: "red"; text: "Ausschalten"; onClicked: win.ask("Ausschalten?", "Danach den Strom erst trennen, wenn das Display schwarz ist.", function () { win.send({ cmd: "poweroff" }) }) }
+                    KButton { width: parent.width; height: 44; kind: "red"; text: "Ausschalten"; ok: !win.st.printing && !win.st.transfer; onClicked: win.ask("Ausschalten?", "Danach den Strom erst trennen, wenn das Display schwarz ist.", function () { win.send({ cmd: "poweroff" }) }) }
                 }
             }
         }
