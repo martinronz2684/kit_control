@@ -94,7 +94,7 @@ Item {
                 anchors.topMargin: 84; anchors.bottomMargin: 40; anchors.rightMargin: 12
                 width: 62
                 readonly property var fill: backend.layerFill || []
-                readonly property real top: Math.max(1, fill.length)
+                readonly property real maxZ: Math.max(1, fill.length)
                 property bool cutOn: false
                 Text {
                     id: cutTitle
@@ -132,7 +132,7 @@ Item {
                     anchors.top: fillChart.top; anchors.bottom: fillChart.bottom
                     anchors.left: fillChart.right; anchors.leftMargin: 2; anchors.right: parent.right
                     orientation: Qt.Vertical
-                    from: 0; to: cutPanel.top; value: cutPanel.top; stepSize: 0.5
+                    from: 0; to: cutPanel.maxZ; value: cutPanel.maxZ; stepSize: 0.5
                     background: Rectangle {
                         x: cutSlider.leftPadding + cutSlider.availableWidth / 2 - 2; y: cutSlider.topPadding
                         width: 4; height: cutSlider.availableHeight; radius: 2; color: "#232830"
@@ -230,29 +230,87 @@ Item {
                         KButton { text: "↶"; kind: "ghost"; implicitWidth: 38; enabled: backend.canUndo; onClicked: backend.undo(); ToolTip.visible: hovered; ToolTip.text: win.t("Rückgängig") }
                         KButton { text: "↷"; kind: "ghost"; implicitWidth: 38; enabled: backend.canRedo; onClicked: backend.redo(); ToolTip.visible: hovered; ToolTip.text: win.t("Wiederholen") }
                     }
+                    // Gleiche Teile zusammengefasst: Vorschaubild, Name, Anzahl mit + / −, aufklappbar
                     ListView {
+                        id: groupList
                         Layout.fillWidth: true
                         Layout.fillHeight: true
                         clip: true
                         spacing: 4
-                        model: pg.parts
-                        delegate: Rectangle {
+                        property var open: ({})
+                        model: backend.partGroups
+                        ScrollBar.vertical: ScrollBar { policy: groupList.contentHeight > groupList.height ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff }
+                        delegate: Column {
+                            id: grp
                             width: ListView.view.width
-                            height: 40; radius: 8
-                            color: index === pg.sel ? "#16313c" : (ma.containsMouse ? "#181c21" : "transparent")
-                            RowLayout {
-                                anchors.fill: parent; anchors.leftMargin: 10; anchors.rightMargin: 10
-                                Text {
-                                    visible: modelData.lock_pos || modelData.lock_orient
-                                    text: "🔒"
-                                    color: "#ffd59a"; font.pixelSize: 12
-                                    ToolTip.visible: lockMa.containsMouse; ToolTip.text: modelData.lock_pos ? win.t("Position gesperrt – Auto-Anordnen bewegt dieses Teil nicht") : win.t("Lage gesperrt – wird nicht gedreht")
-                                    MouseArea { id: lockMa; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                            spacing: 2
+                            readonly property bool expanded: groupList.open[modelData.key] === true && modelData.count > 1
+                            Rectangle {
+                                width: parent.width; height: 46; radius: 9
+                                color: modelData.picked ? "#16313c" : (gma.containsMouse ? "#181c21" : "transparent")
+                                border.color: modelData.anyPicked && !modelData.picked ? "#1f4757" : "transparent"
+                                Behavior on color { ColorAnimation { duration: 100 } }
+                                MouseArea {
+                                    id: gma; anchors.fill: parent; hoverEnabled: true
+                                    onClicked: (m) => {
+                                        if (m.modifiers & Qt.ControlModifier) {
+                                            var cur = backend.selection.slice()
+                                            for (var k = 0; k < modelData.indices.length; k++) if (cur.indexOf(modelData.indices[k]) < 0) cur.push(modelData.indices[k])
+                                            backend.selectIndices(cur)
+                                        } else backend.selectIndices(modelData.indices)
+                                    }
+                                    onDoubleClicked: { var o = Object.assign({}, groupList.open); o[modelData.key] = !o[modelData.key]; groupList.open = o }
                                 }
-                                Text { text: modelData.name; color: win.cInk; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
-                                Text { text: modelData.size[0].toFixed(1) + " × " + modelData.size[1].toFixed(1) + " × " + modelData.size[2].toFixed(1); color: win.cMut; font.pixelSize: 11 }
+                                RowLayout {
+                                    anchors.fill: parent; anchors.leftMargin: 6; anchors.rightMargin: 6
+                                    spacing: 8
+                                    Text {
+                                        text: modelData.count > 1 ? (grp.expanded ? "▾" : "▸") : ""
+                                        color: win.cMut; font.pixelSize: 12; Layout.preferredWidth: 10
+                                        MouseArea { anchors.fill: parent; anchors.margins: -6; onClicked: { var o = Object.assign({}, groupList.open); o[modelData.key] = !o[modelData.key]; groupList.open = o } }
+                                    }
+                                    Rectangle {
+                                        width: 36; height: 36; radius: 7; color: "#0d1013"
+                                        border.color: modelData.status === "overlap" ? "#d9464c" : (modelData.status === "outside" ? "#e3962f" : win.cLine)
+                                        Image { anchors.fill: parent; anchors.margins: 2; source: modelData.thumb; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
+                                    }
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 1
+                                        Text { text: (modelData.locked ? "🔒 " : "") + modelData.name; color: win.cInk; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: modelData.size[0] + " × " + modelData.size[1] + " × " + modelData.size[2] + win.t(" mm"); color: win.cMut; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true }
+                                    }
+                                    // Anzahl
+                                    Row {
+                                        spacing: 0
+                                        Rectangle {
+                                            width: 24; height: 24; radius: 6; color: mMa.containsMouse ? "#22272e" : "#15191d"; border.color: win.cLine
+                                            Text { anchors.centerIn: parent; text: "−"; color: win.cInk; font.pixelSize: 14 }
+                                            MouseArea { id: mMa; anchors.fill: parent; hoverEnabled: true; onClicked: backend.groupRemove(modelData.key) }
+                                        }
+                                        Text { width: 30; height: 24; text: "× " + modelData.count; color: win.cInk; font.pixelSize: 12; font.weight: Font.DemiBold; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+                                        Rectangle {
+                                            width: 24; height: 24; radius: 6; color: pMa.containsMouse ? "#22272e" : "#15191d"; border.color: win.cLine
+                                            Text { anchors.centerIn: parent; text: "+"; color: win.cInk; font.pixelSize: 14 }
+                                            MouseArea { id: pMa; anchors.fill: parent; hoverEnabled: true; onClicked: backend.groupAdd(modelData.key) }
+                                        }
+                                    }
+                                }
                             }
-                            MouseArea { id: ma; anchors.fill: parent; hoverEnabled: true; onClicked: backend.selected = index }
+                            // einzelne Teile der Gruppe
+                            Repeater {
+                                model: grp.expanded ? modelData.indices : []
+                                delegate: Rectangle {
+                                    readonly property var part: pg.parts[modelData] || ({})
+                                    width: grp.width; height: 28; radius: 6
+                                    color: part.picked ? "#132a33" : (sma.containsMouse ? "#161a1f" : "transparent")
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 8
+                                        Text { text: (part.lock_pos || part.lock_orient ? "🔒 " : "") + "#" + (index + 1); color: win.cMut; font.pixelSize: 11 }
+                                        Text { text: part.x !== undefined ? "X " + part.x.toFixed(1) + "  Y " + part.y.toFixed(1) + "  Z " + part.z.toFixed(1) : ""; color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                                    }
+                                    MouseArea { id: sma; anchors.fill: parent; hoverEnabled: true; onClicked: (m) => backend.selectPart(modelData, (m.modifiers & Qt.ControlModifier) ? "toggle" : "set") }
+                                }
+                            }
                         }
                     }
                     RowLayout {

@@ -5,6 +5,8 @@ import os
 import subprocess
 import sys
 import threading
+
+import numpy as np
 import time
 
 from PySide6.QtCore import Property, QObject, QUrl, Signal, Slot
@@ -164,6 +166,97 @@ class Backend(QObject):
             self.partsChanged.emit()
 
     selected = Property(int, _get_sel, _set_sel, notify=partsChanged)
+
+    # -- Teileliste, nach gleichem Netz zusammengefasst ----------------------------
+    def _thumb(self, p) -> str:
+        """Kleines Vorschaubild (schräg von oben, schattiert) als data:-URL; je Netz einmal berechnet."""
+        import base64
+        import re as _re
+        from PySide6.QtCore import QBuffer, QByteArray, QIODevice, QPointF, Qt as _Qt
+        from PySide6.QtGui import QColor, QImage, QPainter, QPolygonF
+        from kitslice.scene import mesh_uid
+        key = mesh_uid(p.mesh)
+        cache = self.__dict__.setdefault("_thumbs", {})
+        if key in cache:
+            return cache[key]
+        t = p.simple(1800).astype(float)
+        t = t - t.reshape(-1, 3).mean(axis=0)
+        a, b = np.radians(-35), np.radians(30)              # Drehung um Z, dann Kippen
+        rz = np.array([[np.cos(a), -np.sin(a), 0], [np.sin(a), np.cos(a), 0], [0, 0, 1]])
+        rx = np.array([[1, 0, 0], [0, np.cos(b), -np.sin(b)], [0, np.sin(b), np.cos(b)]])
+        v = t @ (rx @ rz).T
+        n = np.cross(v[:, 1] - v[:, 0], v[:, 2] - v[:, 0])
+        ln = np.linalg.norm(n, axis=1) + 1e-12
+        light = np.abs(n @ np.array([0.3, 0.5, 0.8]) / ln)
+        depth = v[:, :, 1].mean(axis=1)
+        order = np.argsort(-depth)
+        xy = v[:, :, [0, 2]]
+        lo, hi = xy.reshape(-1, 2).min(axis=0), xy.reshape(-1, 2).max(axis=0)
+        S = 56.0 / max(float((hi - lo).max()), 1e-6)
+        img = QImage(64, 64, QImage.Format_ARGB32_Premultiplied)
+        img.fill(_Qt.transparent)
+        g = QPainter(img)
+        g.setRenderHint(QPainter.Antialiasing)
+        g.setPen(_Qt.NoPen)
+        cx, cy = (lo + hi) / 2
+        for i in order:
+            k = 0.35 + 0.65 * float(light[i])
+            g.setBrush(QColor(int(42 * k + 30), int(156 * k + 20), int(194 * k + 20)))
+            g.drawPolygon(QPolygonF([QPointF(32 + (x - cx) * S, 32 - (y - cy) * S) for x, y in xy[i]]))
+        g.end()
+        ba = QByteArray()
+        buf = QBuffer(ba)
+        buf.open(QIODevice.WriteOnly)
+        img.save(buf, "PNG")
+        url = "data:image/png;base64," + base64.b64encode(bytes(ba)).decode()
+        cache[key] = url
+        return url
+
+    @Property("QVariantList", notify=partsChanged)
+    def partGroups(self):
+        import re as _re
+        from kitslice.scene import mesh_uid
+        groups, order = {}, []
+        sel = set(self.core.targets())
+        for i, p in enumerate(self.core.scene.parts):
+            key = f"{mesh_uid(p.mesh)}:{p.scale[0]:.4f}"
+            if key not in groups:
+                base = _re.sub(r"(\s\((Kopie|\d+)\))+$", "", p.name)
+                try:
+                    thumb = self._thumb(p)
+                except Exception:
+                    thumb = ""
+                groups[key] = {"key": key, "name": base, "indices": [], "thumb": thumb,
+                               "size": [round(float(v), 1) for v in sorted(p.size(), reverse=True)],
+                               "locked": False, "status": ""}
+                order.append(key)
+            g = groups[key]
+            g["indices"].append(i)
+            g["locked"] = g["locked"] or bool(p.lock_pos or p.lock_orient)
+        status = self.core.part_status()
+        for g in groups.values():
+            g["count"] = len(g["indices"])
+            g["picked"] = all(i in sel for i in g["indices"])
+            g["anyPicked"] = any(i in sel for i in g["indices"])
+            st = [status.get(i, "") for i in g["indices"]]
+            g["status"] = "overlap" if "overlap" in st else ("outside" if "outside" in st else "")
+        return [groups[k] for k in order]
+
+    @Slot(str)
+    def groupAdd(self, key):
+        for g in self.partGroups:
+            if g["key"] == key:
+                self.core.duplicate(g["indices"][-1])
+                self._parts_changed()
+                return
+
+    @Slot(str)
+    def groupRemove(self, key):
+        for g in self.partGroups:
+            if g["key"] == key:
+                self.core.remove(g["indices"][-1])
+                self._parts_changed()
+                return
 
     @Property("QVariantList", notify=partsChanged)
     def layerFill(self):
