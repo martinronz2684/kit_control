@@ -18,7 +18,6 @@ class Splash(QSplashScreen):
         self.value = 0.0
         self.text = ""
         super().__init__(self._background())
-        self.setWindowFlag(Qt.WindowStaysOnTopHint, True)
 
     def _background(self) -> QPixmap:
         pm = QPixmap(W, H)

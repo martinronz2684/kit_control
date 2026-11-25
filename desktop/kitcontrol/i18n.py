@@ -186,6 +186,9 @@ EN: dict[str, str] = {
     " Schichten": " layers", "abgebrochen bei ": "cancelled at ", "Design": "Theme", "Dunkel": "Dark", "Hell (Werkstatt)": "Light (workshop)",
     "Windows-Benachrichtigungen (Druck fertig, Aufheizen fertig, Fehler)": "Windows notifications (print done, heat-up done, errors)",
     "Temperaturverlauf erscheint nach dem Verbinden": "Temperature history appears after connecting",
+    "Update verfügbar": "Update available", " ist da (installiert: ": " is available (installed: ",
+    "). Jetzt herunterladen und installieren? Kit Control startet danach neu.": "). Download and install now? Kit Control restarts afterwards.",
+    "Später": "Later",
     "Aufheizen fertig": "Heat-up done", "Druck fertig": "Print finished", "Druck beendet": "Print ended", "Fehler am Kit": "Error on the Kit",
 }
 

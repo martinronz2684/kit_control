@@ -10,6 +10,23 @@ def _base() -> str:
     return getattr(sys, "_MEIPASS", None) and os.path.join(sys._MEIPASS, "kitcontrol") or os.path.dirname(os.path.abspath(__file__))
 
 
+def _settings_file() -> str:
+    if sys.platform == "win32":
+        d = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "KitControl")
+    else:
+        d = os.path.join(os.path.expanduser("~/.config"), "kitcontrol")
+    return os.path.join(d, "settings.json")
+
+
+def _setting(key, default=None):
+    try:
+        import json
+        with open(_settings_file(), encoding="utf-8") as f:
+            return json.load(f).get(key, default)
+    except Exception:
+        return default
+
+
 def _splash_texts():
     """Texte des Ladefensters in der eingestellten Sprache (vor dem Laden der App)."""
     lang = "de"
@@ -25,7 +42,9 @@ def _splash_texts():
         pass
     en = {"Starte …": "Starting …", "Slicer und Pulverprofile laden …": "Loading slicer and powder profiles …",
           "3D-Ansicht vorbereiten …": "Preparing 3D view …", "Einstellungen laden …": "Loading settings …",
-          "Oberfläche wird geladen …": "Loading interface …", "Fertig": "Ready"}
+          "Oberfläche wird geladen …": "Loading interface …", "Fertig": "Ready",
+          "Suche nach Updates …": "Checking for updates …", "Neue Version ": "New version ",
+          " verfügbar – wird gleich angeboten": " available – offered in a moment"}
     return (lambda t: en.get(t, t)) if lang == "en" else (lambda t: t)
 
 
@@ -88,6 +107,21 @@ def main() -> int:
         sp.grab().save(sys.argv[sys.argv.index("--splash-shot") + 1])
         return 0
 
+    # Update-Suche läuft parallel zum Laden; das Ergebnis steht im Ladefenster
+    upd = {"v": None, "done": False}
+    want_update = not (selftest or shots) and _setting("check_updates", True)
+    if want_update:
+        import threading
+
+        def _check():
+            try:
+                from kitcontrol import updater
+                upd["v"] = updater.check(__version__, timeout=4.0)
+            except Exception:
+                pass
+            upd["done"] = True
+        threading.Thread(target=_check, daemon=True).start()
+
     step(0.15, "Slicer und Pulverprofile laden …")
     from kitcontrol.backend import Backend
     step(0.40, "3D-Ansicht vorbereiten …")
@@ -103,12 +137,33 @@ def main() -> int:
     engine.warnings.connect(lambda ws: problems.extend(w.toString() for w in ws))
     engine.rootContext().setContextProperty("backend", backend)
     engine.rootContext().setContextProperty("assetDir", QUrl.fromLocalFile(os.path.join(_base(), "assets")).toString())
+    if want_update:
+        import time as _t
+        step(0.62, "Suche nach Updates …")
+        t_end = _t.time() + 4.0
+        while not upd["done"] and _t.time() < t_end:
+            app.processEvents()
+            _t.sleep(0.03)
+        if upd["v"]:
+            backend._update = upd["v"]
+            step(0.66, tr("Neue Version ") + upd["v"] + tr(" verfügbar – wird gleich angeboten"))
     step(0.70, "Oberfläche wird geladen …")
     engine.load(QUrl.fromLocalFile(os.path.join(_base(), "qml", "Main.qml")))
     if splash is not None:
         step(1.0, "Fertig")
         roots = engine.rootObjects()
-        QTimer.singleShot(400, lambda: splash.finish(roots[0]) if roots else splash.close())
+        if roots:
+            # sobald das Hauptfenster sein erstes Bild gezeichnet hat: Ladefenster weg
+            done = {"x": False}
+
+            def _close():
+                if not done["x"]:
+                    done["x"] = True
+                    splash.close()
+            roots[0].frameSwapped.connect(_close)
+            QTimer.singleShot(3000, _close)                   # Sicherheitsnetz
+        else:
+            splash.close()
     if not engine.rootObjects():
         print("\n".join(problems) or "Oberfläche lädt nicht", file=sys.stderr)
         return 1
@@ -157,7 +212,7 @@ def main() -> int:
                 backend.tray = tray
         except Exception:
             pass
-        if st.get("check_updates", True):
+        if st.get("check_updates", True) and not upd.get("done"):
             backend.check_update()
         if st.get("auto_connect", True) and st.get("host"):
             backend.connectHost(st["host"])                # zuletzt verwendeter Kit

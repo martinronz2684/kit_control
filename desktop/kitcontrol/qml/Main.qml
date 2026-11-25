@@ -527,4 +527,42 @@ ApplicationWindow {
     }
 
     SettingsPopup { id: settingsPop }
+
+    // Update beim Start anbieten (gefunden schon im Ladefenster)
+    Popup {
+        id: updatePop
+        objectName: "updatePop"
+        anchors.centerIn: parent
+        width: 440
+        modal: true
+        padding: 22
+        background: GlassBg {}
+        Overlay.modal: Backdrop {}
+        property bool shown: false
+        function offer() { if (!shown && backend.updateVersion !== "") { shown = true; open() } }
+        Component.onCompleted: Qt.callLater(offer)
+        Connections { target: backend; function onUpdateChanged() { updatePop.offer() } }
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 14
+            Text { text: win.t("Update verfügbar"); color: win.cInk; font.pixelSize: 18; font.weight: Font.DemiBold }
+            Body {
+                Layout.fillWidth: true; color: win.cMut
+                text: win.t("Version ") + backend.updateVersion + win.t(" ist da (installiert: ") + backend.version + win.t("). Jetzt herunterladen und installieren? Kit Control startet danach neu.")
+            }
+            ProgressBar {
+                visible: backend.updateProgress >= 0
+                Layout.fillWidth: true
+                value: backend.updateProgress
+                background: Rectangle { implicitHeight: 6; radius: 3; color: win.cTrack }
+                contentItem: Item { Rectangle { width: parent.width * backend.updateProgress; height: 6; radius: 3; color: win.cAcc } }
+            }
+            RowLayout {
+                Layout.fillWidth: true; spacing: 10
+                Item { Layout.fillWidth: true }
+                KButton { text: win.t("Später"); kind: "ghost"; enabled: backend.updateProgress < 0; onClicked: updatePop.close() }
+                KButton { text: backend.updateProgress >= 0 ? win.t("Lädt …") : win.t("Jetzt aktualisieren"); kind: "pri"; enabled: backend.updateProgress < 0; onClicked: backend.installUpdate() }
+            }
+        }
+    }
 }
