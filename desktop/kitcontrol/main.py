@@ -292,6 +292,7 @@ def _layout_check(root, where: str, only=None) -> list:
                     nm = it.property("text") or it.property("placeholderText") or cls
                     out.append(f"{where}: Bedienelement seitlich abgeschnitten: {str(nm)[:40]}")
         if r.width() > 2 and r.height() > 2 and (r.right() > W + 2 or r.bottom() > H + 2) and cls.startswith("QQuick") \
+                and not cls.startswith("QQuickShaderEffect") and "MultiEffect" not in cls \
                 and not anc_clipped(it):
             nm = it.property("text") or it.objectName() or cls
             out.append(f"{where}: außerhalb des Fensters: {str(nm)[:40]} ({r.right():.0f}, {r.bottom():.0f})")

@@ -231,12 +231,23 @@ Item {
                     }
                 }
 
-                ColumnLayout {
+                Flickable {
+                    id: rightFl
                     Layout.preferredWidth: 300
                     Layout.maximumWidth: 300
                     Layout.minimumWidth: 260
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    clip: true
+                    contentWidth: width
+                    contentHeight: Math.max(height, rightCol.implicitHeight)
+                    flickableDirection: Flickable.VerticalFlick
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar { policy: rightCol.implicitHeight > rightFl.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
+                ColumnLayout {
+                    id: rightCol
+                    width: rightFl.width - (rightCol.implicitHeight > rightFl.height ? 10 : 0)
+                    height: Math.max(rightFl.height, implicitHeight)
                     spacing: 14
 
                     Card {
@@ -283,6 +294,7 @@ Item {
                     Card {
                         Layout.fillWidth: true
                         Layout.fillHeight: true
+                        Layout.minimumHeight: 110
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 14
                             spacing: 6
@@ -308,6 +320,7 @@ Item {
                             Text { visible: !(k.errors && k.errors.length) && !(k.warnings && k.warnings.length); text: pr.live ? win.t("Keine Fehler oder Warnungen") : "–"; color: win.cMut; font.pixelSize: 12 }
                         }
                     }
+                }
                 }
             }
         }

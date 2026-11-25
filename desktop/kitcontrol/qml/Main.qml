@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import QtQuick.Effects
 import QtQuick.Dialogs
 
 ApplicationWindow {
@@ -177,6 +178,9 @@ ApplicationWindow {
                 spacing: 6
 
                 Image {
+                    id: logoImg
+                    layer.enabled: win.light
+                    layer.effect: MultiEffect { brightness: -0.92; contrast: 0.2 }
                     source: assetDir + "/logo.png"
                     Layout.preferredWidth: 200
                     Layout.preferredHeight: 44
@@ -192,7 +196,7 @@ ApplicationWindow {
                     Layout.bottomMargin: 18
                     Text { text: "by"; color: win.cMut2; font.pixelSize: 12; font.italic: true; Layout.alignment: Qt.AlignVCenter }
                     Image {
-                        source: assetDir + "/rat3d.svg"
+                        source: assetDir + (win.light ? "/rat3d_dark.svg" : "/rat3d.svg")
                         sourceSize: Qt.size(120, 92)
                         Layout.preferredWidth: 60; Layout.preferredHeight: 46
                         fillMode: Image.PreserveAspectFit
