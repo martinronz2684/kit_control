@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 
 from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtGui import QColor, QFont, QLinearGradient, QPainter, QPainterPath, QPen, QPixmap, QRadialGradient
 from PySide6.QtWidgets import QApplication, QSplashScreen
 
 W, H = 560, 340
@@ -31,11 +31,15 @@ class Splash(QSplashScreen):
         bg.setColorAt(1, QColor("#0c0f12"))
         g.fillRect(0, 0, W, H, bg)
         # dezenter Petrol-Schimmer hinter dem Logo
-        glow = QLinearGradient(0, 0, W, 0)
-        glow.setColorAt(0.0, QColor(38, 148, 184, 0))
-        glow.setColorAt(0.5, QColor(38, 148, 184, 26))
+        glow = QRadialGradient(QPointF(W / 2, 128), 230)
+        glow.setColorAt(0.0, QColor(38, 148, 184, 34))
         glow.setColorAt(1.0, QColor(38, 148, 184, 0))
-        g.fillRect(0, 70, W, 110, glow)
+        g.save()
+        g.translate(W / 2, 128)
+        g.scale(1.0, 0.45)
+        g.translate(-W / 2, -128)
+        g.fillRect(0, 0, W, H * 2, glow)
+        g.restore()
         g.setPen(QPen(QColor("#262b33"), 1))
         g.drawRect(0, 0, W - 1, H - 1)
         # Kit-Control-Logo
