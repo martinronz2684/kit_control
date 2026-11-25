@@ -41,7 +41,7 @@ NET_JOBS = os.environ.get("KIT_NET_JOBS", "1") == "1"
 NET_START = os.environ.get("KIT_NET_START", "1") == "1"
 # Nur am Gerät: Netzwerk, Updates, Neustart und der Schalter selbst
 LOCAL_ONLY = {"pc_link", "update_check", "update_start", "wifi_connect", "wifi_disconnect", "demo",
-              "reboot", "poweroff", "remote_control", "job_autostart", "lamp_legacy"}
+              "remote_control", "job_autostart", "lamp_legacy"}
 # Was der PC auch während eines Drucks darf: nur anhalten
 STOP_CMDS = {"abort_print", "stop_sintering"}
 
@@ -745,6 +745,10 @@ class Handler(BaseHTTPRequestHandler):
             WORKER.want_demo = bool(cmd.get("on"))
             return self._json({"ok": True})
         if cmd.get("cmd") in ("reboot", "poweroff"):
+            if WORKER.snapshot().get("transfer"):
+                return self._json({"ok": False, "error": "Es wird gerade ein Job zum Kit übertragen"})
+            if DEMO:
+                return self._json({"ok": True})
             import subprocess
             subprocess.Popen(["sudo", "-n", "/usr/bin/systemctl", cmd["cmd"]])
             return self._json({"ok": True})

@@ -945,6 +945,24 @@ class Backend(QObject):
         if host:
             threading.Thread(target=run, daemon=True).start()
 
+    @Slot()
+    def powerOff(self):
+        host = self._host
+
+        def run():
+            try:
+                r = Pi(host, timeout=10).cmd({"cmd": "poweroff"})
+            except Exception as e:
+                r = {"ok": False, "error": str(e)}
+            if r.get("ok"):
+                self.message.emit("Kit Control fährt herunter – Strom trennen, sobald das Display schwarz ist (ca. 20 s)", "ok")
+            elif "Nur am Kit Control" in str(r.get("error", "")) or "Bedienung nur am Gerät" in str(r.get("error", "")):
+                self.message.emit("Dieses Kit Control kann noch nicht vom PC herunterfahren – bitte am Pi updaten", "error")
+            else:
+                self.message.emit(str(r.get("error", "Fehler")), "error")
+        if host:
+            threading.Thread(target=run, daemon=True).start()
+
     @Slot(str, int)
     def requestPiLayer(self, job_id, n):
         host = self._host
