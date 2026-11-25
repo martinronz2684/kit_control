@@ -489,7 +489,7 @@ Item {
                 spacing: 8
                 Layout.topMargin: 6
                 KButton {
-                    text: pg.cur ? "„" + pg.cur.name + win.t("“ auffüllen") : win.t("Mit Kopien auffüllen"); Layout.fillWidth: true; enabled: pg.parts.length > 0
+                    text: pg.cur ? win.t("Mit Kopien auffüllen") + ": " + pg.cur.name : win.t("Mit Kopien auffüllen"); Layout.fillWidth: true; enabled: pg.parts.length > 0
                     onClicked: { packPop.close(); backend.fillChamber(pg.sel, { gap: packPop.gap, wall: packPop.wall, rotate: packPop.rotate, quality: packPop.quality }) }
                     ToolTip.visible: hovered; ToolTip.text: win.t("Das ausgewählte (sonst das erste) Teil so oft kopieren, wie es in den idealen Bereich passt")
                 }

@@ -179,9 +179,7 @@ ApplicationWindow {
 
                 Image {
                     id: logoImg
-                    layer.enabled: win.light
-                    layer.effect: MultiEffect { brightness: -0.92; contrast: 0.2 }
-                    source: assetDir + "/logo.png"
+                    source: assetDir + (win.light ? "/logo_dark.png" : "/logo.png")
                     Layout.preferredWidth: 200
                     Layout.preferredHeight: 44
                     fillMode: Image.PreserveAspectFit

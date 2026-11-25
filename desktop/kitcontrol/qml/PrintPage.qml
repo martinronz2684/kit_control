@@ -100,7 +100,11 @@ Item {
                         KButton { text: win.t("Jobs am Kit"); kind: pr.tab === 0 ? "pri" : "ghost"; implicitHeight: 30; onClicked: pr.tab = 0 }
                         KButton { text: win.t("Verlauf"); kind: pr.tab === 1 ? "pri" : "ghost"; implicitHeight: 30; onClicked: pr.tab = 1 }
                         Item { Layout.fillWidth: true }
-                        KButton { visible: pr.tab === 0; text: win.t("Aktualisieren"); kind: "ghost"; implicitHeight: 30; enabled: backend.connected; onClicked: backend.refreshJobs() }
+                        KButton {
+                            visible: pr.tab === 0; text: "⟳"; kind: "ghost"; implicitHeight: 30; implicitWidth: 36; leftPadding: 0; rightPadding: 0
+                            enabled: backend.connected; onClicked: backend.refreshJobs()
+                            ToolTip.visible: hovered; ToolTip.text: win.t("Aktualisieren")
+                        }
                     }
                     // Druckverlauf
                     ListView {
