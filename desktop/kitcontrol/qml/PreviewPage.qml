@@ -58,6 +58,7 @@ Item {
                     }
                 }
                 RowLayout {
+                    Layout.fillWidth: true
                     enabled: vp.done
                     opacity: enabled ? 1 : 0.35
                     spacing: 12
