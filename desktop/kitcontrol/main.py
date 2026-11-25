@@ -10,6 +10,25 @@ def _base() -> str:
     return getattr(sys, "_MEIPASS", None) and os.path.join(sys._MEIPASS, "kitcontrol") or os.path.dirname(os.path.abspath(__file__))
 
 
+def _splash_texts():
+    """Texte des Ladefensters in der eingestellten Sprache (vor dem Laden der App)."""
+    lang = "de"
+    try:
+        import json
+        if sys.platform == "win32":
+            d = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "KitControl")
+        else:
+            d = os.path.join(os.path.expanduser("~/.config"), "kitcontrol")
+        with open(os.path.join(d, "settings.json"), encoding="utf-8") as f:
+            lang = json.load(f).get("lang", "de")
+    except Exception:
+        pass
+    en = {"Starte …": "Starting …", "Slicer und Pulverprofile laden …": "Loading slicer and powder profiles …",
+          "3D-Ansicht vorbereiten …": "Preparing 3D view …", "Einstellungen laden …": "Loading settings …",
+          "Oberfläche wird geladen …": "Loading interface …", "Fertig": "Ready"}
+    return (lambda t: en.get(t, t)) if lang == "en" else (lambda t: t)
+
+
 def main() -> int:
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # desktop/
     if here not in sys.path:
@@ -22,12 +41,6 @@ def main() -> int:
     from PySide6.QtGui import QFont, QGuiApplication, QIcon
     from PySide6.QtQml import QQmlApplicationEngine
 
-    from kitcontrol.backend import Backend
-    try:
-        from kitcontrol import geometry  # noqa: F401  (registriert MeshGeometry/LineGeometry für QML)
-    except Exception as e:               # ohne Qt Quick 3D bleibt die einfache Ansicht
-        print("3D-Ansicht ohne Grafikkarte:", e, file=sys.stderr)
-
     selftest = "--selftest" in sys.argv
     shots = None
     mouse = None
@@ -39,7 +52,7 @@ def main() -> int:
         os.environ["KIT_PROFILE_DIR"] = os.path.join(shots, "_profile")
     files = [a for a in sys.argv[1:] if not a.startswith("--") and a != shots]
 
-    try:                                                   # Widgets nur für die Windows-Benachrichtigung (Tray)
+    try:                                                   # Widgets für Ladefenster und Windows-Benachrichtigung
         from PySide6.QtWidgets import QApplication
         app = QApplication(sys.argv)
     except ImportError:
@@ -50,13 +63,52 @@ def main() -> int:
     if sys.platform == "win32":
         app.setFont(QFont("Segoe UI", 10))
 
+    # Ladefenster (nicht in den automatischen Prüfungen)
+    from kitcontrol.version import __version__
+    splash = None
+    tr = _splash_texts()
+    if not (selftest or shots or "--no-splash" in sys.argv):
+        try:
+            from kitcontrol.splash import Splash
+            splash = Splash(os.path.join(_base(), "assets"), __version__)
+            splash.show()
+            splash.step(0.05, tr("Starte …"))
+        except Exception as e:                      # ohne Widgets geht es auch ohne Ladefenster
+            print("Ladefenster:", e, file=sys.stderr)
+            splash = None
+
+    def step(v, t):
+        if splash is not None:
+            splash.step(v, tr(t))
+
+    if "--splash-shot" in sys.argv:                 # Bild des Ladefensters für die Prüfung
+        from kitcontrol.splash import Splash
+        sp = Splash(os.path.join(_base(), "assets"), __version__)
+        sp.value, sp.text = 0.62, tr("Oberfläche wird geladen …")
+        sp.grab().save(sys.argv[sys.argv.index("--splash-shot") + 1])
+        return 0
+
+    step(0.15, "Slicer und Pulverprofile laden …")
+    from kitcontrol.backend import Backend
+    step(0.40, "3D-Ansicht vorbereiten …")
+    try:
+        from kitcontrol import geometry  # noqa: F401  (registriert MeshGeometry/LineGeometry für QML)
+    except Exception as e:               # ohne Qt Quick 3D bleibt die einfache Ansicht
+        print("3D-Ansicht ohne Grafikkarte:", e, file=sys.stderr)
+    step(0.55, "Einstellungen laden …")
+
     backend = Backend()
     engine = QQmlApplicationEngine()
     problems = []
     engine.warnings.connect(lambda ws: problems.extend(w.toString() for w in ws))
     engine.rootContext().setContextProperty("backend", backend)
     engine.rootContext().setContextProperty("assetDir", QUrl.fromLocalFile(os.path.join(_base(), "assets")).toString())
+    step(0.70, "Oberfläche wird geladen …")
     engine.load(QUrl.fromLocalFile(os.path.join(_base(), "qml", "Main.qml")))
+    if splash is not None:
+        step(1.0, "Fertig")
+        roots = engine.rootObjects()
+        QTimer.singleShot(400, lambda: splash.finish(roots[0]) if roots else splash.close())
     if not engine.rootObjects():
         print("\n".join(problems) or "Oberfläche lädt nicht", file=sys.stderr)
         return 1

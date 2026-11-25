@@ -52,6 +52,8 @@ jobs:
           KIT_UPDATE_REPO: invalid/none
         run: |
           cd desktop
+          mkdir -p ../shots
+          timeout 60 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--splash-shot', '../shots/0-ladefenster.png']; sys.exit(main())" || true
           timeout 300 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--screenshots', '../shots']; sys.exit(main())" > shots.log 2>&1 || true
           (grep "^LAYOUT" shots.log || tail -15 shots.log) | head -40 | while IFS= read -r l; do echo "::warning title=Layout::$l"; done || true
           cp shots.log ../shots/ 2>/dev/null || true
