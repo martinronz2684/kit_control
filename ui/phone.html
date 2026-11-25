@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Kit Control">
+<meta name="theme-color" content="#0c0e11">
+<link rel="apple-touch-icon" href="phone-icon.png">
+<link rel="icon" href="phone-icon.png">
+<link rel="manifest" href="phone.webmanifest">
+<title>Kit Control</title>
+<style>
+/* Kit Control – Handy-Oberfläche. Läuft vom Pi (http://<pi>:8080/app) und spricht dieselbe Schnittstelle wie die PC-App. */
+:root{
+  --bg:#0c0e11;--panel:#15181d;--panel2:#1b1f25;--line:rgba(255,255,255,.07);
+  --ink:#eef1f5;--mut:#8b929c;--dim:#5d646e;
+  --acc:#2fa6cc;--acc2:#1b809f;--heat:#ff8a5c;--red:#e5484d;--ok:#2fd38a;
+  --safe-t:env(safe-area-inset-top);--safe-b:env(safe-area-inset-bottom);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text","Inter",system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+body{min-height:100vh;background:radial-gradient(520px 380px at 50% -120px,rgba(47,166,204,.16),transparent 70%),var(--bg)}
+button{font:inherit;color:inherit;border:0;background:none;cursor:pointer}
+button:disabled{opacity:.32;cursor:default}
+
+/* Kopf */
+header{position:sticky;top:0;z-index:5;padding:calc(var(--safe-t) + 10px) 18px 10px;display:flex;align-items:center;gap:10px;
+  background:linear-gradient(180deg,rgba(12,14,17,.96) 60%,rgba(12,14,17,0));backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+header img{width:30px;height:30px}
+header .t{flex:1;line-height:1.1}
+header .t b{display:block;font-size:17px;letter-spacing:-.02em}
+header .t small{color:var(--dim);font-size:11px}
+.pill{display:flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:99px;background:rgba(255,255,255,.05);border:1px solid var(--line);font-size:12px;color:var(--mut);white-space:nowrap}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--ok);box-shadow:0 0 8px var(--ok)}
+.pill.off i{background:var(--red);box-shadow:0 0 8px var(--red)}
+.pill.busy i{background:var(--acc);box-shadow:0 0 8px var(--acc)}
+
+main{padding:4px 14px calc(var(--safe-b) + 96px)}
+section{display:none}section.on{display:block;animation:fade .22s ease}
+@keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+
+.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:20px;padding:16px;margin-bottom:12px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+.cap{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);margin:0 0 10px}
+.row{display:flex;gap:10px}.row>*{flex:1}
+.mut{color:var(--mut)}.small{font-size:12px}
+
+/* Hinweise */
+.note{display:flex;gap:10px;align-items:flex-start;padding:12px 14px;border-radius:16px;margin-bottom:12px;font-size:13px;
+  background:rgba(47,166,204,.1);border:1px solid rgba(47,166,204,.28);color:#bfe6f3}
+.note.warn{background:rgba(255,138,92,.1);border-color:rgba(255,138,92,.3);color:#ffcdb8}
+.note.err{background:rgba(229,72,77,.12);border-color:rgba(229,72,77,.35);color:#ffb7b9}
+.note b{display:block}
+
+/* Fortschritt */
+.hero{display:flex;align-items:center;gap:16px}
+.ring{position:relative;width:118px;height:118px;flex:none}
+.ring svg{transform:rotate(-90deg)}
+.ring .v{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring .v b{font-size:30px;font-weight:600;letter-spacing:-.03em}
+.ring .v span{font-size:11px;color:var(--mut)}
+.hero h2{margin:0 0 4px;font-size:21px;letter-spacing:-.02em}
+.hero .job{color:var(--mut);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52vw}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.stat{background:rgba(255,255,255,.035);border-radius:14px;padding:10px 12px}
+.stat span{display:block;font-size:11px;color:var(--mut)}
+.stat b{font-size:18px;font-weight:600;letter-spacing:-.02em}
+.stat.heat b{color:var(--heat)}.stat.acc b{color:#5cc3e3}
+
+/* Temperaturen */
+.temps{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.temp{border-radius:16px;padding:12px;background:rgba(255,255,255,.035)}
+.temp span{font-size:11px;color:var(--mut)}
+.temp b{display:block;font-size:28px;font-weight:300;letter-spacing:-.03em}
+.temp small{color:var(--dim);font-size:11px}
+.temp.s b{color:var(--heat)}
+.bar{height:4px;border-radius:2px;background:rgba(255,255,255,.07);margin-top:8px;overflow:hidden}
+.bar i{display:block;height:100%;border-radius:2px;background:var(--heat);transition:width .6s}
+.temp.c .bar i{background:#cdd2d8}
+
+/* Schicht */
+.layer{position:relative;aspect-ratio:1;border-radius:14px;background:#0a0c0f;overflow:hidden}
+.layer canvas{width:100%;height:100%;display:block}
+.layer .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:30px;color:var(--dim);font-size:13px}
+
+/* Knöpfe */
+.btn{display:flex;width:100%;align-items:center;justify-content:center;gap:8px;min-height:50px;padding:0 14px;border-radius:15px;font-weight:600;font-size:15px;
+  background:rgba(255,255,255,.06);border:1px solid var(--line);transition:transform .12s,background .12s}
+.btn:active:not(:disabled){transform:scale(.97);background:rgba(255,255,255,.1)}
+.btn.pri{background:linear-gradient(180deg,#3bb6dc,var(--acc2));border-color:transparent;color:#fff;box-shadow:0 8px 20px rgba(27,128,159,.35)}
+.btn.hot{background:linear-gradient(180deg,#ff9b70,#e9662f);border-color:transparent;color:#fff;box-shadow:0 8px 20px rgba(233,102,47,.3)}
+.btn.red{background:rgba(229,72,77,.14);border-color:rgba(229,72,77,.35);color:#ff8a8e}
+.btn.ghost{background:transparent}
+.stack>*+*{margin-top:10px}
+
+/* Segmente */
+.seg{display:flex;padding:4px;border-radius:14px;background:rgba(255,255,255,.05);gap:4px}
+.seg button{flex:1;height:38px;border-radius:11px;font-size:14px;font-weight:600;color:var(--mut)}
+.seg button.on{background:#2c323b;color:var(--ink)}
+
+/* Fahren */
+.jog{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.jog .col{background:rgba(255,255,255,.035);border-radius:16px;padding:12px}
+.jog .col span{display:block;font-size:12px;color:var(--mut);margin-bottom:8px;text-align:center}
+.jog .btn{min-height:56px;font-size:20px}
+
+/* Jobs */
+.job-it{display:flex;align-items:center;gap:12px;padding:12px;border-radius:16px;background:rgba(255,255,255,.035);margin-bottom:8px}
+.job-it .th{width:46px;height:46px;border-radius:11px;background:#0a0c0f;flex:none}
+.job-it .tx{flex:1;min-width:0}
+.job-it .tx b{display:block;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.job-it .tx span{font-size:12px;color:var(--mut)}
+.icon{width:42px;height:42px;border-radius:13px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.06);font-size:16px;flex:none}
+.icon.go{background:rgba(47,166,204,.18);color:#6fd0ee}
+.icon.del{color:#ff8a8e}
+.empty{padding:28px 10px;text-align:center;color:var(--dim);font-size:13px}
+
+/* Info */
+.kv{display:flex;justify-content:space-between;gap:12px;padding:11px 2px;border-bottom:1px solid var(--line);font-size:14px}
+.kv:last-child{border:0}.kv span{color:var(--mut)}.kv b{font-weight:500;text-align:right}
+
+/* Untere Leiste */
+nav{position:fixed;left:12px;right:12px;bottom:calc(var(--safe-b) + 10px);z-index:6;display:flex;padding:6px;border-radius:24px;
+  background:rgba(26,30,36,.82);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(20px) saturate(1.4);-webkit-backdrop-filter:blur(20px) saturate(1.4);box-shadow:0 14px 40px rgba(0,0,0,.45)}
+nav button{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 0 6px;border-radius:18px;font-size:10.5px;font-weight:600;color:var(--dim)}
+nav button svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+nav button.on{color:var(--ink);background:rgba(255,255,255,.07)}
+nav button.on svg{stroke:#5cc3e3}
+
+/* Dialog und Meldung */
+.sheet-bg{position:fixed;inset:0;z-index:20;background:rgba(0,0,0,.55);display:none;align-items:flex-end;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+.sheet-bg.on{display:flex;animation:fade .18s}
+.sheet{width:100%;margin:10px;margin-bottom:calc(var(--safe-b) + 10px);padding:20px;border-radius:24px;background:#1b1f25;border:1px solid var(--line)}
+.sheet h3{margin:0 0 6px;font-size:18px}.sheet p{margin:0 0 18px;color:var(--mut);font-size:14px}
+.toast{position:fixed;left:16px;right:16px;top:calc(var(--safe-t) + 64px);z-index:30;padding:13px 16px;border-radius:16px;font-size:14px;
+  background:rgba(30,34,40,.96);border:1px solid var(--line);box-shadow:0 12px 30px rgba(0,0,0,.4);transform:translateY(-14px);opacity:0;pointer-events:none;transition:all .25s}
+.toast.on{transform:none;opacity:1}
+.toast.err{border-color:rgba(229,72,77,.45);color:#ffb7b9}.toast.ok{border-color:rgba(47,211,138,.4);color:#a8f0cf}
+.demo{display:none;text-align:center;font-size:11px;color:var(--dim);margin:-2px 0 10px}
+</style>
+</head>
+<body>
+<header>
+  <img src="phone-icon.png" alt="">
+  <div class="t"><b>Kit Control</b><small id="sub">by Rat3d</small></div>
+  <div class="pill off" id="pill"><i></i><span id="pillT">Verbinde …</span></div>
+</header>
+
+<main>
+  <div class="demo" id="demo">Vorschau mit simuliertem Kit</div>
+  <div id="notes"></div>
+
+  <!-- Druck -->
+  <section id="p-print" class="on">
+    <div class="card">
+      <div class="hero">
+        <div class="ring">
+          <svg width="118" height="118" viewBox="0 0 118 118">
+            <circle cx="59" cy="59" r="51" stroke="rgba(255,255,255,.07)" stroke-width="9" fill="none"/>
+            <circle id="ringArc" cx="59" cy="59" r="51" stroke="url(#g)" stroke-width="9" fill="none" stroke-linecap="round" stroke-dasharray="320.4" stroke-dashoffset="320.4" style="transition:stroke-dashoffset .6s"/>
+            <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6fd0ee"/><stop offset="1" stop-color="#1b809f"/></linearGradient></defs>
+          </svg>
+          <div class="v"><b id="pct">–</b><span id="pctL">Fortschritt</span></div>
+        </div>
+        <div style="min-width:0">
+          <h2 id="state">–</h2>
+          <div class="job" id="jobName">Kein Druck</div>
+        </div>
+      </div>
+      <div class="stats">
+        <div class="stat"><span>Schicht</span><b id="sLayer">–</b></div>
+        <div class="stat"><span>Druckzeit</span><b id="sTime">–</b></div>
+        <div class="stat acc" id="remBox"><span id="remL">Restzeit</span><b id="sRem">–</b></div>
+        <div class="stat"><span>Fertig ca.</span><b id="sEnd">–</b></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cap">Temperaturen</div>
+      <div class="temps">
+        <div class="temp s"><span>Oberfläche</span><b id="tS">–</b><small id="tSt">Soll –</small><div class="bar"><i id="tSb" style="width:0"></i></div></div>
+        <div class="temp c"><span>Kammer</span><b id="tC">–</b><small id="tCt">Soll –</small><div class="bar"><i id="tCb" style="width:0"></i></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="cap" id="layerCap">Aktuelle Schicht</div>
+      <div class="layer"><canvas id="layerCv"></canvas><div class="ph" id="layerPh">Hier erscheint während des Drucks die aktuelle Schicht</div></div>
+    </div>
+
+    <div class="card stack">
+      <div class="cap">Steuerung</div>
+      <div class="row">
+        <button class="btn hot" data-need="idle" onclick="cmd({cmd:'warmup',on:true},'Aufheizen gestartet')">Aufheizen</button>
+        <button class="btn" data-need="stop" onclick="cmd({cmd:'warmup',on:false},'Heizen aus')">Heizen aus</button>
+      </div>
+      <button class="btn" data-need="printing" onclick="ask('Zum Abkühlen springen?','Sintern beenden und abkühlen. Der Druck endet nach der aktuellen Schicht.','Abkühlen',()=>cmd({cmd:'stop_sintering'},'Kit kühlt ab'))">Zum Abkühlen springen</button>
+      <button class="btn red" data-need="printing" onclick="ask('Druck abbrechen?','Der laufende Druck wird sofort abgebrochen.','Abbrechen',()=>cmd({cmd:'abort_print'},'Druck abgebrochen'),true)">Druck abbrechen</button>
+    </div>
+  </section>
+
+  <!-- Jobs -->
+  <section id="p-jobs">
+    <div class="card">
+      <div class="cap" style="display:flex;justify-content:space-between;align-items:center">Jobs am Kit <button class="small mut" onclick="loadJobs(true)">⟳ Aktualisieren</button></div>
+      <div id="jobList"><div class="empty">Lade …</div></div>
+    </div>
+  </section>
+
+  <!-- Pulver -->
+  <section id="p-powder">
+    <div class="card">
+      <div class="cap">Schrittweite</div>
+      <div class="seg" id="steps"></div>
+    </div>
+    <div class="card">
+      <div class="cap">Plattformen fahren</div>
+      <div class="jog">
+        <div class="col stack"><span>Bauplattform</span>
+          <button class="btn" data-need="idle" onclick="mv('print',-1)">▲</button>
+          <button class="btn" data-need="idle" onclick="mv('print',1)">▼</button></div>
+        <div class="col stack"><span>Vorrat</span>
+          <button class="btn" data-need="idle" onclick="mv('reservoir',-1)">▲</button>
+          <button class="btn" data-need="idle" onclick="mv('reservoir',1)">▼</button></div>
+      </div>
+    </div>
+    <div class="card stack">
+      <div class="cap">Pulver</div>
+      <button class="btn pri" data-need="idle" onclick="cmd({cmd:'make_layer',mm:0.15},'Pulver aufgetragen (0,15 mm)')">Pulver auftragen (0,15 mm)</button>
+      <div class="row">
+        <button class="btn" data-need="idle" onclick="cmd({cmd:'powder_prep_on'},'Pulvervorbereitung läuft')">Vorbereitung starten</button>
+        <button class="btn ghost" data-need="idle" onclick="cmd({cmd:'powder_prep_off'},'Pulvervorbereitung beendet')">Beenden</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- System -->
+  <section id="p-sys">
+    <div class="card" id="msgCard">
+      <div class="cap">Meldungen vom Kit</div>
+      <div id="msgs" class="small mut">Keine Fehler oder Warnungen.</div>
+    </div>
+    <div class="card">
+      <div class="cap">Kit</div>
+      <div id="info"></div>
+    </div>
+    <div class="card stack">
+      <div class="cap">Kit Control</div>
+      <button class="btn red" data-need="off" onclick="ask('Kit Control herunterfahren?','Den Strom erst trennen, wenn das Display am Kit schwarz ist (ca. 20 s).'+(S.surface>60?' Achtung: Der Kit ist noch heiß – er heizt weiter, bis er ausgeschaltet wird.':''),'Herunterfahren',()=>cmd({cmd:'poweroff'},'Kit Control fährt herunter'),true)">Herunterfahren</button>
+      <div class="small mut">Tipp: In Safari „Teilen → Zum Home-Bildschirm“ – dann startet Kit Control wie eine App.</div>
+    </div>
+  </section>
+</main>
+
+<nav>
+  <button class="on" data-p="print"><svg viewBox="0 0 24 24"><path d="M4 18h16M6 14l3-3 3 3 6-6"/></svg>Druck</button>
+  <button data-p="jobs"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><path d="M8 9h8M8 13h8M8 17h5"/></svg>Jobs</button>
+  <button data-p="powder"><svg viewBox="0 0 24 24"><path d="M12 4v9M8 9l4 4 4-4M5 18h14M5 21h14"/></svg>Pulver</button>
+  <button data-p="sys"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>System</button>
+</nav>
+
+<div class="sheet-bg" id="sheet" onclick="if(event.target===this)closeSheet()">
+  <div class="sheet"><h3 id="shT"></h3><p id="shP"></p>
+    <div class="row"><button class="btn" onclick="closeSheet()">Zurück</button><button class="btn pri" id="shOk"></button></div></div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+const PLATE = 110;                  // Bauplatte in mm (wie die PC-App)
+const STEPS = [0.1, 1, 5, 10];
+let S = {connected:false};          // Zustand vom Pi
+let JOBS = [], step = 1, page = "print", DEMO = false;
+const $ = id => document.getElementById(id);
+
+// ---------- Schnittstelle (oder Simulation für die Vorschau) ----------
+const api = {
+  async get(p){ if (DEMO) return Sim.get(p); const r = await fetch(p, {cache:"no-store"}); return r.json(); },
+  async cmd(b){ if (DEMO) return Sim.cmd(b);
+    const r = await fetch("/api/cmd", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)}); return r.json(); },
+  async del(id){ if (DEMO) return Sim.del(id);
+    const r = await fetch("/api/jobs/" + encodeURIComponent(id), {method:"DELETE"}); return r.json(); },
+};
+
+// ---------- Anzeige ----------
+const fmtT = s => { s = Math.max(0, Math.round(s || 0)); const h = Math.floor(s/3600), m = Math.floor(s%3600/60);
+  return h ? h + " h " + String(m).padStart(2,"0") + " min" : m + " min"; };
+const num = (v, d=0) => (v === undefined || v === null || isNaN(v)) ? "–" : Number(v).toFixed(d).replace(".", ",");
+const busy = () => !!(S.printing || S.transfer);
+const can = need => {
+  if (!S.connected || !S.remote_control) return false;
+  if (need === "printing") return !!S.printing;
+  if (need === "stop") return true;
+  return !busy();
+};
+
+function render(){
+  const s = S, live = !!s.connected;
+  const pill = $("pill");
+  pill.className = "pill" + (!live ? " off" : s.printing ? " busy" : "");
+  $("pillT").textContent = !live ? (s.message || "Nicht verbunden") : s.printing ? "Druckt" : (s.state_name || "Bereit");
+
+  // Hinweise oben
+  let n = "";
+  if (live && !s.remote_control) n += `<div class="note warn"><div><b>Bedienung vom Handy ist am Kit aus</b>Am Kit-Display unter System → „Bedienung vom PC“ einschalten. Anschauen geht trotzdem.</div></div>`;
+  (s.errors || []).forEach(e => n += `<div class="note err"><div><b>${e.code} · ${esc(e.title)}</b>${esc(e.text || "")}</div></div>`);
+  if (s.transfer) n += `<div class="note"><div><b>Job wird übertragen</b>${esc(s.transfer.phase || "")}${s.transfer.total ? " · " + Math.floor(100*s.transfer.sent/s.transfer.total) + " %" : ""}</div></div>`;
+  $("notes").innerHTML = n;
+
+  // Druck
+  const job = s.current_job || null, layers = job && job.layers;
+  const pct = s.printing ? (s.percent || 0) : 0;
+  $("ringArc").style.strokeDashoffset = 320.4 * (1 - pct / 100);
+  $("pct").textContent = s.printing ? pct + " %" : "–";
+  $("state").textContent = !live ? "Nicht verbunden" : (s.state_name || "–");
+  $("jobName").textContent = s.printing && job ? job.name : (s.job_result && s.job_result.name ? "Zuletzt: " + s.job_result.name : "Kein Druck");
+  $("sLayer").textContent = s.printing ? (s.layer || 0) + (layers ? " / " + layers : "") : "–";
+  $("sTime").textContent = s.printing ? fmtT(s.elapsed_s) : "–";
+  let rem = null;
+  if (s.countdown_on) { $("remL").textContent = "Aufheizen noch"; $("remBox").className = "stat heat"; rem = s.countdown_s; }
+  else { $("remL").textContent = "Restzeit"; $("remBox").className = "stat acc";
+    if (s.printing && s.layer > 3 && layers) rem = s.elapsed_s / s.layer * Math.max(0, layers - s.layer);
+    else if (s.printing && s.percent > 2) rem = s.elapsed_s / s.percent * (100 - s.percent); }
+  $("sRem").textContent = rem === null ? "–" : fmtT(rem);
+  $("sEnd").textContent = rem === null || !s.printing ? "–" : new Date(Date.now() + rem * 1000).toLocaleTimeString("de-DE", {hour:"2-digit", minute:"2-digit"});
+
+  // Temperaturen
+  const tgtS = s.printing ? s.target_surface_print : s.target_surface_warmup, tgtC = s.printing ? s.target_chamber_print : s.target_chamber_warmup;
+  $("tS").textContent = num(s.surface, 1) + " °C"; $("tC").textContent = num(s.chamber, 1) + " °C";
+  $("tSt").textContent = "Soll " + num(tgtS) + " °C"; $("tCt").textContent = "Soll " + num(tgtC) + " °C";
+  $("tSb").style.width = Math.min(100, (s.surface || 0) / (tgtS || 170) * 100) + "%";
+  $("tCb").style.width = Math.min(100, (s.chamber || 0) / (tgtC || 140) * 100) + "%";
+
+  // Knöpfe freigeben
+  document.querySelectorAll("[data-need]").forEach(b => {
+    const need = b.dataset.need;
+    b.disabled = need === "off" ? !(live && s.remote_control && !busy()) : !can(need);
+  });
+
+  // System
+  const msgs = (s.errors || []).map(m => Object.assign({err:true}, m)).concat(s.warnings || []);
+  $("msgs").innerHTML = msgs.length ? msgs.map(m => `<div class="note ${m.err ? "err" : "warn"}" style="margin:0 0 8px"><div><b>${m.code} · ${esc(m.title)}</b>${esc(m.text || "")}</div></div>`).join("") : "Keine Fehler oder Warnungen.";
+  const kv = [["Zustand", s.state_name], ["Modell", s.model], ["Firmware", s.firmware], ["Bedienung vom Handy", s.remote_control ? "erlaubt" : "am Kit aus"],
+              ["Laser", s.laser_speed ? num(s.laser_speed) + " mm/s" : null], ["Verbindung", DEMO ? "Vorschau" : location.host]];
+  $("info").innerHTML = kv.map(([k, v]) => `<div class="kv"><span>${k}</span><b>${v === undefined || v === null || v === "" ? "—" : esc(String(v))}</b></div>`).join("");
+
+  wantLayer();
+}
+const esc = t => String(t).replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// ---------- Schichtbild ----------
+let layerKey = "", layerBusy = false;
+async function wantLayer(){
+  const job = S.current_job;
+  if (!S.printing || !job || !S.layer) { $("layerPh").style.display = "flex"; $("layerCap").textContent = "Aktuelle Schicht"; clearCv(); layerKey = ""; return; }
+  const key = job.id + "/" + S.layer;
+  if (key === layerKey || layerBusy) return;
+  layerBusy = true;
+  try {
+    const L = await api.get(`/api/jobs/${encodeURIComponent(job.id)}/layer/${S.layer}`);
+    layerKey = key; $("layerPh").style.display = "none";
+    $("layerCap").textContent = "Schicht " + S.layer + (L.z_mm ? " · Z " + num(L.z_mm, 2) + " mm" : "");
+    drawLayer($("layerCv"), L);
+  } catch (e) {} finally { layerBusy = false; }
+}
+function clearCv(){ const c = $("layerCv"), g = c.getContext("2d"); g.clearRect(0, 0, c.width, c.height); }
+function drawLayer(cv, L, mini){
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth || 46;
+  cv.width = cv.height = Math.round(w * dpr);
+  const g = cv.getContext("2d"), k = cv.width / PLATE;
+  g.clearRect(0, 0, cv.width, cv.height);
+  if (!mini) {   // Raster 10 mm
+    g.strokeStyle = "rgba(255,255,255,.045)"; g.lineWidth = 1;
+    for (let x = 10; x < PLATE; x += 10) { g.beginPath(); g.moveTo(x*k, 0); g.lineTo(x*k, cv.height); g.moveTo(0, x*k); g.lineTo(cv.width, x*k); g.stroke(); }
+  }
+  const seg = (a, col, lw) => { if (!a || !a.length) return; g.strokeStyle = col; g.lineWidth = lw * dpr; g.beginPath();
+    for (let i = 0; i + 3 < a.length; i += 4) { g.moveTo(a[i]*k, cv.height - a[i+1]*k); g.lineTo(a[i+2]*k, cv.height - a[i+3]*k); } g.stroke(); };
+  seg(L.infill, "rgba(47,166,204,.55)", mini ? .5 : .8);
+  seg(L.contour, "#8fdcf2", mini ? .8 : 1.4);
+}
+
+// ---------- Befehle ----------
+async function cmd(b, okText){
+  try {
+    const r = await api.cmd(b);
+    if (r.ok) toast(okText || "Ausgeführt", "ok");
+    else toast(r.error || "Fehler", "err");
+  } catch (e) { toast("Kit Control nicht erreichbar", "err"); }
+  poll();
+}
+function mv(p, dir){ cmd({cmd:"move", platform:p, mm:dir*step}, (p === "print" ? "Bauplattform " : "Vorrat ") + (dir < 0 ? "hoch " : "runter ") + String(step).replace(".", ",") + " mm"); }
+
+// ---------- Jobs ----------
+async function loadJobs(show){
+  try { const j = await api.get("/api/jobs"); JOBS = j.jobs || []; renderJobs(); if (show) toast("Liste aktualisiert", "ok"); }
+  catch (e) { $("jobList").innerHTML = `<div class="empty">Kit Control nicht erreichbar</div>`; }
+}
+function renderJobs(){
+  if (!JOBS.length) { $("jobList").innerHTML = `<div class="empty">Keine Jobs am Kit.<br>Jobs schickst du aus Kit Control am PC.</div>`; return; }
+  const curId = S.current_job && S.printing ? S.current_job.id : null;
+  $("jobList").innerHTML = JOBS.map((j, i) => `
+    <div class="job-it">
+      <canvas class="th" id="th${i}"></canvas>
+      <div class="tx"><b>${esc(j.name)}</b><span>${j.error ? esc(j.error) : (j.layers || "?") + " Schichten · " + num(j.height_mm, 1) + " mm"}${j.id === curId ? " · druckt" : ""}</span></div>
+      <button class="icon go" ${can("idle") && !j.error ? "" : "disabled"} onclick="startJob(${i})" aria-label="Starten">▶</button>
+      <button class="icon del" ${S.connected && j.id !== curId ? "" : "disabled"} onclick="delJob(${i})" aria-label="Löschen">✕</button>
+    </div>`).join("");
+  JOBS.forEach(async (j, i) => {   // kleine Vorschau: mittlere Schicht
+    if (!j.layers) return;
+    try { const L = await api.get(`/api/jobs/${encodeURIComponent(j.id)}/layer/${Math.max(1, Math.round(j.layers / 2))}`); const c = $("th" + i); if (c) drawLayer(c, L, true); } catch (e) {}
+  });
+}
+function startJob(i){ const j = JOBS[i];
+  ask("„" + j.name + "“ drucken?", "Pulver geladen und Haube geschlossen? Der Pi heizt vor, überträgt den Job zum Kit und startet ihn.", "Drucken",
+      () => { cmd({cmd:"job_start", id:j.id}, "Job startet"); show("print"); }); }
+function delJob(i){ const j = JOBS[i];
+  ask("„" + j.name + "“ löschen?", "Der Job wird vom Kit gelöscht.", "Löschen", async () => {
+    try { const r = await api.del(j.id); r.ok ? toast("Job gelöscht", "ok") : toast(r.error || "Fehler", "err"); } catch (e) { toast("Kit Control nicht erreichbar", "err"); }
+    loadJobs(); }, true); }
+
+// ---------- Dialog, Meldung, Seiten ----------
+function ask(t, p, ok, fn, danger){
+  $("shT").textContent = t; $("shP").textContent = p; const b = $("shOk");
+  b.textContent = ok; b.className = "btn " + (danger ? "red" : "pri"); b.onclick = () => { closeSheet(); fn(); };
+  $("sheet").classList.add("on");
+}
+function closeSheet(){ $("sheet").classList.remove("on"); }
+let tt; function toast(t, k){ const e = $("toast"); e.textContent = t; e.className = "toast on " + (k || ""); clearTimeout(tt); tt = setTimeout(() => e.className = "toast", k === "err" ? 5000 : 2200); }
+function show(p){ page = p;
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("on", s.id === "p-" + p));
+  document.querySelectorAll("nav button").forEach(b => b.classList.toggle("on", b.dataset.p === p));
+  if (p === "jobs") loadJobs(); window.scrollTo({top:0}); if (p === "print") { layerKey = ""; wantLayer(); } }
+document.querySelectorAll("nav button").forEach(b => b.onclick = () => show(b.dataset.p));
+$("steps").innerHTML = STEPS.map(v => `<button data-v="${v}">${String(v).replace(".", ",")} mm</button>`).join("");
+$("steps").querySelectorAll("button").forEach(b => b.onclick = () => { step = +b.dataset.v; markStep(); });
+function markStep(){ $("steps").querySelectorAll("button").forEach(b => b.classList.toggle("on", +b.dataset.v === step)); }
+markStep();
+
+// ---------- Live-Verbindung ----------
+let es = null, lastMsg = 0;
+function setState(st){ const prevJobs = S.printing; S = st; lastMsg = Date.now(); render(); if (page === "jobs" && prevJobs !== st.printing) renderJobs(); }
+async function poll(){ try { setState(await api.get("/api/state")); } catch (e) { S = {connected:false, message:"Nicht erreichbar"}; render(); } }
+function live(){
+  if (DEMO) { setInterval(() => setState(Sim.tick()), 1000); return; }
+  try {
+    es = new EventSource("/api/events");
+    es.onmessage = e => { try { const st = JSON.parse(e.data); setState(Object.assign({}, S, st)); } catch (_) {} };
+    es.onerror = () => {};
+  } catch (e) {}
+  // Die Ereignisse enthalten nicht alles (z. B. Central) – zusätzlich ab und zu den vollen Zustand holen
+  setInterval(() => { if (Date.now() - lastMsg > 4000) poll(); }, 3000);
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(); if (page === "jobs") loadJobs(); } });
+}
+
+// ---------- Simulation (nur Vorschau ohne Kit) ----------
+const Sim = (() => {
+  const t0 = Date.now() / 1000;
+  const jobs = [
+    {id:"demo-1", name:"INDX Dock Halter ×8", layers:641, height_mm:64.1, layer_mm:0.1, error:""},
+    {id:"demo-2", name:"Kalibrierteil 40×40", layers:50, height_mm:5, layer_mm:0.1, error:""},
+    {id:"demo-3", name:"Gehäuse Deckel", layers:288, height_mm:28.8, layer_mm:0.1, error:""}];
+  const st = {connected:true, demo:true, remote_control:true, model:"KitM2USBV", firmware:12, state_name:"Druckt", printing:true,
+    layer:212, percent:33, elapsed_s:3*3600+1240, surface:169.6, chamber:139.8, laser_speed:650,
+    target_surface_print:170, target_chamber_print:140, target_surface_warmup:150, target_chamber_warmup:140,
+    countdown_on:false, countdown_s:0, errors:[], warnings:[], transfer:null, current_job:jobs[0], job_result:null};
+  let heat = 0;
+  function rect(out, x0, y0, x1, y1){ out.push(x0,y0,x1,y0, x1,y0,x1,y1, x1,y1,x0,y1, x0,y1,x0,y0); }
+  function circ(out, cx, cy, r){ const n = 28; for (let i = 0; i < n; i++) { const a = i/n*2*Math.PI, b = (i+1)/n*2*Math.PI; out.push(cx+r*Math.cos(a), cy+r*Math.sin(a), cx+r*Math.cos(b), cy+r*Math.sin(b)); } }
+  function layer(id, n){
+    const c = [], f = [], s = id === "demo-2" ? 1 : 0;
+    const parts = s ? [[35,35,75,75]] : [[12,12,52,26],[12,32,52,46],[12,52,52,66],[58,12,72,58],[78,12,92,58],[58,64,98,78],[14,74,48,98],[60,84,98,98]];
+    parts.forEach(([x0,y0,x1,y1], i) => {
+      if (!s && n > 300 + i * 40) return;
+      rect(c, x0, y0, x1, y1);
+      if (s) rect(c, 40, 40, 70, 70); else circ(c, (x0+x1)/2 + ((n + i*7) % 9) - 4, (y0+y1)/2, Math.min(x1-x0, y1-y0) * .22);
+      for (let y = y0 + .8; y < y1; y += 1.6) f.push(x0, y, x1, y);
+    });
+    return {layer:n, z_mm:n*0.1, contour:c, infill:f};
+  }
+  return {
+    get(p){
+      if (p === "/api/state") return JSON.parse(JSON.stringify(st));
+      if (p === "/api/jobs") return {jobs};
+      const m = p.match(/\/api\/jobs\/([^/]+)\/layer\/(\d+)/); if (m) return layer(decodeURIComponent(m[1]), +m[2]);
+      return {};
+    },
+    cmd(b){
+      if (!st.remote_control) return {ok:false, error:"Bedienung vom PC ist am Kit ausgeschaltet"};
+      const stop = ["abort_print","stop_sintering"].includes(b.cmd) || (b.cmd === "warmup" && b.on === false);
+      if (st.printing && !stop) return {ok:false, error:"Während eines Drucks ist die Bedienung vom PC gesperrt – nur Abbrechen und Abkühlen"};
+      if (b.cmd === "abort_print" || b.cmd === "stop_sintering") { st.job_result = {name:st.current_job.name}; st.printing = false; st.state_name = b.cmd === "abort_print" ? "Abgebrochen" : "Abkühlen"; heat = -1; }
+      if (b.cmd === "warmup") { heat = b.on ? 1 : -1; st.countdown_on = !!b.on; st.countdown_s = 1800; st.state_name = b.on ? "Aufheizen" : "Bereit"; }
+      if (b.cmd === "job_start") { const j = jobs.find(x => x.id === b.id); st.current_job = j; st.printing = true; st.layer = 1; st.percent = 0; st.elapsed_s = 0; st.state_name = "Druckt"; st.countdown_on = false; heat = 0; st.surface = 168; }
+      if (b.cmd === "poweroff") { setTimeout(() => { st.connected = false; st.message = "Heruntergefahren"; }, 1500); }
+      return {ok:true};
+    },
+    del(id){ const i = jobs.findIndex(j => j.id === id); if (i >= 0) jobs.splice(i, 1); return {ok:true}; },
+    tick(){
+      if (st.printing) { st.elapsed_s += 1; if (Math.random() < .25) st.layer = Math.min(st.current_job.layers, st.layer + 1);
+        st.percent = Math.floor(st.layer / st.current_job.layers * 100);
+        st.surface = 169.4 + Math.random() * .8; st.chamber = 139.6 + Math.random() * .5; }
+      else if (heat > 0) { st.surface = Math.min(150, st.surface + .9); st.chamber = Math.min(140, st.chamber + .7); st.countdown_s = Math.max(0, st.countdown_s - 1); }
+      else { st.surface = Math.max(24, st.surface - .6); st.chamber = Math.max(24, st.chamber - .4); }
+      return JSON.parse(JSON.stringify(st));
+    }
+  };
+})();
+
+// ---------- Start ----------
+(async () => {
+  // Simulation nur für die Vorschau (?demo); vom Pi aus nie – dort lieber „nicht erreichbar“ als falsche Werte
+  DEMO = window.KIT_PREVIEW === true || /[?&]demo/.test(location.search) || location.protocol === "file:";
+  if (!DEMO) await poll();
+  if (DEMO) { $("demo").style.display = "block"; setState(Sim.get("/api/state")); }
+  live();
+})();
+</script>
+</body>
+</html>

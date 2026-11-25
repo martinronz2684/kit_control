@@ -1,6 +1,7 @@
 """kitd – Hintergrunddienst zwischen Kit (USB) und Touch-Oberfläche (Browser).
 
     GET  /                 Oberfläche (ui/index.html)
+    GET  /app              Handy-Oberfläche (ui/phone.html), auf dem iPhone „Zum Home-Bildschirm“
     GET  /api/state        aktueller Zustand als JSON
     GET  /api/events       Server-Sent Events, ein Zustand pro Sekunde
     POST /api/cmd          {"cmd": "...", ...} -> {"ok": true} / {"ok": false, "error": "..."}  (nur am Gerät)
@@ -559,12 +560,15 @@ class Handler(BaseHTTPRequestHandler):
                     time.sleep(1)
             except (BrokenPipeError, ConnectionResetError):
                 return
-        path = "index.html" if self.path in ("/", "/index.html") else self.path.lstrip("/")
+        path = self.path.split("?")[0]
+        # Handy-Oberfläche: http://<pi>:8080/app
+        path = "index.html" if path in ("/", "/index.html") else "phone.html" if path in ("/app", "/app/") else path.lstrip("/")
         f = (UI_DIR / path).resolve()
         if not f.is_relative_to(UI_DIR.resolve()) or not f.is_file():
             return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
         ctype = {"html": "text/html; charset=utf-8", "js": "text/javascript", "css": "text/css",
-                 "png": "image/png", "svg": "image/svg+xml"}.get(f.suffix.lstrip("."), "application/octet-stream")
+                 "png": "image/png", "svg": "image/svg+xml",
+                 "webmanifest": "application/manifest+json"}.get(f.suffix.lstrip("."), "application/octet-stream")
         data = f.read_bytes()
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", ctype)
