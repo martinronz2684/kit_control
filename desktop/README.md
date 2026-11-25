@@ -18,8 +18,9 @@ Die App fragt bei jedem Start auf GitHub nach einer neuen Version und bietet sie
 Das Setup baut GitHub Actions bei jeder Änderung in `desktop/` automatisch (`.github/workflows/desktop-setup.yml`).
 
 ## Bedienung vom PC
-Live-Verfolgung und Job senden gehen sofort. Heizen, Abbrechen und Pulver fahren vom PC aus erlaubt der Pi
-erst nach Freigabe: in `/etc/kit/kitd.env` `KIT_REMOTE=1` setzen und `sudo systemctl restart kitd`.
+Live-Verfolgung, Job senden und Jobs löschen gehen sofort. Heizen, Fahren, Beschichten und Kalibrieren vom PC aus
+erlaubt der Pi, wenn am Display unter System „Bedienung vom PC“ auf An steht (der Pi merkt sich das).
+Während eines Drucks geht vom PC nur Abbrechen, Abkühlen und Heizen aus.
 
 ## Entwickeln
 ```bash

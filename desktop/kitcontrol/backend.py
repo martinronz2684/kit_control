@@ -938,9 +938,8 @@ class Backend(QObject):
                 r = {"ok": False, "error": str(e)}
             if r.get("ok"):
                 self.message.emit("Ausgeführt", "ok")
-            elif "nur am Gerät" in str(r.get("error", "")):
-                self.message.emit("Am Kit Control ist die Bedienung vom PC aus gesperrt. "
-                                  "Freigabe am Pi: KIT_REMOTE=1 in /etc/kit/kitd.env", "error")
+            elif "Bedienung nur am Gerät" in str(r.get("error", "")):
+                self.message.emit("Dieses Kit Control kennt den Schalter „Bedienung vom PC“ noch nicht – bitte am Pi updaten", "error")
             else:
                 self.message.emit(str(r.get("error", "Fehler")), "error")
         if host:

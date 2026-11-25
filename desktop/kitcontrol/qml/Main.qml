@@ -59,6 +59,9 @@ ApplicationWindow {
         win.t("Pulver vorbereiten und laden"),
         win.t("Job zum Kit senden und Druck live verfolgen")]
     readonly property var kit: backend.kit || ({})
+    // Schalter „Bedienung vom PC“ am Kit-Display (der Pi meldet ihn im Zustand)
+    readonly property bool remoteOn: kit.remote_control === true
+    readonly property string remoteHint: t("Bedienung vom PC ist am Kit ausgeschaltet – am Display unter System → „Bedienung vom PC“ einschalten.")
     // Sprache: Texte sind deutsch geschrieben; bei Englisch über die Übersetzungstabelle (kitcontrol/i18n.py)
     readonly property string lang: backend.lang
     readonly property var en: backend.translations

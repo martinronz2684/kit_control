@@ -17,8 +17,14 @@ Canvas {
             g.fillText(win.t("Temperaturverlauf erscheint nach dem Verbinden"), 6, height / 2 + 4)
             return
         }
+        function ok(v) { return typeof v === "number" && isFinite(v) }
         var t0 = d[0][0], t1 = d[n - 1][0], lo = 1e9, hi = -1e9
-        for (var i = 0; i < n; i++) for (var c = 1; c <= 4; c++) if (d[i][c] !== null) { lo = Math.min(lo, d[i][c]); hi = Math.max(hi, d[i][c]) }
+        for (var i = 0; i < n; i++) for (var c = 1; c <= 4; c++) if (ok(d[i][c])) { lo = Math.min(lo, d[i][c]); hi = Math.max(hi, d[i][c]) }
+        if (hi < lo) {
+            g.fillStyle = "rgba(160,168,178,0.6)"; g.font = "11px sans-serif"
+            g.fillText(win.t("Noch keine Temperaturwerte vom Kit"), 6, height / 2 + 4)
+            return
+        }
         if (hi - lo < 10) { var m = (hi + lo) / 2; lo = m - 5; hi = m + 5 }
         function X(t) { return (t - t0) / Math.max(1, t1 - t0) * (width - 2) + 1 }
         function Y(v) { return height - 3 - (v - lo) / (hi - lo) * (height - 6) }
@@ -27,7 +33,7 @@ Canvas {
             g.setLineDash ? g.setLineDash(dash ? [4, 4] : []) : 0
             g.beginPath(); var started = false
             for (var k = 0; k < n; k++) {
-                var v = d[k][col]; if (v === null) { started = false; continue }
+                var v = d[k][col]; if (!ok(v)) { started = false; continue }
                 if (!started) { g.moveTo(X(d[k][0]), Y(v)); started = true } else g.lineTo(X(d[k][0]), Y(v))
             }
             g.stroke()

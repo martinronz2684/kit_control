@@ -85,7 +85,7 @@ class Pi:
                     yield json.loads(line[6:])
 
     def cmd(self, cmd: dict) -> dict:
-        """Bedienbefehl (wie am Display). Der Pi erlaubt das aus dem Netz nur mit KIT_REMOTE=1."""
+        """Bedienbefehl (wie am Display). Erlaubt, wenn am Display „Bedienung vom PC“ an ist und kein Druck läuft."""
         req = urllib.request.Request(self.base + "/api/cmd", data=json.dumps(cmd).encode(),
                                      headers={"Content-Type": "application/json"}, method="POST")
         try:

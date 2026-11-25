@@ -153,7 +153,7 @@ Item {
                                 }
                                 KButton {
                                     text: win.t("Starten"); kind: "ghost"
-                                    enabled: pr.live && k.printing !== true && !modelData.error
+                                    enabled: pr.live && win.remoteOn && k.printing !== true && !modelData.error
                                     onClicked: confirm.ask("„" + modelData.name + win.t("“ jetzt drucken?"), function() { backend.cmd({ cmd: "job_start", id: modelData.id }) })
                                 }
                                 KButton {
@@ -286,16 +286,21 @@ Item {
                             Caption { text: win.t("Steuerung") }
                             RowLayout {
                                 spacing: 8
-                                KButton { text: win.t("Aufheizen"); kind: "hot"; Layout.fillWidth: true; enabled: pr.live && k.printing !== true; onClicked: backend.cmd({ cmd: "warmup", on: true }) }
-                                KButton { text: win.t("Heizen aus"); Layout.fillWidth: true; enabled: pr.live; onClicked: backend.cmd({ cmd: "warmup", on: false }) }
+                                KButton { text: win.t("Aufheizen"); kind: "hot"; Layout.fillWidth: true; enabled: pr.live && win.remoteOn && k.printing !== true; onClicked: backend.cmd({ cmd: "warmup", on: true }) }
+                                KButton { text: win.t("Heizen aus"); Layout.fillWidth: true; enabled: pr.live && win.remoteOn; onClicked: backend.cmd({ cmd: "warmup", on: false }) }
                             }
                             KButton {
-                                text: win.t("Zum Abkühlen springen"); Layout.fillWidth: true; enabled: pr.live && k.printing === true
+                                text: win.t("Zum Abkühlen springen"); Layout.fillWidth: true; enabled: pr.live && win.remoteOn && k.printing === true
                                 onClicked: confirm.ask(win.t("Sintern beenden und abkühlen? Der Druck endet nach der aktuellen Schicht."), function() { backend.cmd({ cmd: "stop_sintering" }) })
                             }
                             KButton {
-                                text: win.t("Druck abbrechen"); kind: "red"; Layout.fillWidth: true; enabled: pr.live && k.printing === true
+                                text: win.t("Druck abbrechen"); kind: "red"; Layout.fillWidth: true; enabled: pr.live && win.remoteOn && k.printing === true
                                 onClicked: confirm.ask(win.t("Druck wirklich abbrechen?"), function() { backend.cmd({ cmd: "abort_print" }) })
+                            }
+                            Text {
+                                visible: pr.live && !win.remoteOn
+                                Layout.fillWidth: true; wrapMode: Text.WordWrap
+                                text: win.remoteHint; color: win.cMut; font.pixelSize: 11
                             }
                             KButton { text: win.t("Temperaturprotokolle"); kind: "ghost"; Layout.fillWidth: true; onClicked: backend.openFolder("logs") }
                         }

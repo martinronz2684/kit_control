@@ -15,7 +15,7 @@ Popup {
     background: GlassBg {}
         Overlay.modal: Backdrop {}
     readonly property var st: backend.settings || ({})
-    readonly property bool ready: backend.connected && win.kit.connected === true && win.kit.printing !== true
+    readonly property bool ready: backend.connected && win.kit.connected === true && win.kit.printing !== true && win.remoteOn
     function num(t) { var v = Number(String(t).replace(",", ".")); return isFinite(v) ? v : NaN }
 
     Flickable {
@@ -139,7 +139,8 @@ Popup {
                 Body {
                     visible: !sp.ready
                     Layout.fillWidth: true; font.pixelSize: 12; color: win.cMut
-                    text: win.t("Senden geht nur mit verbundenem Kit und nicht während des Drucks (Freigabe am Pi: KIT_REMOTE=1).")
+                    text: backend.connected && win.kit.connected === true && win.kit.printing !== true && !win.remoteOn ? win.remoteHint
+                        : win.t("Senden geht nur mit verbundenem Kit und nicht während des Drucks.")
                 }
             }
 

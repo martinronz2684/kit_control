@@ -8,7 +8,8 @@
     DELETE /api/jobs/<id>  Job aus der Bibliothek löschen (PC-App; nicht während er übertragen wird)
 
 Lesen (Zustand, Jobs, Schichtvorschau) geht aus dem Netz, damit die PC-App den Druck live verfolgen kann.
-Bedienbefehle bleiben am Gerät (KIT_REMOTE=1 erlaubt sie aus dem Netz). Jobs annehmen: KIT_NET_JOBS=0
+Bedienbefehle aus dem Netz: Schalter „Bedienung vom PC“ am Display (gemerkt in kitd.json, KIT_REMOTE=1 erzwingt ihn),
+nie während eines Drucks – dann nur Abbrechen/Abkühlen. Jobs annehmen: KIT_NET_JOBS=0
 schaltet es ab, KIT_NET_START=0 verbietet das Starten aus dem Netz.
 
 Nur Python-Standardbibliothek plus pyusb. KIT_DEMO=1 simuliert einen druckenden Kit.
@@ -38,6 +39,40 @@ MOVE_SIGN = float(os.environ.get("KIT_MOVE_SIGN", "-1"))
 STATE_DIR = os.environ.get("KIT_STATE_DIR", "/var/lib/kitd")
 NET_JOBS = os.environ.get("KIT_NET_JOBS", "1") == "1"
 NET_START = os.environ.get("KIT_NET_START", "1") == "1"
+# Nur am Gerät: Netzwerk, Updates, Neustart und der Schalter selbst
+LOCAL_ONLY = {"pc_link", "update_check", "update_start", "wifi_connect", "wifi_disconnect", "demo",
+              "reboot", "poweroff", "remote_control", "job_autostart", "lamp_legacy"}
+# Was der PC auch während eines Drucks darf: nur anhalten
+STOP_CMDS = {"abort_print", "stop_sintering"}
+
+
+def _cfg_file() -> str:
+    return os.path.join(STATE_DIR, "kitd.json")
+
+
+def _cfg() -> dict:
+    try:
+        with open(_cfg_file()) as f:
+            c = json.load(f)
+            return c if isinstance(c, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def remote_enabled() -> bool:
+    return os.environ.get("KIT_REMOTE") == "1" or bool(_cfg().get("remote_control", False))
+
+
+def set_remote(on: bool) -> None:
+    c = _cfg()
+    c["remote_control"] = bool(on)
+    os.makedirs(STATE_DIR, exist_ok=True)
+    tmp = _cfg_file() + ".tmp"
+    with open(tmp, "w") as f:
+        json.dump(c, f)
+    os.replace(tmp, _cfg_file())
+
+
 MAX_UPLOAD = int(os.environ.get("KIT_MAX_UPLOAD_MB", "1024")) * 1024 * 1024
 IGNORED_WARNINGS = {int(x) for x in os.environ.get("KIT_IGNORE_WARNINGS", "81").replace(" ", "").split(",") if x}
 
@@ -60,7 +95,9 @@ class KitWorker(threading.Thread):
     # -- state -----------------------------------------------------------------
     def snapshot(self) -> dict:
         with self.lock:
-            return dict(self.state)
+            st = dict(self.state)
+        st["remote_control"] = remote_enabled()
+        return st
 
     def _set(self, **kw):
         with self.lock:
@@ -613,18 +650,52 @@ class Handler(BaseHTTPRequestHandler):
         except (ValueError, OSError) as e:
             return self._json({"ok": False, "error": str(e)})
 
+    def _remote_denied(self, cmd: dict) -> str:
+        """Leer, wenn der PC diesen Befehl schicken darf, sonst der Grund."""
+        name = cmd.get("cmd")
+        try:
+            from kitd.bridge import _allowed
+            if not _allowed(self.client_address[0]):
+                return "Gerät nicht erlaubt"
+        except ImportError:
+            pass
+        if name in LOCAL_ONLY:
+            return "Nur am Kit Control bedienbar"
+        if not remote_enabled():
+            return "Bedienung vom PC ist am Kit ausgeschaltet – am Display unter System → „Bedienung vom PC“ einschalten"
+        st = WORKER.snapshot()
+        stop = name in STOP_CMDS or (name == "warmup" and cmd.get("on") is False)
+        if (st.get("printing") or st.get("transfer")) and not stop:
+            return "Während eines Drucks ist die Bedienung vom PC gesperrt – nur Abbrechen und Abkühlen"
+        if name == "job_start" and not NET_START:
+            return "Starten aus dem Netz ist am Pi abgeschaltet"
+        if name == "pattern" and cmd.get("name") == "home":
+            return "Referenzfahrt nur am Kit Control"
+        return ""
+
     def do_POST(self):
         if self.path == "/api/jobs":
             return self._upload_job()
         if self.path != "/api/cmd":
             return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
-        if self.client_address[0] not in ("127.0.0.1", "::1") and os.environ.get("KIT_REMOTE") != "1":
-            return self._json({"ok": False, "error": "Bedienung nur am Gerät"}, HTTPStatus.FORBIDDEN)
+        local = self.client_address[0] in ("127.0.0.1", "::1")
         try:
             n = int(self.headers.get("Content-Length", "0"))
             cmd = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
+            if not isinstance(cmd, dict):
+                raise ValueError
         except (ValueError, json.JSONDecodeError):
             return self._json({"ok": False, "error": "ungültige Anfrage"}, HTTPStatus.BAD_REQUEST)
+        if not local:
+            why = self._remote_denied(cmd)
+            if why:
+                return self._json({"ok": False, "error": why}, HTTPStatus.FORBIDDEN)
+        if cmd.get("cmd") == "remote_control":
+            try:
+                set_remote(bool(cmd.get("on")))
+                return self._json({"ok": True})
+            except OSError as e:
+                return self._json({"ok": False, "error": str(e)})
         if cmd.get("cmd") == "pc_link":
             mode = cmd.get("mode")
             if mode not in ("wlan", "usb"):

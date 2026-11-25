@@ -6,7 +6,7 @@ Item {
     id: pw
     property var m: backend.sliceMeta || ({})
     property real step: 0.1
-    property bool ready: backend.connected && win.kit.connected === true && win.kit.printing !== true
+    property bool ready: backend.connected && win.kit.connected === true && win.kit.printing !== true && win.remoteOn
     property bool prep: win.kit.state_name !== undefined && String(win.kit.state_name).indexOf("Pulver") >= 0
 
     function mv(platform, dir) { backend.cmd({ cmd: "move", platform: platform, mm: dir * pw.step }) }
@@ -140,7 +140,8 @@ Item {
                     font.pixelSize: 12; color: win.cMut
                     text: !backend.connected ? win.t("Nicht mit dem Kit Control verbunden – unter „Drucken“ verbinden.")
                         : win.kit.printing === true ? win.t("Während des Drucks gesperrt.")
-                        : win.t("Fahren wie am Display. Die Freigabe für die Bedienung vom PC erfolgt am Pi (KIT_REMOTE=1).")
+                        : !win.remoteOn ? win.remoteHint
+                        : win.t("Fahren und beschichten wie am Display.")
                 }
             }
         }

@@ -1132,12 +1132,25 @@ Window {
                     }
                 }
                 Column {
-                    x: infoPanel.x + infoPanel.width + 8; width: 150; height: parent.height; spacing: 8
-                    KButton { width: parent.width; height: 50; kind: "pri"; text: "WLAN"; onClicked: wifiOvl.open() }
-                    KButton { width: parent.width; height: 50; kind: win.upd.available ? "acc" : "normal"; text: win.upd.running ? "Update läuft …" : (win.upd.available ? "Update verfügbar" : "Software"); onClicked: updOvl.open() }
+                    x: infoPanel.x + infoPanel.width + 8; width: 150; height: parent.height; spacing: 6
+                    KButton { width: parent.width; height: 44; kind: "pri"; text: "WLAN"; onClicked: wifiOvl.open() }
+                    KButton { width: parent.width; height: 44; kind: win.upd.available ? "acc" : "normal"; text: win.upd.running ? "Update läuft …" : (win.upd.available ? "Update verfügbar" : "Software"); onClicked: updOvl.open() }
+                    Lbl { text: "Bedienung vom PC" }
+                    Seg {
+                        width: parent.width; height: 32
+                        items: [["Aus", false], ["An", true]]
+                        value: win.st.remote_control === true
+                        onPicked: function (v) {
+                            if (v === (win.st.remote_control === true)) return
+                            win.send({ cmd: "remote_control", on: v }, function (ok) {
+                                if (ok) toast.show(v ? "Kit Control am PC darf heizen, fahren und beschichten – nicht während eines Drucks"
+                                                     : "Bedienung vom PC aus – nur noch hier am Display")
+                            })
+                        }
+                    }
                     Lbl { text: "PC-Verbindung für Central" }
                     Seg {
-                        width: parent.width; height: 40
+                        width: parent.width; height: 32
                         items: [["WLAN", "wlan"], ["USB", "usb"]]
                         value: win.st.pc_link || "wlan"
                         onPicked: function (v) {
@@ -1150,7 +1163,7 @@ Window {
                     }
                     Lbl { text: "Demo ohne Kit" }
                     Seg {
-                        width: parent.width; height: 40
+                        width: parent.width; height: 32
                         items: [["Aus", false], ["An", true]]
                         value: win.st.demo === true
                         onPicked: function (v) {
@@ -1159,9 +1172,9 @@ Window {
                             toast.show(v ? "Demo-Modus an: simulierter Kit, nichts wird an echte Hardware gesendet" : "Demo-Modus aus: suche Kit über USB")
                         }
                     }
-                    Item { width: 1; height: Math.max(0, parent.height - 50 - 50 - 16 - 40 - 16 - 40 - 52 - 52 - 72) }
-                    KButton { width: parent.width; text: "Neustart"; onClicked: win.ask("Neu starten?", "Der Kit Controller startet neu. Ein laufender Druck läuft auf dem Kit weiter.", function () { win.send({ cmd: "reboot" }) }) }
-                    KButton { width: parent.width; kind: "red"; text: "Ausschalten"; onClicked: win.ask("Ausschalten?", "Danach den Strom erst trennen, wenn das Display schwarz ist.", function () { win.send({ cmd: "poweroff" }) }) }
+                    Item { width: 1; height: Math.max(0, parent.height - 4 * 44 - 3 * (16 + 32) - 10 * 6) }
+                    KButton { width: parent.width; height: 44; text: "Neustart"; onClicked: win.ask("Neu starten?", "Der Kit Controller startet neu. Ein laufender Druck läuft auf dem Kit weiter.", function () { win.send({ cmd: "reboot" }) }) }
+                    KButton { width: parent.width; height: 44; kind: "red"; text: "Ausschalten"; onClicked: win.ask("Ausschalten?", "Danach den Strom erst trennen, wenn das Display schwarz ist.", function () { win.send({ cmd: "poweroff" }) }) }
                 }
             }
         }
