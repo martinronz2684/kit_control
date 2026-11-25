@@ -156,6 +156,23 @@ Window {
         })
     }
     function checkUpd() { Api.cmd({ cmd: "update_check" }, function (j) { if (j && j.update) win.upd = j.update }) }
+    // Beim Start einmal nach neuer Software suchen und sie gleich anbieten (WLAN braucht nach dem Booten etwas)
+    property bool updOffered: false
+    property int updTries: 0
+    Timer {
+        id: startUpd
+        interval: win.updTries === 0 ? 8000 : 20000; running: !win.updOffered && win.updTries < 6; repeat: true
+        onTriggered: {
+            win.updTries++
+            Api.cmd({ cmd: "update_check" }, function (j) {
+                if (!j || !j.update) return
+                win.upd = j.update
+                if (!j.update.latest) return                 // noch kein Netz – später nochmal
+                win.updOffered = true
+                if (j.update.available && !j.update.running && !win.st.printing && !win.st.transfer) updOvl.open()
+            })
+        }
+    }
     Timer { interval: (win.upd.running || updOvl.visible) ? 2000 : 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: win.loadUpd() }
     Timer { interval: 20000; running: true; onTriggered: win.checkUpd() }
     Timer { interval: 6 * 3600 * 1000; running: true; repeat: true; onTriggered: win.checkUpd() }
@@ -1304,7 +1321,7 @@ Window {
                 anchors.centerIn: parent; width: 520; height: 330
                 Column {
                     x: 18; y: 16; width: parent.width - 36; spacing: 10
-                    Val { font.pixelSize: 20; text: "Software" }
+                    Val { font.pixelSize: 20; text: win.upd.available && !win.upd.running ? "Neue Software verfügbar" : "Software" }
                     Row {
                         spacing: 10; width: parent.width
                         Rectangle { width: (parent.width - 10) / 2; height: 62; radius: 12; color: "#0bffffff"
@@ -1326,7 +1343,7 @@ Window {
                         text: win.upd.running ? "Das Update dauert einige Minuten. Die Oberfläche startet dabei kurz neu." : "Hinweis: Solange der Kit druckt, ist ein Update gesperrt." }
                     Row {
                         spacing: 8
-                        KButton { width: 150; height: 46; text: "Schließen"; onClicked: updOvl.visible = false }
+                        KButton { width: 150; height: 46; text: win.upd.available && !win.upd.running ? "Später" : "Schließen"; onClicked: updOvl.visible = false }
                         KButton { width: 150; height: 46; text: "Neu prüfen"; ok: !win.upd.running; onClicked: win.checkUpd() }
                         KButton { width: 184; height: 46; kind: "acc"; ok: !win.upd.running && !win.st.printing
                             text: win.upd.running ? "Läuft …" : "Jetzt aktualisieren"
