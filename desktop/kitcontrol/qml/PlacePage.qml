@@ -8,6 +8,54 @@ Item {
     property var problems: backend.problems
     property int sel: backend.selected
     property var cur: sel >= 0 && sel < parts.length ? parts[sel] : null
+    property var selection: backend.selection || []
+    readonly property int nSel: selection.length
+    readonly property bool active: win.page === 0 && !packPop.opened
+
+    // Tastenkürzel (wirken nicht, solange ein Eingabefeld die Taste braucht)
+    Shortcut { sequences: [StandardKey.Delete, "Backspace"]; enabled: pg.active && pg.nSel > 0; onActivated: backend.removeSelected() }
+    Shortcut { sequence: "Ctrl+D"; enabled: pg.active && pg.nSel > 0; onActivated: backend.duplicateSelected() }
+    Shortcut { sequence: "R"; enabled: pg.active && pg.nSel > 0; onActivated: backend.rotateSelected() }
+    Shortcut { sequence: "F"; enabled: pg.active && pg.nSel > 0; onActivated: backend.layFlatSelected() }
+    Shortcut { sequence: StandardKey.Undo; enabled: pg.active; onActivated: backend.undo() }
+    Shortcut { sequences: [StandardKey.Redo, "Ctrl+Y"]; enabled: pg.active; onActivated: backend.redo() }
+    Shortcut { sequence: "A"; enabled: pg.active && pg.parts.length > 0 && backend.packState !== "running"; onActivated: packPop.open() }
+    Shortcut { sequence: StandardKey.SelectAll; enabled: pg.active; onActivated: backend.selectAll() }
+    Shortcut { sequence: "Esc"; enabled: pg.active && pg.nSel > 0; onActivated: backend.selectNone() }
+    Shortcut { sequence: "1"; enabled: pg.active; onActivated: view3d.setView("iso") }
+    Shortcut { sequence: "2"; enabled: pg.active; onActivated: view3d.setView("top") }
+    Shortcut { sequence: "3"; enabled: pg.active; onActivated: view3d.setView("front") }
+    Shortcut { sequence: "4"; enabled: pg.active; onActivated: view3d.setView("right") }
+
+    // Rechtsklick-Menü in der 3D-Ansicht
+    Menu {
+        id: partMenu
+        property int target: -1
+        readonly property bool any: pg.nSel > 0
+        background: Rectangle { implicitWidth: 240; radius: 10; color: win.cPanel; border.color: win.cLine }
+        delegate: MenuItem {
+            id: mi
+            implicitHeight: 34
+            contentItem: RowLayout {
+                spacing: 10
+                Text { text: mi.text; color: mi.enabled ? win.cInk : "#59606b"; font.pixelSize: 13; Layout.fillWidth: true; elide: Text.ElideRight }
+                Text { text: mi.action && mi.action.shortcut ? String(mi.action.shortcut) : ""; color: win.cMut; font.pixelSize: 11 }
+            }
+            background: Rectangle { radius: 6; color: mi.highlighted ? "#16313c" : "transparent"; anchors.fill: parent; anchors.margins: 3 }
+        }
+        Action { text: partMenu.any && pg.nSel > 1 ? pg.nSel + win.t(" Teile ausgewählt") : (pg.cur ? pg.cur.name : win.t("Kein Bauteil ausgewählt")); enabled: false }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: win.cLine } }
+        Action { text: win.t("Duplizieren"); shortcut: "Ctrl+D"; enabled: partMenu.any; onTriggered: backend.duplicateSelected() }
+        Action { text: win.t("90° drehen"); shortcut: "R"; enabled: partMenu.any; onTriggered: backend.rotateSelected() }
+        Action { text: win.t("Auf Fläche legen"); shortcut: "F"; enabled: partMenu.any; onTriggered: backend.layFlatSelected() }
+        Action { text: win.t("Mit Kopien auffüllen"); enabled: pg.nSel === 1; onTriggered: backend.fillChamber(pg.sel, { gap: backend.settings.pack_gap, wall: backend.settings.pack_wall, rotate: true }) }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: win.cLine } }
+        Action { text: pg.cur && pg.cur.lock_pos ? win.t("Position entsperren") : win.t("Position sperren"); enabled: partMenu.any; onTriggered: backend.lockSelected("lock_pos", !(pg.cur && pg.cur.lock_pos)) }
+        Action { text: pg.cur && pg.cur.lock_orient ? win.t("Lage entsperren") : win.t("Lage sperren"); enabled: partMenu.any; onTriggered: backend.lockSelected("lock_orient", !(pg.cur && pg.cur.lock_orient)) }
+        MenuSeparator { contentItem: Rectangle { implicitHeight: 1; color: win.cLine } }
+        Action { text: win.t("Alles auswählen"); shortcut: "Ctrl+A"; enabled: pg.parts.length > 0; onTriggered: backend.selectAll() }
+        Action { text: win.t("Entfernen"); shortcut: "Entf"; enabled: partMenu.any; onTriggered: backend.removeSelected() }
+    }
 
     RowLayout {
         anchors.fill: parent
@@ -38,7 +86,14 @@ Item {
             Connections {
                 target: view3d.item
                 ignoreUnknownSignals: true
-                function onPicked(i) { backend.selected = i }
+                function onPicked(i) { backend.selectPart(i, "set") }
+                function onPickedMode(i, mode) { backend.selectPart(i, mode) }
+                function onGroupMoved(i, dx, dy, dz) { backend.moveSelected(i, dx, dy, dz) }
+                function onContextMenu(i, x, y) { partMenu.target = i; partMenu.popup(view3d, x, y) }
+                function onBoxSelected(idx, add) {
+                    if (add) { var cur = backend.selection.slice(); for (var k = 0; k < idx.length; k++) if (cur.indexOf(idx[k]) < 0) cur.push(idx[k]); backend.selectIndices(cur) }
+                    else backend.selectIndices(idx)
+                }
                 function onMoved(i, x, y, first) { backend.movePart(i, x, y, first) }
                 function onMoved3(i, x, y, z) { backend.movePart3(i, x, y, z) }
             }
@@ -164,7 +219,7 @@ Item {
                     id: selCol
                     width: selFlick.width - (selFlick.contentHeight > selFlick.height ? 10 : 0)
                     spacing: 10
-                    Caption { text: pg.cur ? win.t("Ausgewählt: ") + pg.cur.name : "Kein Bauteil ausgewählt" }
+                    Caption { text: pg.nSel > 1 ? pg.nSel + win.t(" Teile ausgewählt – Tasten wirken auf alle") : (pg.cur ? win.t("Ausgewählt: ") + pg.cur.name : win.t("Kein Bauteil ausgewählt")) }
                     GridLayout {
                         enabled: pg.cur !== null
                         opacity: enabled ? 1 : 0.4
@@ -187,8 +242,8 @@ Item {
                     RowLayout {
                         enabled: pg.cur !== null
                         spacing: 8
-                        KButton { text: win.t("90° drehen"); Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.setPart(pg.sel, "rot_z", (pg.cur.rot_z + 90) % 360) }
-                        KButton { text: win.t("Auf Fläche legen"); Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.layFlat(pg.sel) }
+                        KButton { text: win.t("90° drehen"); Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.rotateSelected() }
+                        KButton { text: win.t("Auf Fläche legen"); Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.layFlatSelected() }
                     }
                     RowLayout {
                         enabled: pg.cur !== null
@@ -197,18 +252,18 @@ Item {
                             Layout.preferredWidth: 1
                             id: lockPos
                             checked: pg.cur ? pg.cur.lock_pos : false
-                            onToggled: backend.setPart(pg.sel, "lock_pos", checked); text: win.t("Position sperren") }
+                            onToggled: backend.lockSelected("lock_pos", checked); text: win.t("Position sperren") }
                         KCheck {
                             Layout.preferredWidth: 1
                             id: lockOri
                             checked: pg.cur ? pg.cur.lock_orient : false
-                            onToggled: backend.setPart(pg.sel, "lock_orient", checked); text: win.t("Lage sperren") }
+                            onToggled: backend.lockSelected("lock_orient", checked); text: win.t("Lage sperren") }
                     }
                     RowLayout {
                         enabled: pg.cur !== null
                         spacing: 8
-                        KButton { text: win.t("Duplizieren"); Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.duplicatePart(pg.sel) }
-                        KButton { text: win.t("Entfernen"); kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.removePart(pg.sel) }
+                        KButton { text: win.t("Duplizieren"); Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.duplicateSelected() }
+                        KButton { text: win.t("Entfernen"); kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.removeSelected() }
                     }
                     Repeater {
                         model: backend.notes

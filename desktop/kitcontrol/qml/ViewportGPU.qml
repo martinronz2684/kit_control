@@ -19,7 +19,13 @@ Item {
     property real ty: 0
     property real tz: 40
     objectName: "viewport"
-    signal picked(int index)
+    signal picked(int index)                       // einfacher Klick (Auswahl ersetzen)
+    signal pickedMode(int index, string mode)      // "toggle" (Strg) / "add" (Umschalt)
+    signal groupMoved(int lead, real dx, real dy, real dz)
+    signal contextMenu(int index, real x, real y)
+    signal boxSelected(var indices, bool add)
+    property bool dragGroup: false                 // mehrere ausgewählte Teile werden gemeinsam gezogen
+    property rect band: Qt.rect(0, 0, 0, 0)        // Auswahlrahmen (Umschalt + Ziehen)
     signal moved(int index, real x, real y, bool first)
     property int dragIdx: -1          // Teil, das gerade gezogen wird (nur Anzeige, gespeichert beim Loslassen)
     property real dragDx: 0
@@ -158,13 +164,20 @@ Item {
                     property int partIndex: index
                     pickable: true
                     geometry: MeshGeometry { key: modelData.gkey }
-                    position: Qt.vector3d(modelData.pos[0] + (index === vg.dragIdx ? vg.dragDx : 0),
-                                          modelData.pos[1] + (index === vg.dragIdx ? vg.dragDy : 0),
-                                          modelData.pos[2] + (index === vg.dragIdx ? vg.dragDz : 0))
+                    readonly property bool moving: vg.dragIdx >= 0 && (index === vg.dragIdx || (vg.dragGroup && modelData.picked))
+                    position: Qt.vector3d(modelData.pos[0] + (moving ? vg.dragDx : 0),
+                                          modelData.pos[1] + (moving ? vg.dragDy : 0),
+                                          modelData.pos[2] + (moving ? vg.dragDz : 0))
                     rotation: Qt.quaternion(modelData.quat[0], modelData.quat[1], modelData.quat[2], modelData.quat[3])
                     scale: Qt.vector3d(modelData.scale3[0], modelData.scale3[1], modelData.scale3[2])
                     materials: PrincipledMaterial {
-                        baseColor: index === vg.sel ? "#8adaf2" : "#2a9cc2"
+                        // Farben mit Bedeutung: rot = überlappt, orange = außerhalb des idealen Bereichs,
+                        // grau-blau = gesperrt; ausgewählt jeweils heller
+                        readonly property bool hi: modelData.picked || index === vg.sel
+                        baseColor: modelData.status === "overlap" ? (hi ? "#f39a9d" : "#d9464c")
+                                 : modelData.status === "outside" ? (hi ? "#f7c987" : "#e3962f")
+                                 : (modelData.lock_pos || modelData.lock_orient) ? (hi ? "#b9cbd3" : "#6f8792")
+                                 : (hi ? "#8adaf2" : "#2a9cc2")
                         roughness: 0.5
                         metalness: 0.0
                         cullMode: Material.NoCulling
@@ -184,25 +197,51 @@ Item {
         color: "#6b737d"; font.pixelSize: 11
     }
 
+    function centerOf(i) {
+        var p = parts[i]
+        return screenPoint(p.x, p.y, p.z + p.size[2] / 2)
+    }
+
+    // Auswahlrahmen
+    Rectangle {
+        visible: vg.band.width > 2 || vg.band.height > 2
+        x: vg.band.x; y: vg.band.y; width: vg.band.width; height: vg.band.height
+        color: "#262694b8"; border.color: "#2694b8"; border.width: 1; radius: 3
+    }
+
     MouseArea {
         anchors.fill: parent
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
         property int idx: -1
-        property int mode: 0          // 1 verschieben, 2 drehen, 3 schieben
+        property int mode: 0          // 1 verschieben, 2 drehen, 3 schieben, 4 Rahmen
         property real lx; property real ly
+        property real sx; property real sy
         property real px; property real py; property real pz
         property var g0: null
         property bool upright: false
         property var wn: null
         property bool first: true
+        property bool addMode: false
         cursorShape: mode === 1 ? Qt.ClosedHandCursor : (mode === 2 ? Qt.SizeAllCursor : Qt.ArrowCursor)
         onPressed: (m) => {
-            lx = m.x; ly = m.y
+            lx = m.x; ly = m.y; sx = m.x; sy = m.y
+            vg.forceActiveFocus()
             if (m.button === Qt.LeftButton) {
                 idx = vg.pickAt(m.x, m.y)
-                vg.picked(idx)
+                if (m.modifiers & Qt.ControlModifier) {          // Strg: zur Auswahl hinzufügen / entfernen
+                    if (idx >= 0) vg.pickedMode(idx, "toggle")
+                    mode = 0
+                    return
+                }
+                if ((m.modifiers & Qt.ShiftModifier) && idx < 0) {   // Umschalt + Ziehen auf leerem Grund: Rahmen
+                    mode = 4; addMode = true
+                    vg.band = Qt.rect(m.x, m.y, 0, 0)
+                    return
+                }
                 if (idx >= 0) {
                     var p = vg.parts[idx]
+                    if (!p.picked) vg.picked(idx)
+                    vg.dragGroup = p.picked === true
                     px = p.x; py = p.y; pz = p.z
                     // steil von oben: auf der Platte schieben; flach von vorne/seitlich: in der Bildebene
                     // (links/rechts und hoch/runter = Höhe über Platte)
@@ -236,17 +275,34 @@ Item {
             } else if (mode === 3 && g0) {
                 var g2 = vg.ground(m.x, m.y, vg.tz)
                 if (g2) { vg.tx -= g2.x - g0.x; vg.ty -= g2.y - g0.y }
+            } else if (mode === 4) {
+                vg.band = Qt.rect(Math.min(sx, m.x), Math.min(sy, m.y), Math.abs(m.x - sx), Math.abs(m.y - sy))
             }
             lx = m.x; ly = m.y
         }
-        onReleased: {
+        onReleased: (m) => {
             if (mode === 1 && vg.dragIdx >= 0) {
-                var i = vg.dragIdx, x = Math.round((px + vg.dragDx) * 10) / 10, y = Math.round((py + vg.dragDy) * 10) / 10
-                var z = Math.round((pz + vg.dragDz) * 10) / 10
+                var i = vg.dragIdx
+                var dx = Math.round(vg.dragDx * 10) / 10, dy = Math.round(vg.dragDy * 10) / 10, dz = Math.round(vg.dragDz * 10) / 10
                 vg.dragIdx = -1; vg.dragDx = 0; vg.dragDy = 0; vg.dragDz = 0
-                vg.moved3(i, x, y, z)
+                vg.groupMoved(i, dx, dy, dz)
+            } else if (mode === 2 && m.button === Qt.LeftButton && Math.abs(m.x - sx) + Math.abs(m.y - sy) < 4) {
+                vg.picked(-1)                                    // Klick ins Leere: Auswahl aufheben
+            } else if (mode === 3 && Math.abs(m.x - sx) + Math.abs(m.y - sy) < 5) {
+                // Rechtsklick ohne Ziehen: Menü für das Teil unter der Maus
+                var hit = vg.pickAt(m.x, m.y)
+                if (hit >= 0 && !vg.parts[hit].picked) vg.picked(hit)
+                vg.contextMenu(hit, m.x, m.y)
+            } else if (mode === 4) {
+                var r = vg.band, sel = []
+                for (var k = 0; k < vg.parts.length; k++) {
+                    var c = vg.centerOf(k)
+                    if (c.x >= r.x && c.x <= r.x + r.width && c.y >= r.y && c.y <= r.y + r.height) sel.push(k)
+                }
+                vg.band = Qt.rect(0, 0, 0, 0)
+                vg.boxSelected(sel, addMode)
             }
-            mode = 0; idx = -1
+            mode = 0; idx = -1; vg.dragGroup = false
         }
         onDoubleClicked: (m) => { if (vg.pickAt(m.x, m.y) < 0) vg.setView("iso") }
         onWheel: (w) => { vg.dist = Math.max(60, Math.min(1500, vg.dist * (w.angleDelta.y > 0 ? 1 / 1.12 : 1.12))) }

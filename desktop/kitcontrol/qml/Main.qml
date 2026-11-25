@@ -153,7 +153,22 @@ ApplicationWindow {
                     fillMode: Image.PreserveAspectFit
                     horizontalAlignment: Image.AlignLeft
                     smooth: true; mipmap: true
-                    Layout.bottomMargin: 22; Layout.topMargin: 6
+                    Layout.topMargin: 6
+                }
+                // „Kit Control by Rat3d“
+                RowLayout {
+                    spacing: 8
+                    Layout.leftMargin: 2
+                    Layout.bottomMargin: 18
+                    Text { text: "by"; color: "#6b737d"; font.pixelSize: 12; font.italic: true; Layout.alignment: Qt.AlignVCenter }
+                    Image {
+                        source: assetDir + "/rat3d.svg"
+                        sourceSize: Qt.size(120, 92)
+                        Layout.preferredWidth: 60; Layout.preferredHeight: 46
+                        fillMode: Image.PreserveAspectFit
+                        smooth: true; mipmap: true
+                    }
+                    Text { text: "Rat3d"; color: "#9aa3ad"; font.pixelSize: 13; font.letterSpacing: 1; Layout.alignment: Qt.AlignVCenter }
                 }
 
                 Repeater {

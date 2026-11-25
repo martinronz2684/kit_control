@@ -283,6 +283,9 @@ class Scene:
 
     def collisions(self, tol: float = 0.05) -> list[tuple[str, str]]:
         """Paare, deren Säulen (je Rasterzelle unterste bis oberste Fläche) sich in der Höhe überschneiden."""
+        return [(self.parts[i].name, self.parts[j].name) for i, j in self.collision_pairs(tol)]
+
+    def collision_pairs(self, tol: float = 0.05) -> list[tuple[int, int]]:
         out = []
         boxes = [p.bbox() for p in self.parts]
         cols = {}
@@ -303,7 +306,16 @@ class Scene:
                 ca, cb = cols[i], cols[j]
                 common = set(ca) & set(cb)
                 if any(max(ca[c][0], cb[c][0]) < min(ca[c][1], cb[c][1]) - tol for c in common):
-                    out.append((self.parts[i].name, self.parts[j].name))
+                    out.append((i, j))
+        return out
+
+    def outside(self) -> list[int]:
+        hx = IDEAL_XY / 2
+        out = []
+        for i, p in enumerate(self.parts):
+            lo, hi = p.bbox()
+            if lo[0] < -hx - 1e-6 or lo[1] < -hx - 1e-6 or hi[0] > hx + 1e-6 or hi[1] > hx + 1e-6 or hi[2] > IDEAL_Z + 1e-6:
+                out.append(i)
         return out
 
     def arrange(self, gap: float = 3.0) -> bool:

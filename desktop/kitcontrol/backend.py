@@ -165,6 +165,60 @@ class Backend(QObject):
 
     selected = Property(int, _get_sel, _set_sel, notify=partsChanged)
 
+    @Property("QVariantList", notify=partsChanged)
+    def selection(self):
+        return self.core.targets()
+
+    @Slot(int, str)
+    def selectPart(self, i, mode):
+        self.core.select(int(i), mode or "set")
+        self.partsChanged.emit()
+
+    @Slot("QVariantList")
+    def selectIndices(self, idx):
+        self.core.select_many(idx)
+        self.partsChanged.emit()
+
+    @Slot()
+    def selectAll(self):
+        self.core.select_many(range(len(self.core.scene.parts)))
+        self.partsChanged.emit()
+
+    @Slot()
+    def selectNone(self):
+        self.core.select(-1)
+        self.partsChanged.emit()
+
+    @Slot()
+    def removeSelected(self):
+        self.core.remove_sel()
+        self._parts_changed()
+
+    @Slot()
+    def duplicateSelected(self):
+        self.core.duplicate_sel()
+        self._parts_changed()
+
+    @Slot()
+    def rotateSelected(self):
+        self.core.rotate_sel(90.0)
+        self._parts_changed()
+
+    @Slot()
+    def layFlatSelected(self):
+        self.core.lay_flat_sel()
+        self._parts_changed()
+
+    @Slot(str, bool)
+    def lockSelected(self, key, value):
+        self.core.lock_sel(key, value)
+        self._parts_changed()
+
+    @Slot(int, float, float, float)
+    def moveSelected(self, lead, dx, dy, dz):
+        self.core.move_sel(dx, dy, dz, int(lead))
+        self._parts_changed()
+
     @Property(bool, constant=True)
     def gpuView(self):
         """3D-Ansicht auf der Grafikkarte, außer KIT_NO_GPU=1 oder Qt Quick 3D fehlt."""

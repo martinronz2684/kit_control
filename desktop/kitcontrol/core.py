@@ -110,6 +110,7 @@ class AppCore:
         self.undo_stack: list = []
         self.redo_stack: list = []
         self.selected = -1
+        self.multi: list[int] = []          # Mehrfachauswahl (Strg+Klick, Rahmen); leer = nur self.selected
         self.settings = self._load_settings()
         self.profile_id = self.settings.get("profile", "pa12")
         from kitslice.scene import set_ideal
@@ -147,6 +148,7 @@ class AppCore:
         return [(p.name, p.mesh, {k: getattr(p, k) for k in PART_KEYS}) for p in self.scene.parts], self.selected
 
     def _restore(self, snap):
+        self.multi = []
         parts, sel = snap
         self.scene.parts = []
         for name, mesh, kw in parts:
@@ -191,19 +193,122 @@ class AppCore:
                 self.scene.add(p)
             self.scene.nest(only=new)
             self.selected = len(self.scene.parts) - 1
+            self.multi = []
         return errs
+
+    # -- Auswahl (eine oder mehrere) ---------------------------------------------
+    def targets(self) -> list[int]:
+        n = len(self.scene.parts)
+        m = sorted({i for i in self.multi if 0 <= i < n})
+        if len(m) > 1:
+            return m
+        return [self.selected] if 0 <= self.selected < n else []
+
+    def select(self, i: int, mode: str = "set") -> None:
+        n = len(self.scene.parts)
+        if not 0 <= i < n:
+            self.selected, self.multi = -1, []
+            return
+        cur = set(self.targets())
+        if mode == "toggle":
+            cur ^= {i}
+            self.multi = sorted(cur)
+            self.selected = i if i in cur else (self.multi[-1] if self.multi else -1)
+        elif mode == "add":
+            cur.add(i)
+            self.multi, self.selected = sorted(cur), i
+        else:
+            self.multi, self.selected = [], i
+
+    def select_many(self, idx) -> None:
+        n = len(self.scene.parts)
+        idx = sorted({int(i) for i in idx if 0 <= int(i) < n})
+        self.multi = idx
+        self.selected = idx[-1] if idx else -1
+
+    def remove_sel(self) -> None:
+        t = self.targets()
+        if not t:
+            return
+        self._push()
+        for i in sorted(t, reverse=True):
+            del self.scene.parts[i]
+        self.multi, self.selected = [], -1
+
+    def duplicate_sel(self) -> None:
+        t = self.targets()
+        if not t:
+            return
+        self._push()
+        new = []
+        for i in t:
+            src = self.scene.parts[i]
+            p = Part(src.name + " (Kopie)", src.mesh)
+            for k in PART_KEYS:
+                setattr(p, k, copy.copy(getattr(src, k)))
+            p.lock_pos = False
+            self.scene.add(p)
+            new.append(p)
+        self.scene.nest(only=new)
+        n = len(self.scene.parts)
+        self.select_many(range(n - len(new), n))
+
+    def rotate_sel(self, deg: float = 90.0) -> None:
+        t = self.targets()
+        if not t:
+            return
+        self._push()
+        for i in t:
+            p = self.scene.parts[i]
+            if not p.lock_orient:
+                p.rot_z = (p.rot_z + deg) % 360
+                p._cache = None
+
+    def lay_flat_sel(self) -> None:
+        t = self.targets()
+        if not t:
+            return
+        self._push()
+        for i in t:
+            if not self.scene.parts[i].lock_orient:
+                self.scene.parts[i].lay_flat()
+
+    def lock_sel(self, key: str, value: bool) -> None:
+        if key not in ("lock_pos", "lock_orient"):
+            return
+        t = self.targets()
+        if t:
+            self._push()
+            for i in t:
+                setattr(self.scene.parts[i], key, bool(value))
+
+    def move_sel(self, dx: float, dy: float, dz: float = 0.0, lead: int = -1) -> None:
+        """Ziehen mit der Maus: alle ausgewählten Teile um denselben Weg verschieben (ein Rückgängig-Schritt)."""
+        t = self.targets()
+        if lead >= 0 and lead not in t:
+            t = [lead]
+        if not t:
+            return
+        self._push()
+        for i in t:
+            p = self.scene.parts[i]
+            p.x, p.y = float(p.x + dx), float(p.y + dy)
+            p.z_lift = max(0.0, float(p.z_lift + dz))
+        self.job = None
 
     def remove(self, i: int) -> None:
         if 0 <= i < len(self.scene.parts):
             self._push()
             del self.scene.parts[i]
             self.selected = min(self.selected, len(self.scene.parts) - 1)
+            self.multi = []
 
     def clear(self) -> None:
         if self.scene.parts:
             self._push()
             self.scene.parts = []
             self.selected = -1
+            self.multi = []
 
     def duplicate(self, i: int) -> None:
         if 0 <= i < len(self.scene.parts):
@@ -216,6 +321,7 @@ class AppCore:
             self.scene.add(p)
             self.scene.nest(only=[p])
             self.selected = len(self.scene.parts) - 1
+            self.multi = []
 
     def set_part(self, i: int, key: str, value) -> None:
         if not 0 <= i < len(self.scene.parts) or key not in PART_KEYS + ("scale_pct",):
@@ -287,6 +393,7 @@ class AppCore:
         self.scene.add(p)
         self.scene.nest(only=[p])
         self.selected = len(self.scene.parts) - 1
+        self.multi = []
 
     def unlock_all(self) -> int:
         n = sum(1 for p in self.scene.parts if p.lock_pos or p.lock_orient)
@@ -341,6 +448,7 @@ class AppCore:
         if not 0 <= i < len(self.scene.parts):
             i = 0                       # ohne Auswahl: das (erste) Teil auffüllen
         self.selected = i
+        self.multi = []
         self._push()
         return packing.fill(self.scene, self.scene.parts[i], gap, wall, rotate, progress=progress, cancel=cancel,
                             quality_w=quality)
@@ -368,8 +476,22 @@ class AppCore:
             self._outline_cache[key] = np.round(p.transform(p.simple(max_tris)), 3).ravel().tolist()
         return self._outline_cache[key]
 
+    def part_status(self) -> dict:
+        """Je Teil: overlap / outside (für Farben in der 3D-Ansicht)."""
+        st = {}
+        try:
+            for i, j in self.scene.collision_pairs():
+                st[i] = st[j] = "overlap"
+            for i in self.scene.outside():
+                st.setdefault(i, "outside")
+        except Exception:
+            pass
+        return st
+
     def parts_info(self) -> list[dict]:
         out = []
+        status = self.part_status()
+        multi = set(self.targets())
         for i, p in enumerate(self.scene.parts):
             sx, sy, sz = p.size()
             key = (mesh_uid(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale))
@@ -393,6 +515,7 @@ class AppCore:
                 "size": [round(float(sx), 2), round(float(sy), 2), round(float(sz), 2)], "outline": self._outline_cache[key],
                 "triangles": int(len(p.mesh)),
                 "lock_pos": bool(p.lock_pos), "lock_orient": bool(p.lock_orient),
+                "status": status.get(i, ""), "picked": i in multi,
             })
         return out
 
@@ -435,6 +558,7 @@ class AppCore:
             except KeyError:
                 pass
         self.selected = 0 if self.scene.parts else -1
+        self.multi = []
 
     def export_stl(self, path: str) -> None:
         stl.save_binary(self.scene.merged(), path)
