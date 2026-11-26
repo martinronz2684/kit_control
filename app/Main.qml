@@ -887,9 +887,11 @@ Window {
                         }
                         // Übertragung zum Kit läuft
                         Column { width: parent.width; spacing: 6; visible: !!jobsPage.tr
-                            Lbl { width: parent.width; text: jobsPage.tr ? jobsPage.tr.phase + (jobsPage.tr.total ? " · " + Math.floor(100 * jobsPage.tr.sent / jobsPage.tr.total) + " %" : "") : "" }
+                            Lbl { width: parent.width; text: jobsPage.tr ? jobsPage.tr.phase + (jobsPage.tr.total && !jobsPage.tr.waiting ? " · " + Math.floor(100 * jobsPage.tr.sent / jobsPage.tr.total) + " %" : "") : "" }
                             Rectangle { width: parent.width; height: 6; radius: 3; color: "#2a2a30"
                                 Rectangle { height: parent.height; radius: 3; color: win.cBlue; width: jobsPage.tr && jobsPage.tr.total ? parent.width * jobsPage.tr.sent / jobsPage.tr.total : 0 } }
+                            KButton { width: parent.width; height: 44; kind: "red"; visible: !!(jobsPage.tr && jobsPage.tr.waiting)
+                                text: "Start abbrechen (Vorheizen aus)"; onClicked: win.send({ cmd: "job_cancel" }) }
                         }
                         Row { width: parent.width; spacing: 8; visible: !jobsPage.tr
                             KButton { width: 52; height: 52; text: "✕"; ok: !!jobsPage.sel

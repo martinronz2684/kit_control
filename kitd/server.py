@@ -48,7 +48,7 @@ PRINTLOG = PrintLog(STATE_DIR)
 LOCAL_ONLY = {"pc_link", "update_check", "update_start", "wifi_connect", "wifi_disconnect", "demo",
               "remote_control", "job_autostart", "lamp_legacy"}
 # Was der PC auch während eines Drucks darf: nur anhalten
-STOP_CMDS = {"abort_print", "stop_sintering"}
+STOP_CMDS = {"abort_print", "stop_sintering", "job_cancel"}
 
 
 def _cfg_file() -> str:
@@ -88,6 +88,7 @@ class KitWorker(threading.Thread):
     def __init__(self):
         super().__init__(daemon=True)
         self.lock = threading.Lock()
+        self.pending = None           # Job, der auf die Übernahme durch den Kit wartet (Vorheizen läuft)
         self.cmds: "queue.Queue[tuple[dict, queue.Queue]]" = queue.Queue()
         self.state = {"connected": False, "message": "Suche Kit …"}
         self.kit: Kit | None = None
@@ -134,6 +135,7 @@ class KitWorker(threading.Thread):
             try:
                 with self.usb:
                     self._poll()
+                self._try_pending()
                 self._run_cmds(deadline=time.time() + 1.0)
             except Exception as e:  # USB unplugged, timeout …
                 self._set(connected=False, message=f"Verbindung verloren: {e}")
@@ -287,8 +289,16 @@ class KitWorker(threading.Thread):
                 return
             try:
                 if cmd.get("cmd") == "job_start":
+                    if getattr(self, "pending", None):
+                        raise ValueError("Es wartet schon ein Job auf den Start")
                     self._start_job(str(cmd.get("id", "")), reply)
                     continue
+                if cmd.get("cmd") == "job_cancel":
+                    self.cancel_pending(warm_off=True)
+                    reply.put({"ok": True})
+                    continue
+                if cmd.get("cmd") in STOP_CMDS or (cmd.get("cmd") == "warmup" and cmd.get("on") is False):
+                    self.cancel_pending(warm_off=False)       # der Befehl selbst wird gleich normal geschickt
                 if cmd.get("cmd") == "lamps_full":
                     # Heizstrahler links/rechts/vorne auf volle Leistung (die Firmware speichert den Wert dauerhaft)
                     if self.snapshot().get("printing"):
@@ -370,55 +380,107 @@ class KitWorker(threading.Thread):
         reply.put({"ok": True})
         tr = {"id": job_id, "name": meta["name"], "sent": 0, "total": len(data), "phase": "Vorheizen einschalten", "error": ""}
         self._set(transfer=dict(tr))
-        last = [0.0]
-
-        def progress(sent, total):
-            if time.time() - last[0] > 0.25 or sent == total:
-                last[0] = time.time()
-                tr.update(sent=sent, phase="Übertrage Job zum Kit")
-                self._set(transfer=dict(tr))
-
-        warm = False
         try:
             with self.usb:
                 tr["phase"] = "Kit bereit machen"
                 self._set(transfer=dict(tr))
                 self._wait_idle()
-                self._check_codes()
-                warn = []
-                # Wie Central (PrintPaneController): nur Vorheizen ein, Job übertragen, Druck starten – kein
-                # Pulverprofil, keine Heizstrahler. Temperaturen und Laser gelten so, wie sie am Kit eingestellt sind.
+                # Wie Central (PrintPaneController): Vorheizen ein, Job übertragen, Druck starten – kein Pulverprofil,
+                # keine Heizstrahler. Temperaturen und Laser gelten so, wie sie am Kit eingestellt sind.
                 tr["phase"] = "Vorheizen einschalten"
-                self._strict(P.cmd_warmup(True), "Vorheizen")
-                warm = True
-                tr["phase"] = "Übertrage Job zum Kit"
                 self._set(transfer=dict(tr))
-                try:
-                    ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress,
-                                  log=lambda m: print(m, flush=True))
-                except ftp.TransferError as e:
-                    why = self._codes_text()
-                    raise ftp.TransferError(str(e) + (f" – Kit meldet: {why}" if why else "")) from e
+                self._strict(P.cmd_warmup(True), "Vorheizen")
+        except Exception as e:
+            self._fail(meta, tr, e)
+            if isinstance(e, OSError) and not isinstance(e, ftp.TransferError):
+                raise
+            return
+        # Übertragen und starten; nimmt der Kit den Job noch nicht an (heizt auf, Warnung steht an …), bleibt das
+        # Vorheizen an und der Pi versucht es weiter, bis der Kit ihn nimmt – die Anzeige läuft dabei weiter.
+        self.pending = {"id": job_id, "meta": meta, "data": data, "tr": tr, "since": time.time(), "next": 0.0, "tries": 0}
+        self._try_pending()
+
+    PENDING_MAX_S = 2 * 3600          # so lange wird höchstens gewartet
+    PENDING_RETRY_S = 10.0
+
+    def _try_pending(self):
+        pd = getattr(self, "pending", None)
+        if not pd or time.time() < pd["next"]:
+            return
+        from kitctl import ftp
+        from kitd import jobs
+        meta, tr, data = pd["meta"], pd["tr"], pd["data"]
+        last = [0.0]
+
+        def progress(sent, total):
+            if time.time() - last[0] > 0.25 or sent == total:
+                last[0] = time.time()
+                tr.update(sent=sent, phase="Übertrage Job zum Kit", waiting=False)
+                self._set(transfer=dict(tr))
+        pd["tries"] += 1
+        try:
+            with self.usb:
+                tr.update(phase="Übertrage Job zum Kit", sent=0)
+                self._set(transfer=dict(tr))
+                ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress,
+                              cancel=lambda: getattr(self, "pending", None) is None,
+                              log=lambda m: print(m, flush=True))
                 tr["phase"] = "Druck starten"
                 self._set(transfer=dict(tr))
                 self.kit.command(P.cmd_simple(P.COM_STARTPRINT), strict=True)
-            jobs.update(job_id, last_started=time.time(), starts=int(meta.get("starts") or 0) + 1)
-            self.set_current_job(meta)
-            res = {"ok": True, "name": meta["name"], "ts": time.time()}
-            if warn:
-                res["warn"] = "nicht übernommen: " + ", ".join(warn) + " – es gelten die Werte am Kit"
-            self._set(transfer=None, job_result=res)
+        except ftp.TransferError as e:
+            if getattr(self, "pending", None) is None:
+                return                                    # abgebrochen
+            why = ""
+            try:
+                with self.usb:
+                    why = self._codes_text()
+            except Exception:
+                pass
+            if time.time() - pd["since"] > self.PENDING_MAX_S:
+                self.pending = None
+                self._fail(meta, tr, ftp.TransferError(f"{e} – nach {self.PENDING_MAX_S // 3600} h aufgegeben"), warm_off=True)
+                return
+            print(f"Start: Kit nimmt den Job noch nicht ({e}{' – ' + why if why else ''}), neuer Versuch in {self.PENDING_RETRY_S:.0f} s", flush=True)
+            pd["next"] = time.time() + self.PENDING_RETRY_S
+            tr.update(sent=0, waiting=True,
+                      phase="Heizt vor – Job wird übertragen, sobald der Kit bereit ist" + (f" (Kit meldet: {why})" if why else ""))
+            self._set(transfer=dict(tr))
+            return
         except Exception as e:
-            if warm:
-                try:
-                    with self.usb:
-                        self.kit.command(P.cmd_warmup(False))
-                except Exception:
-                    pass
-            msg = f"{tr['phase']}: {str(e) or e.__class__.__name__}"
-            self._set(transfer=None, job_result={"ok": False, "name": meta["name"], "error": msg, "ts": time.time()})
-            if isinstance(e, (OSError,)) and not isinstance(e, ftp.TransferError):
-                raise   # USB weg -> Hauptschleife verbindet neu
+            self.pending = None
+            self._fail(meta, tr, e, warm_off=True)
+            if isinstance(e, OSError):
+                raise
+            return
+        self.pending = None
+        jobs.update(pd["id"], last_started=time.time(), starts=int(meta.get("starts") or 0) + 1)
+        self.set_current_job(meta)
+        self._set(transfer=None, job_result={"ok": True, "name": meta["name"], "ts": time.time()})
+
+    def cancel_pending(self, warm_off: bool = True) -> bool:
+        pd = getattr(self, "pending", None)
+        if not pd:
+            return False
+        self.pending = None
+        if warm_off:
+            try:
+                with self.usb:
+                    self.kit.command(P.cmd_warmup(False))
+            except Exception:
+                pass
+        self._set(transfer=None, job_result={"ok": False, "name": pd["meta"]["name"], "error": "Start abgebrochen", "ts": time.time()})
+        return True
+
+    def _fail(self, meta, tr, e, warm_off=False):
+        if warm_off:
+            try:
+                with self.usb:
+                    self.kit.command(P.cmd_warmup(False))
+            except Exception:
+                pass
+        msg = f"{tr['phase']}: {str(e) or e.__class__.__name__}"
+        self._set(transfer=None, job_result={"ok": False, "name": meta["name"], "error": msg, "ts": time.time()})
 
     def _wait_idle(self, timeout: float = 20.0) -> None:
         """Pulvervorbereitung beenden (Central schließt das Pulverfenster vor dem Druck) und warten, bis der Kit
@@ -449,13 +511,6 @@ class KitWorker(threading.Thread):
             except P.ProtocolError:
                 pass
         return ", ".join(f"{describe(c)['title']} ({c})" for c in found)
-
-    def _check_codes(self) -> None:
-        """Steht am Kit ein Fehler an, nimmt er keinen Job an – gleich sagen, was los ist. (Warnungen
-        blockieren nicht; manche stehen dauerhaft an. Bricht der Kit die Übertragung ab, werden sie genannt.)"""
-        txt = self._codes_text(("errors",))
-        if txt:
-            raise ValueError(f"Kit meldet {txt} – erst beheben, ggf. Kit aus- und wieder einschalten")
 
     def _strict(self, payload: bytes, what: str, tries: int = 3):
         """Befehl mit Erfolgs-Prüfung; die Firmware lehnt direkt nach einem Zustandswechsel gern kurz ab."""
@@ -508,7 +563,7 @@ class KitWorker(threading.Thread):
         if s.get("printing"):
             return "Der Kit druckt bereits"
         if s.get("transfer"):
-            return "Es wird gerade ein Job übertragen"
+            return "Es wird gerade ein Job übertragen oder wartet auf den Start"
         if s.get("errors"):
             return "Kit meldet Fehler: " + ", ".join(str(e.get("title", e)) if isinstance(e, dict) else str(e) for e in s["errors"])
         if s.get("waiting_for_sd"):

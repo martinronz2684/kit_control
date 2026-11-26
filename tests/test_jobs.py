@@ -152,6 +152,33 @@ class StartFromPiTest(unittest.TestCase):
         self.assertEqual(w.kit.t.layers, 5)
         self.assertEqual(jobs.get(meta["id"])["starts"], 1)
 
+    def test_start_waits_until_kit_accepts_while_warming(self):
+        import kitd.server as S
+        from kitctl import ftp as F
+        w = S.KitWorker()
+        w.kit = Kit(DemoTransport())
+        w.kit.connect()
+        w.PENDING_RETRY_S = 0.0
+        meta = jobs.save(pjob.build([[("contour", [(0, 0), (5, 5)])]] * 3), "pc", "Wartet")
+        real, calls = F.send_file, []
+
+        def flaky(*a, **k):
+            calls.append(1)
+            if len(calls) < 3:
+                raise F.TransferError("Kit hat die Übertragung abgebrochen")
+            return real(*a, **k)
+        F.send_file = flaky
+        try:
+            q = queue.Queue()
+            w._start_job(meta["id"], q)
+            self.assertTrue(q.get_nowait()["ok"])
+            self.assertTrue(w.snapshot()["transfer"]["waiting"])      # Vorheizen bleibt an, Pi wartet
+            w._try_pending(); w._try_pending()
+        finally:
+            F.send_file = real
+        self.assertIsNone(w.pending)
+        self.assertTrue(w.snapshot()["job_result"]["ok"], w.snapshot())
+
     def test_start_job_with_profile(self):
         import kitd.server as S
         w = S.KitWorker()
