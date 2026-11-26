@@ -32,7 +32,7 @@ class DemoTransport:
         if c == P.COM_IDENTIFY:
             self._next = P.code(P.SIG_IDENTIFY) + struct.pack("<III", 4, 4, 12) + bytes(16)
         elif c == P.COM_REQUESTGENERALPRINTERSTATE:
-            st = 7 if self.printing else (4 if self.powder else 1)
+            st = 7 if self.printing else (4 if self.powder else (5 if getattr(self, "warm", False) else 1))
             self._next = P.code(P.SIG_GENERALPRINTERSTATE) + bytes([st]) + le(0) + le(0)
         elif c == P.COM_REQUESTPRINTSTATUS:
             layer = min(self.layers, int(t / 2)) if self.printing else 0
@@ -68,10 +68,16 @@ class DemoTransport:
                     pass
             self.printing = True
             self.t0 = time.time()
+            self.warm = False
             self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
         elif c == P.COM_ABORTPRINT:
             self.printing = False
             self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
+        elif c == P.COM_WARMUPMODE:
+            self.warm = bool(data[2]) if len(data) > 2 else False
+            self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"
+        elif c == P.COM_SET_TARGETTEMPERATURES1 and getattr(self, "warm", False) and not self.printing:
+            self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x00"   # wie die Firmware: im Vorheizen abgelehnt
         elif c in (P.COM_GO_POWDERPREPARATION, P.COM_EXIT_POWDERPREPARATION):
             self.powder = c == P.COM_GO_POWDERPREPARATION
             self._next = P.code(P.SIG_OPERATIONSUCCESSFUL) + b"\x01"

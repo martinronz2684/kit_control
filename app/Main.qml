@@ -98,7 +98,7 @@ Window {
             seenCentral = cj.ts; loadJobs()
         }
         if (jr && jr.ts !== seenResult) {
-            if (seenResult >= 0) toast.show(jr.ok ? "„" + jr.name + "“ gestartet" : "Start fehlgeschlagen – " + jr.error, !jr.ok)
+            if (seenResult >= 0) toast.show(jr.ok ? "„" + jr.name + "“ gestartet" + (jr.warn ? " – Profil " + jr.warn : "") : "Start fehlgeschlagen – " + jr.error, !jr.ok || !!jr.warn)
             seenResult = jr.ts; loadJobs()
         }
         if (seenCentral < 0) seenCentral = 0

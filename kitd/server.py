@@ -383,12 +383,17 @@ class KitWorker(threading.Thread):
             with self.usb:
                 tr["phase"] = "Kit bereit machen"
                 self._set(transfer=dict(tr))
-                self._wait_idle()
+                ready = self._wait_idle()
                 prof = meta.get("profile")
-                if prof:
+                warn = []
+                if prof and not ready:
+                    warn = ["Pulverprofil (Kit blieb im Vorheizen)"]
+                elif prof:
+                    # Central setzt beim Start gar kein Profil (nur Vorheizen, Job, Start). Lehnt die Firmware einen
+                    # Profilwert ab, starten wir trotzdem mit den Werten, die am Kit eingestellt sind, und melden es.
                     tr["phase"] = "Pulverprofil einstellen"
                     self._set(transfer=dict(tr))
-                    self._apply_profile(prof)
+                    warn = self._apply_profile(prof)
                 tr["phase"] = "Vorheizen einschalten"
                 self._strict(P.cmd_warmup(True), "Vorheizen")
                 warm = True
@@ -398,7 +403,10 @@ class KitWorker(threading.Thread):
                 self.kit.command(P.cmd_simple(P.COM_STARTPRINT), strict=True)
             jobs.update(job_id, last_started=time.time(), starts=int(meta.get("starts") or 0) + 1)
             self.set_current_job(meta)
-            self._set(transfer=None, job_result={"ok": True, "name": meta["name"], "ts": time.time()})
+            res = {"ok": True, "name": meta["name"], "ts": time.time()}
+            if warn:
+                res["warn"] = "nicht übernommen: " + ", ".join(warn) + " – es gelten die Werte am Kit"
+            self._set(transfer=None, job_result=res)
         except Exception as e:
             if warm:
                 try:
@@ -411,11 +419,13 @@ class KitWorker(threading.Thread):
             if isinstance(e, (OSError,)) and not isinstance(e, ftp.TransferError):
                 raise   # USB weg -> Hauptschleife verbindet neu
 
-    def _wait_idle(self, timeout: float = 20.0):
-        """Vor dem Start muss der Kit „Bereit“ sein: Pulvervorbereitung (auch während sie noch aufheizt) beenden
-        und warten, bis die Firmware wieder bereit ist – sonst lehnt sie Sollwerte und Start ab."""
+    def _wait_idle(self, timeout: float = 20.0) -> bool:
+        """Vor dem Start soll der Kit „Bereit“ sein, sonst lehnt die Firmware Sollwerte ab:
+        Pulvervorbereitung beenden bzw. ein schon laufendes Vorheizen kurz ausschalten (es wird gleich wieder
+        eingeschaltet) und warten. Liefert False, wenn der Kit im Vorheizen bleibt – dann wird ohne Profil
+        gestartet, wie bei Central (Vorheizen, Job, Start). Andere Zustände (Tür offen, Fehler) brechen ab."""
         t_end = time.time() + timeout
-        sent = False
+        sent = set()
         st = None
         while time.time() < t_end:
             try:
@@ -424,11 +434,16 @@ class KitWorker(threading.Thread):
                 st = None
             if st == P.STATE_IDLE:
                 self._set(state=st, state_name=P.STATE_NAMES.get(st, f"Zustand {st}"))
-                return
-            if st in (P.STATE_POWDER_PREP, 5, 6) and not sent:
+                return True
+            if st == P.STATE_POWDER_PREP and "prep" not in sent:
                 self.kit.command(P.cmd_simple(P.COM_EXIT_POWDERPREPARATION))
-                sent = True
+                sent.add("prep")
+            elif st in (5, 6) and "warm" not in sent:
+                self.kit.command(P.cmd_warmup(False))
+                sent.add("warm")
             time.sleep(0.5)
+        if st in (5, 6):
+            return False
         name = P.STATE_NAMES.get(st, f"Zustand {st}") if st is not None else "unbekannt"
         raise ValueError(f"Kit ist nicht bereit ({name}) – Tür zu? Fehler am Kit quittiert?")
 
@@ -442,25 +457,38 @@ class KitWorker(threading.Thread):
                     raise P.ProtocolError(f"{what}: {e}") from e
                 time.sleep(1.0)
 
-    def _apply_profile(self, prof: dict):
-        """Sollwerte, Lasergeschwindigkeit und Heizstrahler aus dem Pulverprofil des Jobs (falls angegeben)."""
+    def _apply_profile(self, prof: dict) -> list:
+        """Sollwerte, Lasergeschwindigkeit und Heizstrahler aus dem Pulverprofil des Jobs (falls angegeben).
+        Ungültige Werte im Profil brechen ab; lehnt die Firmware einen Wert ab, wird er übersprungen.
+        Liefert die Namen der abgelehnten Werte."""
+        failed = []
+
+        def send(payload, what):
+            try:
+                self._strict(payload, what, tries=2)
+                return True
+            except P.ProtocolError as e:
+                print(f"Profil: {e}", flush=True)
+                failed.append(what)
+                return False
         t = prof.get("temps")
         if t:
             vals = [float(t[k]) for k in ("surface_warmup", "chamber_warmup", "surface_print", "chamber_print")]
             for v, lim in zip(vals, (P.MAX_SURFACE, P.MAX_CHAMBER, P.MAX_SURFACE, P.MAX_CHAMBER)):
                 if not 0 <= v <= lim:
                     raise ValueError(f"Profil: Temperatur außerhalb 0–{lim:g} °C")
-            self._strict(P.cmd_targets(*vals), "Solltemperaturen")
+            send(P.cmd_targets(*vals), "Solltemperaturen")
         for key, which in (("laser_speed_mm_s", "general"), ("contour_speed_mm_s", "contour")):
             if prof.get(key) is not None:
                 v = float(prof[key])
                 if not P.MIN_LASER <= v <= P.MAX_LASER:
                     raise ValueError("Profil: Lasergeschwindigkeit außerhalb des erlaubten Bereichs")
-                self._strict(P.cmd_laser_speed(which, v), "Lasergeschwindigkeit" + (" Kontur" if which == "contour" else ""))
+                send(P.cmd_laser_speed(which, v), "Lasergeschwindigkeit" + (" Kontur" if which == "contour" else ""))
         for w, pct in (prof.get("lamps") or {}).items():
             if w in ("left", "right", "front") and 0 <= float(pct) <= 100:
-                self._strict(P.cmd_lamp(w, float(pct)), "Heizstrahler")
-                self._remember_lamp(w, float(pct))
+                if send(P.cmd_lamp(w, float(pct)), "Heizstrahler"):
+                    self._remember_lamp(w, float(pct))
+        return sorted(set(failed), key=failed.index)
 
     def ready_for_net_start(self) -> str:
         """Leer, wenn ein Job aus dem Netz gestartet werden darf, sonst der Grund."""
