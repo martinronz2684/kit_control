@@ -52,6 +52,7 @@ Window {
         d[k] = true
         win.zero = z; win.anchor = a; win.zeroed = d
     }
+    function dur(sec) { var m = Math.round(sec / 60); return m >= 60 ? Math.floor(m / 60) + " h " + (m % 60) + " min" : m + " min" }
     function rel(k) { return Math.round((win.moved[k] - win.zero[k]) * 1000) / 1000 }
     // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
     readonly property var baseDepth: ({ print: 70, reservoir: 0 })
@@ -450,7 +451,10 @@ Window {
                     }
                     Column {
                         anchors.right: parent.right; anchors.rightMargin: 14; y: 12; z: 2
-                        Text { anchors.right: parent.right; text: win.st.printing ? win.st.percent + " %" : ""; color: "#5cc3e3"; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.DemiBold }
+                        Text { anchors.right: parent.right; text: !win.st.printing ? ""
+                              : win.st.percent !== undefined && win.st.state >= 7 ? win.st.percent + " %"
+                              : win.st.countdown_on && win.st.countdown_s > 0 ? win.dur(win.st.countdown_s)   // wie Central „heating up 1h 45min“
+                              : ""; color: "#5cc3e3"; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.DemiBold }
                         Lbl { anchors.right: parent.right; text: win.st.transfer && win.st.transfer.waiting ? "Heizt vor – Job wartet"
                               : win.st.state_name ? win.st.state_name : (win.st.printing ? "Druck läuft" : "Bereit") }
                     }
@@ -467,7 +471,7 @@ Window {
                         Rectangle {
                             id: bar
                             height: parent.height; radius: 3; clip: true
-                            width: parent.width * (win.st.printing ? win.st.percent / 100 : 0)
+                            width: parent.width * (win.st.printing && win.st.percent > 0 ? win.st.percent / 100 : 0)
                             Behavior on width { NumberAnimation { duration: 600; easing.type: Easing.OutCubic } }
                             color: win.cBlue
                             Image {
@@ -503,13 +507,13 @@ Window {
                             id: curLayer
                             x: 10; y: 15; width: parent.height - 30; height: width
                             job: win.job
-                            layerNo: win.job ? (win.st.printing ? Math.max(1, Math.min(win.job.layers, win.st.layer)) : win.job.layers) : 0
+                            layerNo: win.job ? (win.st.printing ? Math.max(1, Math.min(win.job.layers, win.st.layer || 1)) : win.job.layers) : 0
                             hint: "Schichtvorschau erscheint, sobald ein Job über den Pi läuft"
                         }
                         Column {
                             x: curLayer.width + 22; y: 10; width: parent.width - curLayer.width - 32; spacing: 2
                             Lbl { text: "Aktuelle Schicht" }
-                            Text { text: win.st.printing ? win.st.layer : "—"; color: win.cInk; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.Light }
+                            Text { text: win.st.printing && win.st.layer > 0 ? win.st.layer : "—"; color: win.cInk; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.Light }
                             Lbl { text: win.job && win.st.printing ? "von " + win.job.layers + " · Z " + Api.de(win.st.layer * win.job.layer_mm) + " mm" : " " ; font.pixelSize: 11 }
                             Item { width: 1; height: 6 }
                             Lbl { text: "Verstrichen" }
