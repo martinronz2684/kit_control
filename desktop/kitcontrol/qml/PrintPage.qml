@@ -318,10 +318,11 @@ Item {
                         }
                     }
 
+                    // Meldungen des Kits sind keine Fehler – nur am Kit unter System sichtbar
+                    Item { Layout.fillWidth: true; Layout.fillHeight: true }
                     Card {
+                        visible: false
                         Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        Layout.minimumHeight: 110
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 14
                             spacing: 6

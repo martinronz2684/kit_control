@@ -265,7 +265,10 @@ class KitWorker(threading.Thread):
                 key = (st.warnings, st.errors)
                 if key != getattr(self, "_codes_key", None):          # nur bei Änderung die Listen holen
                     self._codes_key = key
-                    self._fetch_codes(out)
+                    if not st.warnings and not st.errors:
+                        out.update(errors=[], warnings=[], hidden_warnings=[])   # Kit meldet nichts mehr -> weg
+                    else:
+                        self._fetch_codes(out)
         for k in ("surface", "chamber"):
             if self._due(k, now):
                 v = req(k)

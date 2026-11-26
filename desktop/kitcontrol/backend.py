@@ -839,10 +839,7 @@ class Backend(QObject):
                          "profile": (prev.get("current_job") or {}).get("profile") or ""})
             self.core.save_settings(history=hist[-100:])
             self.historyChanged.emit()
-        old = {e.get("code") for e in (prev.get("errors") or []) if isinstance(e, dict)}
-        for e in st.get("errors") or []:
-            if isinstance(e, dict) and e.get("code") not in old:
-                self.notify("Hinweis vom Kit", f"{e.get('code', '')} {e.get('title', '')}".strip())
+        # Meldungen des Kits (Pyrometer, Thermistoren …) sind keine Fehler – keine Benachrichtigung.
 
     def _fetch_printlog(self):
         host = self._host

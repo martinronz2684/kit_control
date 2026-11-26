@@ -420,7 +420,7 @@ Window {
                     Chip {
                         readonly property var e: win.st.errors || []
                         readonly property var w: win.st.warnings || []
-                        visible: e.length + w.length > 0
+                        visible: false          // Meldungen des Kits nur unter System – keine Fehler, nichts oben anzeigen
                         // Meldungen des Kits sind Hinweise: er druckt weiter (Central zeigt nur „Errors or warnings present“)
                         tint: "#24ff6a3d"
                         text: "Hinweis: " + (e.length ? e[0].title : (w.length ? w[0].title : "")) + (e.length + w.length > 1 ? " +" + (e.length + w.length - 1) : "")

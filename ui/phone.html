@@ -305,7 +305,6 @@ function render(){
   // Hinweise oben
   let n = "";
   if (live && !s.remote_control) n += `<div class="note warn"><div><b>Bedienung vom Handy ist am Kit aus</b>Am Kit-Display unter System → „Bedienung vom PC“ einschalten. Anschauen geht trotzdem.</div></div>`;
-  (s.errors || []).forEach(e => n += `<div class="note"><div><b>${e.code} · ${esc(e.title)}</b>${esc(e.text || "")}</div></div>`);
   if (s.transfer) n += `<div class="note"><div><b>Job wird übertragen</b>${esc(s.transfer.phase || "")}${s.transfer.total ? " · " + Math.floor(100*s.transfer.sent/s.transfer.total) + " %" : ""}</div></div>`;
   $("notes").innerHTML = n;
 
