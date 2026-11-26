@@ -272,7 +272,7 @@ class KitWorker(threading.Thread):
                 if v is not None:
                     out[k] = round(v.celsius, 1)
         printing = state in self.PRINT_STATES
-        if printing and self._due("print", now):
+        if state in (7, 8, 9) and self._due("print", now):       # Central fragt beim Aufheizen (6) keinen Fortschritt ab
             pr = req("print")
             if pr is not None:
                 out.update(layer=pr.layer, elapsed_s=pr.elapsed_s, percent=pr.percent)
