@@ -394,7 +394,7 @@ Window {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter; x: backBtn.width + (backBtn.visible ? 10 : 4)
                     width: Math.max(0, chips.x - x - 12); elide: Text.ElideRight
-                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "Kalibrieren", params: "Material & Parameter", sys: "System" })[win.page]
+                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "Kalibrieren", params: "Parameter", sys: "System" })[win.page]
                     color: win.cInk; font.family: win.fontName; font.pixelSize: 22; font.weight: Font.Medium; font.letterSpacing: -0.6
                 }
                 Row {
@@ -736,9 +736,9 @@ Window {
                                     lo = Math.min(lo, d[i].s, d[i].c, d[i].tc || 1e9); hi = Math.max(hi, d[i].s, d[i].c, d[i].ts || -1e9)
                                 }
                                 lo = Math.floor((lo - 5) / 10) * 10; hi = Math.ceil((hi + 5) / 10) * 10
-                                var L = 28, W = width - L, H = height - 4
+                                var L = 30, W = width - L, H = height - 16
                                 function X(k) { return L + W * k / 359 }
-                                function Y(v) { return 2 + H * (1 - (v - lo) / (hi - lo)) }
+                                function Y(v) { return 8 + H * (1 - (v - lo) / (hi - lo)) }
                                 g.strokeStyle = "rgba(255,255,255,0.06)"; g.lineWidth = 1; g.fillStyle = "#6b7079"
                                 var step = (hi - lo) > 80 ? 40 : 20
                                 for (var v = lo; v <= hi; v += step) {
