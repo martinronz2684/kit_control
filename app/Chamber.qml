@@ -5,6 +5,7 @@ import QtQuick
 Item {
     id: c
     property bool printing: false
+    property bool heating: printing     // Heizstrahler an (Vorheizen, Pulvervorbereitung, Druck)
     // Tiefe der Platten unter der Pulverebene in mm (0 = oben, 110 = ganz unten)
     property real buildDepth: 70
     property real resDepth: 30
@@ -55,9 +56,10 @@ Item {
         Image {
             source: "assets/glow-heat.png"
             x: modelData - 50; y: 51; width: 100; height: 100
-            opacity: c.printing ? 0.55 : 0.2
+            opacity: c.heating ? 0.55 : 0
+            Behavior on opacity { enabled: !c.heating; NumberAnimation { duration: 600 } }
             SequentialAnimation on opacity {
-                running: c.printing; loops: Animation.Infinite
+                running: c.heating; loops: Animation.Infinite
                 NumberAnimation { to: 0.7; duration: 1400; easing.type: Easing.InOutSine }
                 NumberAnimation { to: 0.45; duration: 1600; easing.type: Easing.InOutSine }
             }

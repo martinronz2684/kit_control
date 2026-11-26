@@ -456,6 +456,7 @@ Window {
                     Chamber {
                         id: chamber
                         printing: !!win.st.printing
+                        heating: [4, 5, 6, 7, 8].indexOf(win.st.state) >= 0     // nur wenn der Kit wirklich heizt
                         buildDepth: win.depth("print"); resDepth: win.depth("reservoir")
                         anchors.bottom: parent.bottom; anchors.bottomMargin: 18
                         anchors.horizontalCenter: parent.horizontalCenter
