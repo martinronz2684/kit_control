@@ -613,8 +613,7 @@ class KitWorker(threading.Thread):
             return "Der Kit druckt bereits"
         if s.get("transfer"):
             return "Es wird gerade ein Job übertragen oder wartet auf den Start"
-        if s.get("errors"):
-            return "Kit meldet Fehler: " + ", ".join(str(e.get("title", e)) if isinstance(e, dict) else str(e) for e in s["errors"])
+        # Fehler-/Warnmeldungen des Kits sperren den Start nicht – Central startet auch mit „Errors or warnings present“.
         if s.get("waiting_for_sd"):
             return "Kit wartet auf SD-Karte"
         return ""
