@@ -59,6 +59,9 @@ class Pi:
     def state(self) -> dict:
         return self._get("/api/state")
 
+    def printlog(self) -> dict:
+        return self._get("/api/printlog")
+
     def jobs(self) -> dict:
         return self._get("/api/jobs")
 

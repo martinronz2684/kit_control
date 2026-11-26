@@ -93,7 +93,7 @@ class Backend(QObject):
     # -- Einstellungen (Zahnrad unten links) --------------------------------------
     DEFAULTS = {"lang": "de", "ideal_xy": 90.0, "ideal_z": 110.0, "pack_gap": 3.0, "pack_wall": 2.0,
                 "check_updates": True, "auto_connect": True, "kit_laser_speed": 200.0, "notify": True,
-                "theme": "dark"}
+                "theme": "dark", "est_recoat_s": 30.0}
 
     @Property("QVariant", notify=settingsChanged)
     def settings(self):
@@ -101,6 +101,7 @@ class Backend(QObject):
         st.update({k: v for k, v in self.core.settings.items() if k in self.DEFAULTS})
         st["est_learned"] = len(self.core.settings.get("est_history", []))
         st["est_factor"] = float(self.core.settings.get("est_factor", 1.0))
+        st["est_layer_model"] = self.core.settings.get("est_layer_model") or {}
         return st
 
     @Slot(str, "QVariant")
@@ -131,7 +132,7 @@ class Backend(QObject):
 
     @Slot()
     def resetEstimate(self):
-        self.core.save_settings(est_history=[], est_factor=1.0)
+        self.core.save_settings(est_history=[], est_factor=1.0, est_layer_model=None)
         self.sliceChanged.emit()
         self.settingsChanged.emit()
         self.message.emit("Druckzeit-Lernwerte zurückgesetzt", "ok")
@@ -781,6 +782,7 @@ class Backend(QObject):
                 self._connected, self._kit = True, first
                 self.kitChanged.emit()
                 self.refreshJobs()
+                self._fetch_printlog()
                 for st in pi.events():
                     if gen != self._live_gen:
                         return
@@ -825,6 +827,7 @@ class Backend(QObject):
         if prev.get("countdown_on") and not st.get("countdown_on") and st.get("printing"):
             self.notify("Aufheizen fertig", f"{name}: der Druck startet")
         if prev.get("printing") and not st.get("printing"):
+            threading.Timer(8.0, self._fetch_printlog).start()     # Pi speichert die Schichtzeiten kurz nach dem Ende
             done = (prev.get("percent") or 0) >= 95
             self.notify("Druck fertig" if done else "Druck beendet", f"{name} – {int(prev.get('percent') or 0)} %")
             hist = self.core.settings.get("history", [])
@@ -838,6 +841,21 @@ class Backend(QObject):
         for e in st.get("errors") or []:
             if isinstance(e, dict) and e.get("code") not in old:
                 self.notify("Fehler am Kit", f"{e.get('code', '')} {e.get('title', '')}".strip())
+
+    def _fetch_printlog(self):
+        host = self._host
+
+        def run():
+            try:
+                prints = Pi(host, timeout=10).printlog().get("prints", [])
+            except Exception:
+                return                                       # ältere Pi-Software kennt das noch nicht
+            before = self.core.settings.get("est_layer_model")
+            if self.core.learn_layer_times(prints) != before:
+                self.settingsChanged.emit()
+                self.sliceChanged.emit()
+        if host:
+            threading.Thread(target=run, daemon=True).start()
 
     @Property("QVariantList", notify=tempsChanged)
     def tempHistory(self):

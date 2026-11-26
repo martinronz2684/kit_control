@@ -313,6 +313,22 @@ class CentralRulesTest(unittest.TestCase):
         layers = slice_mesh(obox(20, 10, 1, -10, -5), s)
         self.assertEqual([round(L.z, 3) for L in layers[:3]], [0.0, 0.1, 0.2])
 
+class LayerTimeFitTest(unittest.TestCase):
+    def test_fit_recoat_and_laser_factor(self):
+        from kitslice.job import fit_layer_times, estimate_seconds
+        rng = np.random.default_rng(1)
+        rows = []
+        for i in range(200):
+            scan, jump, v = rng.uniform(500, 6000), rng.uniform(100, 800), 650.0
+            rows.append([i, 48 + 1.3 * scan / v + jump / 2000 + rng.normal(0, 1.5), scan, jump, v])
+        rows[50][1] = 900                                   # Pause am Kit – darf nicht mitzählen
+        m = fit_layer_times([{"rows": rows}])
+        self.assertAlmostEqual(m["recoat_s"], 48, delta=1.5)
+        self.assertAlmostEqual(m["scan_k"], 1.3, delta=0.05)
+        t = estimate_seconds({"est_scan_m": 0, "est_jump_m": 0, "layers": 100}, 650, m["recoat_s"], scan_k=m["scan_k"])
+        self.assertAlmostEqual(t, 100 * m["recoat_s"], places=3)
+        self.assertIsNone(fit_layer_times([{"rows": rows[:10]}]))   # zu wenig Schichten
+
 
 if __name__ == "__main__":
     unittest.main()

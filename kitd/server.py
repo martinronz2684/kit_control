@@ -1,6 +1,7 @@
 """kitd – Hintergrunddienst zwischen Kit (USB) und Touch-Oberfläche (Browser).
 
     GET  /                 Oberfläche (ui/index.html)
+    GET  /api/printlog     Schichtzeiten der letzten Drucke (für die Druckzeit-Schätzung in Kit Control)
     GET  /app              Handy-Oberfläche (ui/phone.html), auf dem iPhone „Zum Home-Bildschirm“
     GET  /api/state        aktueller Zustand als JSON
     GET  /api/events       Server-Sent Events, ein Zustand pro Sekunde
@@ -41,6 +42,9 @@ STATE_DIR = os.environ.get("KIT_STATE_DIR", "/var/lib/kitd")
 NET_JOBS = os.environ.get("KIT_NET_JOBS", "1") == "1"
 NET_START = os.environ.get("KIT_NET_START", "1") == "1"
 # Nur am Gerät: Netzwerk, Updates, Neustart und der Schalter selbst
+from kitd.printlog import PrintLog  # noqa: E402
+PRINTLOG = PrintLog(STATE_DIR)
+
 LOCAL_ONLY = {"pc_link", "update_check", "update_start", "wifi_connect", "wifi_disconnect", "demo",
               "remote_control", "job_autostart", "lamp_legacy"}
 # Was der PC auch während eines Drucks darf: nur anhalten
@@ -256,6 +260,10 @@ class KitWorker(threading.Thread):
         errs = [f"{k}: {v}" for k, v in snap.items() if isinstance(v, Exception)]
         out["message"] = "; ".join(errs)
         self._set(**out)
+        try:
+            PRINTLOG.update(self.snapshot())
+        except Exception:
+            pass
 
     # -- commands --------------------------------------------------------------
     def submit(self, cmd: dict, timeout=8.0) -> dict:
@@ -538,6 +546,8 @@ class Handler(BaseHTTPRequestHandler):
             except (ValueError, KeyError) as e:
                 return self._json({"error": str(e)}, HTTPStatus.NOT_FOUND)
             return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+        if self.path == "/api/printlog":
+            return self._json({"prints": PRINTLOG.all()})
         if self.path == "/api/state":
             st = WORKER.snapshot()
             try:

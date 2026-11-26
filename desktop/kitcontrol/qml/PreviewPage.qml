@@ -164,7 +164,9 @@ Item {
                 visible: vp.done && backend.estimate.seconds !== undefined
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
                 text: win.t("Druckzeit ohne Aufheizen, „Fertig ca.“ mit ca. 1,5 h Aufheizen")
-                      + (backend.estimate.learned > 0 ? win.t(" – an ") + backend.estimate.learned + win.t(" Drucken angepasst.") : ".") + win.t(" Pulver = Bauraum × (Bauhöhe + 5 mm).")
+                      + (backend.estimate.layer_model && backend.estimate.layer_model.recoat_s
+                         ? win.t(", je Schicht ") + win.fnum(backend.estimate.recoat_s, 0) + win.t(" s Beschichten/Aufwärmen (am Kit gemessen).")
+                         : win.t(", je Schicht ") + win.fnum(backend.estimate.recoat_s, 0) + win.t(" s Beschichten/Aufwärmen (geschätzt).")) + win.t(" Pulver = Bauraum × (Bauhöhe + 5 mm).")
                 color: win.cMut; font.pixelSize: 11
             }
 

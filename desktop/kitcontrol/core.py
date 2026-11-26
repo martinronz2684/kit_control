@@ -690,10 +690,24 @@ class AppCore:
         meta = meta or (self.job[1] if self.job else None)
         if not meta:
             return {}
-        f = float(self.settings.get("est_factor", 1.0))
-        secs = estimate_seconds(meta, self.laser_speed(), float(self.settings.get("est_recoat_s", 10.0)),
-                                float(self.settings.get("est_jump_mm_s", 2000.0)), f)
-        return {"seconds": round(secs), "laser_mm_s": self.laser_speed(), "learned": len(self.settings.get("est_history", []))}
+        lt = self.settings.get("est_layer_model")          # aus gemessenen Schichtzeiten
+        if lt:
+            secs = estimate_seconds(meta, self.laser_speed(), lt["recoat_s"], float(self.settings.get("est_jump_mm_s", 2000.0)),
+                                    1.0, lt["scan_k"])
+        else:
+            secs = estimate_seconds(meta, self.laser_speed(), float(self.settings.get("est_recoat_s", 30.0)),
+                                    float(self.settings.get("est_jump_mm_s", 2000.0)), float(self.settings.get("est_factor", 1.0)))
+        return {"seconds": round(secs), "laser_mm_s": self.laser_speed(),
+                "learned": len(self.settings.get("est_history", [])), "layer_model": lt or {},
+                "recoat_s": (lt or {}).get("recoat_s", float(self.settings.get("est_recoat_s", 30.0)))}
+
+    def learn_layer_times(self, prints: list) -> dict | None:
+        """Gemessene Schichtzeiten vom Pi auswerten (ersetzt den groben Faktor, sobald genug Schichten da sind)."""
+        from kitslice.job import fit_layer_times
+        m = fit_layer_times(prints, float(self.settings.get("est_jump_mm_s", 2000.0)))
+        if m and m != self.settings.get("est_layer_model"):
+            self.save_settings(est_layer_model=m)
+        return m
 
     def learn_print(self, job_id: str, elapsed_s: float, layers_done: int) -> None:
         """Nach einem Druck: Schätzfaktor aus gemessener Zeit nachführen (gleitender Mittelwert)."""

@@ -158,12 +158,21 @@ Popup {
                         label: win.t("Lasergeschwindigkeit, wenn das Profil keine vorgibt"); unit: win.t("mm/s"); value: String(sp.st.kit_laser_speed)
                         onCommitted: (v) => { var n = sp.num(v); if (n > 0) backend.setSetting("kit_laser_speed", n) }
                     }
+                    NumField {
+                        Layout.fillWidth: true; Layout.preferredWidth: 1
+                        enabled: !sp.st.est_layer_model.recoat_s
+                        label: win.t("Beschichten + Aufwärmen je Schicht"); unit: "s"
+                        value: sp.st.est_layer_model.recoat_s ? win.fnum(sp.st.est_layer_model.recoat_s, 0) : String(sp.st.est_recoat_s)
+                        onCommitted: (v) => { var n = sp.num(v); if (n > 0) backend.setSetting("est_recoat_s", n) }
+                    }
                     KButton { text: win.t("Lernwerte zurücksetzen"); kind: "ghost"; Layout.alignment: Qt.AlignBottom; onClicked: backend.resetEstimate() }
                 }
                 Body {
                     Layout.fillWidth: true; font.pixelSize: 12; color: win.cMut
-                    text: win.t("Gelernt aus ") + sp.st.est_learned + win.t(" Drucken, Faktor ") + Number(sp.st.est_factor || 1).toFixed(2).replace(".", win.lang === "en" ? "." : ",")
-                          + win.t(". Die Geschwindigkeit übernimmt Kit Control auch vom Kit, sobald einer verbunden ist.")
+                    text: sp.st.est_layer_model.recoat_s
+                          ? win.t("Am Kit gemessen (") + win.fnum(sp.st.est_layer_model.samples, 0) + win.t(" Schichten aus ") + sp.st.est_layer_model.prints
+                            + win.t(" Drucken): ") + win.fnum(sp.st.est_layer_model.recoat_s, 0) + win.t(" s je Schicht für Beschichten und Aufwärmen, Laser ×") + win.fnum(sp.st.est_layer_model.scan_k, 2) + "."
+                          : win.t("Noch nicht gemessen: Kit Control lernt die Schichtzeiten aus jedem Druck (Pi-Update nötig). Bis dahin gilt der Wert oben.")
                 }
             }
 
