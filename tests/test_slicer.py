@@ -72,16 +72,18 @@ class SlicerTest(unittest.TestCase):
         self.assertAlmostEqual(math.degrees(math.atan2(d1[1], d1[0])) % 180, 135, places=3)
 
     def test_job_roundtrip_and_empty_layers(self):
-        # zwei Teile übereinander mit 3 mm Lücke -> 30 leere Schichten, Central schreibt nur 20
+        # zwei Quader in einem Netz mit 3 mm Lücke. Wie Central: der untere bekommt an seiner
+        # Oberseite (genau auf der Schichtgrenze z = 1,0) eine eigene Schicht, dann 29 leere
+        # Schichten (Central schreibt nur 20), oben 10 Schichten (nichts über der Oberkante)
         tris = np.concatenate([box(5, 5, 1), box(5, 5, 1, 0, 0, 4)])
         p = Part("t", tris)
         sc = Scene([p])
         data, meta, layers = make_job(sc, profiles.get("pa12"))
         self.assertEqual(len(layers), 50)
-        self.assertEqual(meta["layers"], 10 + 20 + 10)
+        self.assertEqual(meta["layers"], 11 + 20 + 10)
         idx = pjob.index(data)
         self.assertEqual(idx["z_um"][:3], [100, 200, 300])
-        self.assertEqual(idx["z_um"][-1], 4000)
+        self.assertEqual(idx["z_um"][-1], 4100)
 
     def test_scene_arrange_and_problems(self):
         sc = Scene([Part("a", box(40, 40, 5)), Part("b", box(40, 40, 5)), Part("c", box(40, 40, 5))])
@@ -245,6 +247,71 @@ class UploadTest(unittest.TestCase):
             self.assertIn("connected", st)
         finally:
             srv.shutdown()
+
+def obox(w, d, h, x=0.0, y=0.0, z=0.0):
+    """Quader mit nach außen zeigenden Flächen (wie eine echte STL)."""
+    return box(w, d, h, x, y, z)[:, ::-1]
+
+
+class CentralRulesTest(unittest.TestCase):
+    """Regeln, die am echten Central 1.2.0 gemessen wurden (Schnitte an den Schichtgrenzen)."""
+
+    def sec(self, tris):
+        from kitslice.central import part_sections
+        return part_sections(tris, 0.1)
+
+    @staticmethod
+    def area(loops):
+        return abs(sum(G.area(l) for l in G.orient([np.asarray(l) for l in loops])))
+
+    def test_box_layers_from_bottom(self):
+        r = self.sec(obox(20, 20, 1))
+        self.assertEqual(sorted(r), list(range(10)))             # 0,0 … 0,9; Oberseite bekommt keine Schicht
+        self.assertAlmostEqual(self.area(r[0]), 400.0, places=3)  # Boden bei z = 0 gehört zur Schicht 0
+
+    def test_unaligned_top_keeps_material(self):
+        # Central verliert hier durch einen Fehler die oberste Schicht (5,0 … 5,03 mm) – wir nicht
+        self.assertEqual(len(self.sec(obox(20, 20, 5.03))), 51)
+
+    @staticmethod
+    def extrude(profile, depth):
+        """Profil in der XZ-Ebene entlang y extrudieren -> geschlossene Hülle mit Normalen nach außen."""
+        P = np.asarray(profile, float)
+        T = []
+        for i in range(1, len(P) - 1):
+            a, b, c = P[0], P[i], P[i + 1]
+            T.append([[a[0], 0, a[1]], [b[0], 0, b[1]], [c[0], 0, c[1]]])
+            T.append([[a[0], depth, a[1]], [c[0], depth, c[1]], [b[0], depth, b[1]]])
+        for i in range(len(P)):
+            a, b = P[i], P[(i + 1) % len(P)]
+            q = np.array([[a[0], 0, a[1]], [b[0], 0, b[1]], [b[0], depth, b[1]], [a[0], depth, a[1]]])
+            T += [q[[0, 2, 1]], q[[0, 3, 2]]]
+        T = np.array(T, float)
+        if np.einsum("ij,ij->i", T[:, 0], np.cross(T[:, 1], T[:, 2])).sum() < 0:
+            T = T[:, ::-1]
+        return T
+
+    def test_flat_faces_on_plane_are_drawn(self):
+        # Flache Flächen genau auf der Ebene zeichnet Central mit – nach oben wie nach unten zeigend
+        step = self.extrude([(0, 0), (30, 0), (30, 2), (10, 2), (10, 3), (0, 3)], 30)
+        over = self.extrude([(10, 0), (20, 0), (20, 2), (30, 2), (30, 3), (0, 3), (0, 2), (10, 2)], 30)
+        self.assertAlmostEqual(self.area(self.sec(step)[20]), 900.0, places=2)
+        self.assertAlmostEqual(self.area(self.sec(step)[21]), 300.0, places=2)
+        self.assertAlmostEqual(self.area(self.sec(over)[19]), 300.0, places=2)
+        self.assertAlmostEqual(self.area(self.sec(over)[20]), 900.0, places=2)
+
+    def test_slanted_cut_at_boundary(self):
+        a = np.array([[0, 0, 0], [20, 0, 0], [20, 20, 0], [0, 20, 0]], float)
+        t = np.array([10, 10, 5.0])
+        tris = [a[[0, 2, 1]], a[[0, 3, 2]]] + [np.array([a[i], a[(i + 1) % 4], t]) for i in range(4)]
+        r = self.sec(np.array(tris))
+        pts = np.vstack(r[10])                                   # Schicht 10 = Schnitt genau bei z = 1,0
+        self.assertAlmostEqual(pts[:, 0].max() - pts[:, 0].min(), 16.0, places=4)
+
+    def test_layer_height_is_boundary(self):
+        s = SliceSettings.from_profile(profiles.get("pa12"))
+        layers = slice_mesh(obox(20, 10, 1, -10, -5), s)
+        self.assertEqual([round(L.z, 3) for L in layers[:3]], [0.0, 0.1, 0.2])
 
 
 if __name__ == "__main__":

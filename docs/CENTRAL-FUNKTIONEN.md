@@ -48,6 +48,7 @@ Spalte „Pi“ = Touch-Oberfläche am Kit, „PC“ = Kit Control Desktop.
 |---|---|---|---|
 | Schichten mit Schieberegler durchblättern („Layer n/m“) | ✅ | 🟡 | `/api/jobs/<id>/layer/<n>` bzw. lokal aus dem Slicer |
 | Slicer wie Central (Kontur, Schraffur 4×90°, Zickzack, Versätze, leere Schichten) | – | ✅ | `desktop/kitslice/`, nach dem Bytecode des Build-Processors |
+| Querschnitte wie Central: je Teil an den Schichtgrenzen z = k·Schicht ab Unterkante, 32-Bit-Kantenregel, Umrissverfolgung, flache Flächen auf der Ebene, Mindestvektor | – | ✅ | `desktop/kitslice/central.py` – Schicht für Schicht gegen Central 1.2.0 geprüft (Kalibrierteil, Testkörper, INDX-Halter/Thimble/Dichtungshalter: identisch). Abweichung mit Absicht: Central verliert durch einen Fehler beim Zusammenbau immer die oberste Schicht eines Teils; hier entfällt nur eine Schicht genau auf der Oberkante |
 
 ## 4. Pulver („3. Powder“)
 | Funktion | Pi | PC | Anmerkung |

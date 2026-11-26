@@ -219,8 +219,9 @@ def _nearest_order(items, start, key_start, key_end):
 
 
 def build_layers(sections, s: SliceSettings, progress=None, cancel=None, base: int = 0,
-                 n_total: int | None = None, only=None) -> list[Layer]:
-    """sections[j] gehört zur Schicht base + j. only = (von, bis) relativ zu sections: nur diese ausgeben."""
+                 n_total: int | None = None, only=None, central: bool = True) -> list[Layer]:
+    """sections[j] gehört zur Schicht base + j. only = (von, bis) relativ zu sections: nur diese ausgeben.
+    central: Schnitte kommen aus kitslice.central (schon wie Central gefiltert, Höhe = Schichtgrenze)."""
     layers = []
     n = len(sections)
     n_total = n_total if n_total is not None else base + n
@@ -231,7 +232,10 @@ def build_layers(sections, s: SliceSettings, progress=None, cancel=None, base: i
     def loops_of(i):
         if i not in prepared:
             sec = sections[i] if 0 <= i < n else []
-            lp = [G.simplify(l, s.min_vector_mm) for l in sec if np.isfinite(l).all()]
+            if central:
+                lp = [l for l in sec if np.isfinite(l).all()]
+            else:
+                lp = [G.simplify(l, s.min_vector_mm) for l in sec if np.isfinite(l).all()]
             prepared[i] = G.orient([l for l in lp if len(l) >= 3]) if lp else []
         return prepared[i]
 
@@ -247,7 +251,7 @@ def build_layers(sections, s: SliceSettings, progress=None, cancel=None, base: i
         for old in [k for k in prepared if k < i - s.skin_layers - 1]:
             prepared.pop(old, None)
             rasters.pop(old, None)
-        z = (base + i + 0.5) * s.layer_mm
+        z = (base + i + (0.0 if central else 0.5)) * s.layer_mm
         L = Layer(z)
         loops = loops_of(i)
         if loops:
@@ -319,7 +323,7 @@ def _wrun(a, b):
     n = _W["n"]
     lo, hi = max(0, a - s.skin_layers), min(n, b + s.skin_layers)
     secs = cross_sections(None, s.layer_mm, rng=(lo, hi), mesh=_W["mesh"])
-    layers = build_layers(secs, s, base=lo, n_total=n, only=(a - lo, b - lo))
+    layers = build_layers(secs, s, base=lo, n_total=n, only=(a - lo, b - lo), central=False)
     return a, [([np.asarray(c) for c in L.contours], np.asarray(L.hatches), L.contour_first, L.z) for L in layers]
 
 
@@ -328,7 +332,148 @@ def workers() -> int:
     return max(1, min(16, (os.cpu_count() or 1) - 1))
 
 
+def _clean(loop: np.ndarray) -> np.ndarray:
+    """Central schließt Umrisse mit dem Startpunkt – für Versatz und Schraffur ohne Wiederholung."""
+    if len(loop) > 3 and np.array_equal(loop[0], loop[-1]):
+        return loop[:-1]
+    return loop
+
+
+def central_sections(parts, settings: SliceSettings, progress=None, cancel=None) -> list[list[np.ndarray]]:
+    """Querschnitte wie Central: jedes Teil in seinem eigenen System (Unterkante z = 0) an den
+    Schichtgrenzen geschnitten und um ganze Schichten nach oben gesetzt. Gleiche Teile nur einmal.
+    parts: Liste (Schlüssel, Dreiecke_lokal oder Funktion dafür, x, y, z_unterkante)."""
+    from kitslice.central import part_sections
+    c = settings.layer_mm
+    cache = {}
+    glob: dict[int, list[np.ndarray]] = {}
+    uniq = {}
+    for key, tris, *_ in parts:
+        uniq.setdefault(key, tris)
+    nw = min(workers(), len(uniq))
+    if nw > 1:                                   # verschiedene Teile parallel schneiden
+        try:
+            from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+            with ProcessPoolExecutor(max_workers=nw) as ex:
+                futs = {ex.submit(part_sections, np.asarray(t() if callable(t) else t, dtype=np.float32),
+                                  c, settings.min_vector_mm): k for k, t in uniq.items()}
+                pending = set(futs)
+                while pending:
+                    if cancel and cancel():
+                        for f in pending:
+                            f.cancel()
+                        raise SliceCancelled()
+                    fin, pending = wait(pending, timeout=0.3, return_when=FIRST_COMPLETED)
+                    for f in fin:
+                        cache[futs[f]] = f.result()
+                    if progress:
+                        progress(0.3 * len(cache) / len(uniq))
+        except SliceCancelled:
+            raise
+        except Exception:                        # Prozesse nicht startbar – dann nacheinander
+            cache.clear()
+    for n, (key, tris, x, y, z0) in enumerate(parts):
+        if cancel and cancel():
+            raise SliceCancelled()
+        if key not in cache:
+            t = tris() if callable(tris) else tris
+            cache[key] = part_sections(np.asarray(t, dtype=np.float32), c, settings.min_vector_mm)
+        k0 = int(round(z0 / c))
+        off = np.array([x, y])
+        for k, loops in cache[key].items():
+            glob.setdefault(k0 + k, []).extend(_clean(l) + off for l in loops)
+        if progress:
+            progress(0.3 * (n + 1) / len(parts))
+    if not glob:
+        return []
+    return [glob.get(i, []) for i in range(max(glob) + 1)]
+
+
+def _scene_parts(scene, settings: SliceSettings):
+    from kitslice.scene import mesh_uid
+    f = 1.0 + np.asarray(settings.shrink_pct, dtype=float) / 100.0   # Schwundausgleich um Plattenmitte / z = 0
+    out = []
+    for p in scene.parts:
+        key = (mesh_uid(p.mesh), p.rot_x, p.rot_y, p.rot_z, tuple(p.scale), tuple(f))
+        out.append((key, (lambda p=p: p._oriented() * f), p.x * f[0], p.y * f[1], p.z_lift * f[2]))
+    return out
+
+
+def slice_scene(scene, settings: SliceSettings, progress=None, cancel=None, parallel=None) -> list[Layer]:
+    """Bauraum slicen: Umrisse wie Central, darauf Kontur, Füllung und alle Erweiterungen."""
+    secs = central_sections(_scene_parts(scene, settings), settings, progress, cancel)
+    return _layers_from_sections(secs, settings, progress, cancel, parallel)
+
+
 def slice_mesh(tris, settings: SliceSettings, progress=None, cancel=None, parallel=None, mesh=None) -> list[Layer]:
+    """Ein Netz (n, 3, 3) als ein Bauteil slicen (Central-Verfahren); mesh = (Eckpunkte, Dreiecke) geht auch."""
+    if tris is None:
+        verts, faces = mesh
+        tris = verts[faces]
+    t = np.asarray(tris, dtype=float).reshape(-1, 3, 3)
+    t = t * (1.0 + np.asarray(settings.shrink_pct, dtype=float) / 100.0)
+    z0 = float(t[:, :, 2].min())
+    t = t - np.array([0.0, 0.0, z0])
+    secs = central_sections([("mesh", t, 0.0, 0.0, z0)], settings, progress, cancel)
+    return _layers_from_sections(secs, settings, progress, cancel, parallel)
+
+
+def _layers_from_sections(secs, settings, progress, cancel, parallel):
+    n = len(secs)
+    nw = workers() if parallel is None else parallel
+    if nw > 1 and n >= 120:
+        try:
+            return _build_parallel(secs, settings, nw, progress, cancel)
+        except SliceCancelled:
+            raise
+        except Exception:                        # z. B. Prozesse nicht startbar – dann eben auf einem Kern
+            pass
+    return build_layers(secs, settings, _sub(progress, 0.3), cancel)
+
+
+def _sub(progress, start):
+    if not progress:
+        return None
+    return lambda v: progress(start + (1.0 - start) * min(1.0, v))
+
+
+def _brun(secs, s, lo, a, b, n):
+    layers = build_layers(secs, s, base=lo, n_total=n, only=(a - lo, b - lo))
+    return a, [([np.asarray(c) for c in L.contours], np.asarray(L.hatches), L.contour_first, L.z) for L in layers]
+
+
+def _build_parallel(secs, settings, nw, progress, cancel):
+    """Kontur und Füllung auf mehreren Kernen (je Block mit den Nachbarschichten für Haut/Kern)."""
+    from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
+    n = len(secs)
+    chunk = max(10, n // (nw * 4))
+    out = [None] * n
+    done_layers = 0
+    with ProcessPoolExecutor(max_workers=nw) as ex:
+        pending = set()
+        for a in range(0, n, chunk):
+            b = min(n, a + chunk)
+            lo, hi = max(0, a - settings.skin_layers), min(n, b + settings.skin_layers)
+            pending.add(ex.submit(_brun, secs[lo:hi], settings, lo, a, b, n))
+        while pending:
+            if cancel and cancel():
+                for f in pending:
+                    f.cancel()
+                raise SliceCancelled()
+            fin, pending = wait(pending, timeout=0.3, return_when=FIRST_COMPLETED)
+            for f in fin:
+                a, res = f.result()
+                for k, (cont, hat, cf, z) in enumerate(res):
+                    L = Layer(z, list(cont), hat)
+                    L.contour_first = cf
+                    out[a + k] = L
+                    done_layers += 1
+            if progress:
+                progress(0.3 + 0.65 * done_layers / n)
+    return out
+
+
+def slice_mesh_midplane(tris, settings: SliceSettings, progress=None, cancel=None, parallel=None, mesh=None) -> list[Layer]:
     """tris: Dreiecksuppe (n, 3, 3) oder None mit mesh = (Eckpunkte, Dreiecke)."""
     if mesh is None:
         mesh = index_mesh(tris)
@@ -345,7 +490,7 @@ def slice_mesh(tris, settings: SliceSettings, progress=None, cancel=None, parall
         except Exception:                        # z. B. Prozesse nicht startbar – dann eben auf einem Kern
             pass
     secs = cross_sections(None, settings.layer_mm, progress, cancel, mesh=(verts, faces))
-    return build_layers(secs, settings, progress, cancel)
+    return build_layers(secs, settings, progress, cancel, central=False)
 
 
 def _slice_parallel(verts, faces, settings, n, nw, progress, cancel):

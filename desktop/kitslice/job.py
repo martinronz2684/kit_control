@@ -7,7 +7,7 @@ import numpy as np
 
 from kitctl import pjob
 from kitslice.scene import Scene
-from kitslice.slicer import SliceSettings, slice_mesh
+from kitslice.slicer import SliceSettings, slice_scene
 
 
 def make_job(scene: Scene, profile: dict, progress=None, cancel=None):
@@ -17,7 +17,7 @@ def make_job(scene: Scene, profile: dict, progress=None, cancel=None):
         raise ValueError("; ".join(probs))
     s = SliceSettings.from_profile(profile)
     t0 = time.time()
-    layers = slice_mesh(None, s, progress, cancel, mesh=scene.indexed())
+    layers = slice_scene(scene, s, progress, cancel)
     idx = {}
     data = pjob.build_central([(l.contours, l.hatches, l.contour_first) for l in layers], s.layer_mm, info=idx)
     if progress:

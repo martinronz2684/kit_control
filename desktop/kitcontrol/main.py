@@ -557,7 +557,7 @@ def _selftest_slice() -> int:
     tris = v[np.array(f)]
     s = SliceSettings.from_profile(PR.validate(PR.get("pa12")))
     from kitslice import slicer
-    layers = slicer._slice_parallel(*slicer.index_mesh(tris), s, 300, 2, None, None)
+    layers = slicer.slice_mesh(tris, s, parallel=2)
     ok = len(layers) == 300 and all(L is not None and len(L.hatches) for L in layers)
     print("Selbsttest Slicen auf mehreren Kernen:", "ok" if ok else "FEHLER")
     return 0 if ok else 1
