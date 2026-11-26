@@ -39,22 +39,22 @@ Window {
     property var moved: ({ print: 0, reservoir: 0 })
     property var zero: ({ print: 0, reservoir: 0 })     // „0 setzen“: Anzeige zählt ab hier
     // Wo die Platte in den Grafiken steht, wenn „0 setzen“ gedrückt wurde: Bauplattform oben (Nullpunkt =
-    // Druckbeginn), Vorrat auf der Ladetiefe des geladenen Jobs (Bauhöhe + 5 mm) bzw. oben ohne Job
-    property var anchor: ({ print: 70, reservoir: 30 })
+    // Druckbeginn). Der Vorrat startet oben bei 0; „0 setzen“ verschiebt ihn in der Grafik nicht – die Platte
+    // bleibt dort gezeichnet, wo sie steht (z. B. heruntergefahren zum Laden), nur die Zahl beginnt bei 0
+    property var anchor: ({ print: 70, reservoir: 0 })
     property var zeroed: ({ print: false, reservoir: false })
-    property bool jobLoaded: false
     function setZero(k) {
         var z = { print: win.zero.print, reservoir: win.zero.reservoir }
         var a = { print: win.anchor.print, reservoir: win.anchor.reservoir }
         var d = { print: win.zeroed.print, reservoir: win.zeroed.reservoir }
         z[k] = win.moved[k]
-        a[k] = k === "print" ? 0 : (win.jobLoaded ? Math.min(110, win.jobH + 5) : 0)
+        a[k] = k === "print" ? 0 : win.depth(k)
         d[k] = true
         win.zero = z; win.anchor = a; win.zeroed = d
     }
     function rel(k) { return Math.round((win.moved[k] - win.zero[k]) * 1000) / 1000 }
     // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
-    readonly property var baseDepth: ({ print: 70, reservoir: 30 })
+    readonly property var baseDepth: ({ print: 70, reservoir: 0 })
     // Job, den der Kit druckt (vom Pi gestartet oder von Central über den Pi übertragen)
     readonly property var job: st.current_job && st.current_job.layers ? st.current_job : null
     // Job-Bibliothek auf dem Pi
@@ -104,7 +104,7 @@ Window {
         if (seenCentral < 0) seenCentral = 0
         if (seenResult < 0) seenResult = 0
         // Bauhöhe des laufenden Jobs für Laden & Entladen übernehmen
-        if (job && job.id !== seenCurrent) { seenCurrent = job.id; if (job.height_mm > 0) { jobH = Math.round(job.height_mm); jobLoaded = true } }
+        if (job && job.id !== seenCurrent) { seenCurrent = job.id; if (job.height_mm > 0) jobH = Math.round(job.height_mm) }
     }
     // Wie Central (Pulver-Fenster): Beim Öffnen von „Bewegung“ geht der Kit in die Pulvervorbereitung,
     // beim Verlassen wieder heraus. Nur darin lassen sich Platten fahren und Schichten auftragen.
@@ -807,7 +807,7 @@ Window {
                 property int pick: 1
                 onSelChanged: {
                     pick = Math.max(1, Math.round(layers * 0.5))
-                    if (sel && sel.height_mm > 0 && !win.st.printing) { win.jobH = Math.round(sel.height_mm); win.jobLoaded = true }   // für Pulver laden / Entladen
+                    if (sel && sel.height_mm > 0 && !win.st.printing) win.jobH = Math.round(sel.height_mm)   // für Pulver laden / Entladen
                 }
                 onVisibleChanged: if (visible) win.loadJobs()
                 function fmtDate(t) { var d = new Date(t * 1000); return ("0" + d.getDate()).slice(-2) + "." + ("0" + (d.getMonth() + 1)).slice(-2) + ". " + d.getHours() + ":" + ("0" + d.getMinutes()).slice(-2) }
