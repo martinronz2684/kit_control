@@ -145,7 +145,10 @@ class StartFromPiTest(unittest.TestCase):
         w.demo = True   # Quelle "demo" darf nur im Demo-Modus starten
         meta = jobs.save(pjob.build([[("contour", [(0, 0), (5, 5)])]] * 5), "demo", "Test")
         q = queue.Queue()
+        w.WARM_SETTLE_S = 0.0
         w._start_job(meta["id"], q)
+        for _ in range(3):
+            w._try_pending()
         self.assertTrue(q.get_nowait()["ok"])
         self.assertTrue(w.snapshot()["job_result"]["ok"], w.snapshot())
         self.assertTrue(w.kit.t.printing)
@@ -170,10 +173,13 @@ class StartFromPiTest(unittest.TestCase):
         F.send_file = flaky
         try:
             q = queue.Queue()
+            w.WARM_SETTLE_S = 0.0
             w._start_job(meta["id"], q)
             self.assertTrue(q.get_nowait()["ok"])
-            self.assertTrue(w.snapshot()["transfer"]["waiting"])      # Vorheizen bleibt an, Pi wartet
-            w._try_pending(); w._try_pending()
+            w._try_pending()                                          # 1. Übertragung scheitert
+            self.assertTrue(w.snapshot()["transfer"]["waiting"])      # Pi wartet, versucht es weiter
+            for _ in range(8):
+                w._try_pending()
         finally:
             F.send_file = real
         self.assertIsNone(w.pending)
@@ -190,7 +196,10 @@ class StartFromPiTest(unittest.TestCase):
                                           "chamber_print": 140}, "lamps": {"left": 80, "right": 100, "front": 100}}
         jobs.update(meta["id"], profile=prof)
         q = queue.Queue()
+        w.WARM_SETTLE_S = 0.0
         w._start_job(meta["id"], q)
+        for _ in range(3):
+            w._try_pending()
         self.assertTrue(q.get_nowait()["ok"])
         self.assertTrue(w.snapshot()["job_result"]["ok"], w.snapshot())
         # wie Central: beim Start kein Profil, keine Heizstrahler-Befehle

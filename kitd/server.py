@@ -443,11 +443,16 @@ class KitWorker(threading.Thread):
             return
         # Übertragen und starten; nimmt der Kit den Job noch nicht an (heizt auf, Warnung steht an …), bleibt das
         # Vorheizen an und der Pi versucht es weiter, bis der Kit ihn nimmt – die Anzeige läuft dabei weiter.
-        self.pending = {"id": job_id, "meta": meta, "data": data, "tr": tr, "since": time.time(), "next": 0.0, "tries": 0}
-        self._try_pending()
+        # Nach „Vorheizen ein“ kurz warten, bevor die Übertragung beginnt (Central: 0,25–0,5 s, wir 2 s). Kommt die
+        # Übertragung sofort, meldete der Kit „Pyrometer gestört“ und brach ab (USB-Mitschnitt des Pi).
+        self.pending = {"id": job_id, "meta": meta, "data": data, "tr": tr, "since": time.time(),
+                        "next": time.time() + self.WARM_SETTLE_S, "tries": 1, "warm": True}
+        tr.update(phase="Vorheizen läuft – Job wird gleich übertragen")
+        self._set(transfer=dict(tr))
 
     PENDING_MAX_S = 2 * 3600          # so lange wird höchstens gewartet
     PENDING_RETRY_S = 10.0
+    WARM_SETTLE_S = 2.0               # Pause zwischen „Vorheizen ein“ und Übertragung
 
     def _try_pending(self):
         pd = getattr(self, "pending", None)
@@ -463,15 +468,23 @@ class KitWorker(threading.Thread):
                 last[0] = time.time()
                 tr.update(sent=sent, phase="Übertrage Job zum Kit", waiting=False)
                 self._set(transfer=dict(tr))
-        pd["tries"] += 1
-        try:
-            with self.usb:
-                if pd["tries"] > 1:
-                    # Bricht der Kit eine Übertragung ab (z. B. Pyrometer-Meldung), schaltet er dabei das Vorheizen
-                    # aus. Wie Central vor jeder Übertragung: erst wieder „Vorheizen ein“.
+        if not pd.get("warm"):
+            # Bricht der Kit eine Übertragung ab (z. B. Pyrometer-Meldung), schaltet er dabei das Vorheizen aus.
+            # Wie Central vor jeder Übertragung: erst wieder „Vorheizen ein“, dann kurz warten.
+            try:
+                with self.usb:
                     tr.update(phase="Vorheizen einschalten", sent=0)
                     self._set(transfer=dict(tr))
                     self._strict(P.cmd_warmup(True), "Vorheizen")
+            except P.ProtocolError as e:
+                print(f"Start: Vorheizen nicht bestätigt ({e}), neuer Versuch in {self.PENDING_RETRY_S:.0f} s", flush=True)
+                pd["next"] = time.time() + self.PENDING_RETRY_S
+                return
+            pd.update(warm=True, next=time.time() + self.WARM_SETTLE_S, tries=pd["tries"] + 1)
+            return
+        pd["warm"] = False                                 # gilt nur für diesen Versuch
+        try:
+            with self.usb:
                 tr.update(phase="Übertrage Job zum Kit", sent=0)
                 self._set(transfer=dict(tr))
                 ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress,
