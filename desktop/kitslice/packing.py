@@ -716,7 +716,8 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     vols = {id(p): volume(p) for p in movers}
     # bisherige Anordnung als Kandidat: Anordnen darf nie schlechter werden als das, was schon da liegt
     st0 = _state(scene.parts)
-    prev = _score_state(scene, area, height) if only is None else None
+    # (nicht im Modus „beste Ausrichtung“: dort geht die Lage nach SLS-Regeln vor der Bauhöhe)
+    prev = _score_state(scene, area, height) if only is None and quality_w < 0.99 else None
 
     def dims(p):
         return sorted(p.size(), reverse=True)
