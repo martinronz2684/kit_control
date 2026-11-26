@@ -178,6 +178,7 @@ class StartFromPiTest(unittest.TestCase):
             F.send_file = real
         self.assertIsNone(w.pending)
         self.assertTrue(w.snapshot()["job_result"]["ok"], w.snapshot())
+        self.assertTrue(getattr(w.kit.t, "warm", False) or w.kit.t.printing)   # Vorheizen vor dem erneuten Versuch
 
     def test_start_job_with_profile(self):
         import kitd.server as S

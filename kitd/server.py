@@ -463,6 +463,12 @@ class KitWorker(threading.Thread):
         pd["tries"] += 1
         try:
             with self.usb:
+                if pd["tries"] > 1:
+                    # Bricht der Kit eine Übertragung ab (z. B. Pyrometer-Meldung), schaltet er dabei das Vorheizen
+                    # aus. Wie Central vor jeder Übertragung: erst wieder „Vorheizen ein“.
+                    tr.update(phase="Vorheizen einschalten", sent=0)
+                    self._set(transfer=dict(tr))
+                    self._strict(P.cmd_warmup(True), "Vorheizen")
                 tr.update(phase="Übertrage Job zum Kit", sent=0)
                 self._set(transfer=dict(tr))
                 ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress,
@@ -471,7 +477,7 @@ class KitWorker(threading.Thread):
                 tr["phase"] = "Druck starten"
                 self._set(transfer=dict(tr))
                 self.kit.command(P.cmd_simple(P.COM_STARTPRINT), strict=True)
-        except ftp.TransferError as e:
+        except (ftp.TransferError, P.ProtocolError) as e:
             if getattr(self, "pending", None) is None:
                 return                                    # abgebrochen
             why = ""
