@@ -83,6 +83,11 @@ ApplicationWindow {
         var h = Math.floor(s / 3600), m = Math.floor((s - h * 3600) / 60) + 1
         return h > 0 ? h + " h " + m + win.t(" min") : m + win.t(" min")
     }
+    // Zahl mit Tausenderpunkt und Komma (Deutsch) bzw. Punkt (Englisch)
+    function fnum(v, d) {
+        if (v === undefined || v === null || v === "" || isNaN(v)) return "–"
+        return Number(v).toLocaleString(Qt.locale(backend.lang === "en" ? "en_US" : "de_DE"), "f", d === undefined ? 1 : d)
+    }
     function num(v, d) { return (v === undefined || v === null || v === "") ? "–" : Number(v).toFixed(d === undefined ? 1 : d) }
 
     // ---------- Dialoge ----------

@@ -226,6 +226,16 @@ Item {
                         }
                     }
 
+                    Caption { text: win.t("Material und Kosten (sofort gespeichert, auch bei Vorlagen)"); Layout.topMargin: 6 }
+                    GridLayout {
+                        Layout.maximumWidth: edCol.width
+                        Layout.fillWidth: true
+                        columns: 3; columnSpacing: 14; rowSpacing: 12
+                        NumField { Layout.fillWidth: true; label: win.t("Preis"); unit: "€/kg"; value: backend.material.price_eur_kg ? String(backend.material.price_eur_kg) : ""; onCommitted: (v) => backend.setMaterial("price_eur_kg", v) }
+                        NumField { Layout.fillWidth: true; label: win.t("Schüttdichte Pulver"); unit: "g/ml"; value: String(backend.material.bulk_g_ml); onCommitted: (v) => backend.setMaterial("bulk_g_ml", v) }
+                        NumField { Layout.fillWidth: true; label: win.t("Dichte gesintert"); unit: "g/cm³"; value: String(backend.material.part_g_cm3); onCommitted: (v) => backend.setMaterial("part_g_cm3", v) }
+                    }
+
                     Caption { text: win.t("Temperaturen (am Kit vor dem Druck eingestellt)"); Layout.topMargin: 6 }
                     GridLayout {
                         Layout.maximumWidth: edCol.width

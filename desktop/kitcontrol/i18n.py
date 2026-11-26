@@ -122,6 +122,11 @@ EN: dict[str, str] = {
     "Nur übertragen": "Transfer only", "Übertragen und starten": "Transfer and start",
     "Job zum Kit übertragen und den Druck sofort starten? Der Kit heizt dann auf.": "Transfer the job to the Kit and start printing right away? The Kit will heat up.",
     "Jobs am Kit": "Jobs on the Kit",
+    "Pulver einfüllen": "Powder to fill", "In den Teilen": "In the parts", "Materialkosten Teile": "Material cost of parts",
+    "Preis im Profil fehlt": "No price in profile", "Pulver: Bauraum 110 × 110 mm × (Bauhöhe + 5 mm), ": "Powder: build area 110 × 110 mm × (build height + 5 mm), ",
+    " g/ml Schüttdichte. Teile: ": " g/ml bulk density. Parts: ", " – änderbar unter Parameter.": " – change under Parameters.",
+    "Material und Kosten (sofort gespeichert, auch bei Vorlagen)": "Material and cost (saved immediately, also for presets)",
+    "Preis": "Price", "Schüttdichte Pulver": "Powder bulk density", "Dichte gesintert": "Sintered density",
     "Herunterfahren": "Shut down", "Während des Drucks nicht ausschalten – erst nach dem Druck": "Don't switch off while printing – only after the print", "Kit Control (Pi) sauber herunterfahren – schont die SD-Karte": "Shut down Kit Control (Pi) cleanly – protects the SD card",
     "Kit Control herunterfahren? Den Strom erst trennen, wenn das Display schwarz ist.": "Shut down Kit Control? Only cut the power once the display is black.",
     "Achtung: Der Kit ist noch heiß – Heizen läuft am Kit weiter, bis er ausgeschaltet wird.": "Caution: the Kit is still hot – heating continues on the Kit until it is switched off.",
@@ -225,6 +230,7 @@ PATTERNS: list[tuple[re.Pattern, str]] = [(re.compile(a), b) for a, b in [
 ]]
 
 PREFIXES: list[tuple[str, str]] = [
+    ("Ungültiger Wert: ", "Invalid value: "),
     ("Löschen fehlgeschlagen: ", "Delete failed: "),
     ("Anordnen fehlgeschlagen: ", "Arranging failed: "), ("Speichern fehlgeschlagen: ", "Saving failed: "),
     ("Projekt lässt sich nicht öffnen: ", "Cannot open project: "), ("Export fehlgeschlagen: ", "Export failed: "),

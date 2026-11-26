@@ -649,6 +649,23 @@ class Backend(QObject):
         return self.core.estimate() if self.core.job and self._slice_state == "done" else {}
 
     @Property("QVariant", notify=sliceChanged)
+    def powder(self):
+        return self.core.powder() if self.core.job and self._slice_state == "done" else {}
+
+    @Property("QVariant", notify=profilesChanged)
+    def material(self):
+        return self.core.material()
+
+    @Slot(str, str)
+    def setMaterial(self, key, value):
+        try:
+            self.core.set_material(key, str(value).replace(",", ".").strip() or None)
+        except ValueError as e:
+            self.message.emit("Ungültiger Wert: " + str(e), "error")
+        self.profilesChanged.emit()
+        self.sliceChanged.emit()
+
+    @Property("QVariant", notify=sliceChanged)
     def sliceMeta(self):
         return self.core.job[1] if self.core.job and self._slice_state == "done" else {}
 

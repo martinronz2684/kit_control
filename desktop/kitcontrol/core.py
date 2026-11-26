@@ -622,8 +622,63 @@ class AppCore:
         self.job = None
         data, meta, layers = make_job(self.scene, self.profile(), progress, cancel)
         meta["powder_mm"] = round(meta["height_mm"] + 5.0, 1)      # Pulver laden: Bauhöhe + 5 mm
+        meta["parts_cm3"] = round(self.parts_volume_cm3(), 3)
         self.job = (data, meta, layers)
         return meta
+
+    MATERIAL_KEYS = ("price_eur_kg", "bulk_g_ml", "part_g_cm3")
+
+    def material(self, pid: str | None = None) -> dict:
+        """Preis und Dichten eines Materials: Werte aus dem Profil, in den Einstellungen änderbar
+        (auch bei den schreibgeschützten Vorlagen)."""
+        pid = pid or self.profile_id
+        try:
+            p = PR.get(pid)
+        except Exception:
+            p = {}
+        m = {"price_eur_kg": p.get("price_eur_kg"), "bulk_g_ml": p.get("bulk_g_ml") or 0.6,
+             "part_g_cm3": p.get("part_g_cm3") or 0.95}
+        m.update({k: v for k, v in self.settings.get("materials", {}).get(pid, {}).items() if k in self.MATERIAL_KEYS})
+        return m
+
+    def set_material(self, key: str, value, pid: str | None = None) -> None:
+        if key not in self.MATERIAL_KEYS:
+            raise ValueError(key)
+        pid = pid or self.profile_id
+        v = None if value in (None, "") else float(value)
+        lim = {"price_eur_kg": (0.0, 10000.0), "bulk_g_ml": (0.05, 3.0), "part_g_cm3": (0.05, 3.0)}[key]
+        if v is not None and not lim[0] <= v <= lim[1]:
+            raise ValueError(f"{lim[0]:g}–{lim[1]:g} erlaubt")
+        mats = dict(self.settings.get("materials", {}))
+        m = dict(mats.get(pid, {}))
+        m[key] = v
+        mats[pid] = m
+        self.save_settings(materials=mats)
+
+    def parts_volume_cm3(self) -> float:
+        """Volumen aller Bauteile (geschlossene Netze, in cm³)."""
+        vol = 0.0
+        for p in self.scene.parts:
+            t = p._oriented()
+            vol += abs(float(np.einsum("ij,ij->i", t[:, 0], np.cross(t[:, 1], t[:, 2])).sum()) / 6.0)
+        return vol / 1000.0
+
+    def powder(self, meta: dict | None = None) -> dict:
+        """Pulver einfüllen (Vorrat = Bauraumfläche × Pulverhöhe), Gewicht in den Teilen und Kosten."""
+        meta = meta or (self.job[1] if self.job else None)
+        if not meta:
+            return {}
+        m = self.material()
+        area_cm2 = (self.scene.size_mm / 10.0) ** 2
+        fill_ml = area_cm2 * meta.get("powder_mm", 0.0) / 10.0
+        parts_cm3 = meta.get("parts_cm3", 0.0)
+        out = {"fill_l": fill_ml / 1000.0, "fill_g": fill_ml * m["bulk_g_ml"], "parts_cm3": parts_cm3,
+               "parts_g": parts_cm3 * m["part_g_cm3"], "price_eur_kg": m["price_eur_kg"],
+               "bulk_g_ml": m["bulk_g_ml"], "part_g_cm3": m["part_g_cm3"]}
+        if m["price_eur_kg"]:
+            out["parts_eur"] = out["parts_g"] / 1000.0 * m["price_eur_kg"]
+            out["fill_eur"] = out["fill_g"] / 1000.0 * m["price_eur_kg"]
+        return out
 
     def laser_speed(self) -> float:
         """Für die Zeitschätzung: Profilwert, sonst zuletzt am Kit gesehene Geschwindigkeit, sonst 200 mm/s."""

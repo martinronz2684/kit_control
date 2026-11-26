@@ -30,6 +30,7 @@ BUILTIN = {
         "alternating_hatch": True, "min_vector_um": 25,
         "temps": {"surface_warmup": 150, "chamber_warmup": 140, "surface_print": 170, "chamber_print": 140},
         "laser_speed_mm_s": None, "contour_speed_mm_s": None, "lamps": None,
+        "price_eur_kg": 96.0, "bulk_g_ml": 0.6, "part_g_cm3": 0.95,
     },
     "tpe": {
         "id": "tpe", "name": "Sintratec TPE", "builtin": True,
@@ -38,6 +39,7 @@ BUILTIN = {
         "alternating_hatch": True, "min_vector_um": 25,
         "temps": {"surface_warmup": 90, "chamber_warmup": 40, "surface_print": 96, "chamber_print": 40},
         "laser_speed_mm_s": None, "contour_speed_mm_s": None, "lamps": None,
+        "price_eur_kg": None, "bulk_g_ml": 0.6, "part_g_cm3": 0.95,
     },
 }
 
@@ -105,6 +107,12 @@ def validate(p: dict) -> dict:
     q["shrink_pct"] = {a: float(sh.get(a, 0) or 0) for a in "xyz"}
     if not all(-5 <= v <= 5 for v in q["shrink_pct"].values()):
         raise ValueError("Schwundausgleich höchstens ±5 %")
+    # Material und Kosten (für Pulverbedarf und Preis)
+    for k, lo, hi in (("price_eur_kg", 0.0, 10000.0), ("bulk_g_ml", 0.05, 3.0), ("part_g_cm3", 0.05, 3.0)):
+        v = q.get(k)
+        q[k] = None if v in (None, "") else float(v)
+        if q[k] is not None and not lo <= q[k] <= hi:
+            raise ValueError(f"{k}: {lo:g}–{hi:g} erlaubt")
     q["draw_original_boundary"] = bool(q.get("draw_original_boundary", False))
     q["alternating_hatch"] = bool(q.get("alternating_hatch", True))
     return q

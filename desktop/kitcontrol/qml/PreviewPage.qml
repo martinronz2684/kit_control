@@ -144,9 +144,21 @@ Item {
                         value: backend.estimate.seconds !== undefined ? Qt.formatTime(new Date(Date.now() + (backend.estimate.seconds + vp.heatS) * 1000), "hh:mm") + win.t(" Uhr") : "–"
                         tint: win.cAcc
                     }
+                    Stat {
+                        label: win.t("Pulver einfüllen")
+                        value: backend.powder.fill_l !== undefined ? win.fnum(backend.powder.fill_l, 2) + " l · " + win.fnum(backend.powder.fill_g, 0) + " g" : "–"
+                        tint: win.cAcc
+                    }
+                    Stat {
+                        label: win.t("In den Teilen")
+                        value: backend.powder.parts_g !== undefined ? win.fnum(backend.powder.parts_cm3, 1) + " cm³ · " + win.fnum(backend.powder.parts_g, 0) + " g" : "–"
+                    }
+                    Stat {
+                        label: win.t("Materialkosten Teile")
+                        value: backend.powder.parts_eur !== undefined ? win.fnum(backend.powder.parts_eur, 2) + " €" : win.t("Preis im Profil fehlt")
+                        tint: backend.powder.parts_eur !== undefined ? win.cAcc : win.cMut
+                    }
                     Stat { label: win.t("Laserweg"); value: vp.m.est_scan_m !== undefined ? Math.round(vp.m.est_scan_m) + " m" : "–" }
-                    Stat { label: win.t("Vektoren"); value: vp.m.vectors !== undefined ? Number(vp.m.vectors).toLocaleString(Qt.locale("de_DE"), "f", 0) : "–" }
-                    Stat { label: win.t("Rechenzeit"); value: vp.m.slice_s !== undefined ? vp.m.slice_s + " s" : "–" }
                 }
             }
 
@@ -155,6 +167,7 @@ Item {
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
                 text: win.t("Druckzeit ohne Aufheizen, Fertig-Uhrzeit mit ca. 1,5 h Aufheizen. Berechnet mit ") + Math.round(backend.estimate.laser_mm_s || 0) + win.t(" mm/s")
                       + (backend.estimate.learned > 0 ? win.t(", an ") + backend.estimate.learned + win.t(" echten Drucken angepasst.") : win.t(" – wird mit jedem Druck genauer."))
+                      + (backend.powder.fill_l !== undefined ? "\n" + win.t("Pulver: Bauraum 110 × 110 mm × (Bauhöhe + 5 mm), ") + win.fnum(backend.powder.bulk_g_ml, 2) + win.t(" g/ml Schüttdichte. Teile: ") + win.fnum(backend.powder.part_g_cm3, 2) + win.t(" g/cm³") + (backend.powder.price_eur_kg ? ", " + win.fnum(backend.powder.price_eur_kg, 2) + win.t(" €/kg") : "") + win.t(" – änderbar unter Parameter.") : "")
                 color: win.cMut; font.pixelSize: 11
             }
 
