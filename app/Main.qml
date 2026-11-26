@@ -528,8 +528,35 @@ Window {
                                 } }
                         }
                     }
-                    KButton { width: parent.width; text: "Sintern stoppen & abkühlen"; onClicked: win.ask("Sintern stoppen?", "Der Kit hört auf zu belichten und kühlt ab.", function () { win.send({ cmd: "stop_sintering" }) }) }
-                    KButton { width: parent.width; kind: "red"; text: "Druck abbrechen"; onClicked: win.ask("Druck abbrechen?", "Der laufende Druck wird beendet und lässt sich nicht fortsetzen.", function () { win.send({ cmd: "abort_print" }) }) }
+                    // Knöpfe je nach Lage: kein Druck -> Jobs/Vorheizen, Job wartet -> Start abbrechen,
+                    // Druck heizt auf -> Aufheizen überspringen (wie Centrals „Skip Heat Up“), Druck läuft -> Abkühlen
+                    KButton {
+                        width: parent.width
+                        readonly property bool waiting: !!(win.st.transfer && win.st.transfer.waiting)
+                        kind: !win.st.printing && !waiting ? "pri" : ""
+                        text: waiting ? "Start abbrechen (Vorheizen aus)"
+                              : win.st.state === 6 ? "Aufheizen überspringen"
+                              : win.st.printing ? "Sintern stoppen & abkühlen" : "Job auswählen"
+                        onClicked: {
+                            if (waiting) win.send({ cmd: "job_cancel" })
+                            else if (win.st.state === 6)
+                                win.ask("Aufheizen überspringen?", "Der Kit beendet das Vorheizen und beginnt sofort mit dem Druck. Nur sinnvoll, wenn die Kammer schon durchgewärmt ist – sonst verziehen sich die ersten Schichten.",
+                                        function () { win.send({ cmd: "skip_heatup" }) })
+                            else if (win.st.printing)
+                                win.ask("Sintern stoppen?", "Der Kit hört auf zu belichten und kühlt ab.", function () { win.send({ cmd: "stop_sintering" }) })
+                            else win.page = "jobs"
+                        }
+                    }
+                    KButton {
+                        width: parent.width
+                        kind: win.st.printing ? "red" : ""
+                        text: win.st.printing ? "Druck abbrechen" : (win.st.state === 5 ? "Vorheizen aus" : "Vorheizen")
+                        onClicked: {
+                            if (win.st.printing)
+                                win.ask("Druck abbrechen?", "Der laufende Druck wird beendet und lässt sich nicht fortsetzen.", function () { win.send({ cmd: "abort_print" }) })
+                            else win.send({ cmd: "warmup", on: win.st.state !== 5 })
+                        }
+                    }
                 }
             }
 

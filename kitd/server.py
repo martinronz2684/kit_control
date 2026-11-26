@@ -868,7 +868,7 @@ class Handler(BaseHTTPRequestHandler):
         if not remote_enabled():
             return "Bedienung vom PC ist am Kit ausgeschaltet – am Display unter System → „Bedienung vom PC“ einschalten"
         st = WORKER.snapshot()
-        stop = name in STOP_CMDS or (name == "warmup" and cmd.get("on") is False)
+        stop = name in STOP_CMDS or (name == "warmup" and cmd.get("on") is False) or name == "skip_heatup"
         if (st.get("printing") or st.get("transfer")) and not stop:
             return "Während eines Drucks ist die Bedienung vom PC gesperrt – nur Abbrechen und Abkühlen"
         if name == "job_start" and not NET_START:

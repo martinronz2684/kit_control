@@ -291,6 +291,12 @@ Item {
                                 KButton { text: win.t("Heizen aus"); Layout.fillWidth: true; enabled: pr.live && win.remoteOn; onClicked: backend.cmd({ cmd: "warmup", on: false }) }
                             }
                             KButton {
+                                visible: k.state === 6
+                                text: win.t("Aufheizen überspringen"); kind: "hot"; Layout.fillWidth: true; enabled: pr.live && win.remoteOn
+                                ToolTip.visible: hovered; ToolTip.text: win.t("Wie „Skip Heat Up“ in Central: Vorheizen beenden und sofort drucken – nur bei durchgewärmter Kammer")
+                                onClicked: confirm.ask(win.t("Aufheizen überspringen und sofort drucken? Nur sinnvoll, wenn die Kammer schon durchgewärmt ist."), function() { backend.cmd({ cmd: "skip_heatup" }) })
+                            }
+                            KButton {
                                 text: win.t("Zum Abkühlen springen"); Layout.fillWidth: true; enabled: pr.live && win.remoteOn && k.printing === true
                                 onClicked: confirm.ask(win.t("Sintern beenden und abkühlen? Der Druck endet nach der aktuellen Schicht."), function() { backend.cmd({ cmd: "stop_sintering" }) })
                             }
