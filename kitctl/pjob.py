@@ -169,6 +169,13 @@ def layer(data: bytes, idx: dict, n: int, max_segments: int = 6000) -> dict:
 
 
 # -- Erzeugen ---------------------------------------------------------------------
+def _um32(mm):
+    """Wie Central (CommandBin.floatMMToInt32LittleEndianUM): float32 mm · 1000, dann Math.round (halb aufrunden)."""
+    import numpy as np
+    v = np.asarray(mm, dtype=np.float32) * np.float32(1000.0)
+    return np.floor(v + np.float32(0.5)).astype(np.int32)
+
+
 def build_central(layers, layer_mm: float, max_empty: int = 20, contour_first=True, info: dict | None = None) -> bytes:
     """Wie PrintJobKit.writeOut. layers: je Schicht (Konturen, Schraffur[, Kontur zuerst]); Konturen sind
     geschlossene Polygone [(x, y), ...] in mm, Schraffur Strecken (x0, y0, x1, y1).
@@ -189,8 +196,8 @@ def build_central(layers, layer_mm: float, max_empty: int = 20, contour_first=Tr
             raise ValueError("ungültige Koordinate im Druckjob")
         a = np.empty(len(codes), dtype=dt)
         a["c"] = codes
-        a["x"] = np.rint(xy[:, 0] * 1000).astype(np.int32)
-        a["y"] = np.rint(xy[:, 1] * 1000).astype(np.int32)
+        a["x"] = _um32(xy[:, 0])
+        a["y"] = _um32(xy[:, 1])
         return a.tobytes()
 
     for item in layers:
@@ -202,7 +209,7 @@ def build_central(layers, layer_mm: float, max_empty: int = 20, contour_first=Tr
                 continue
         else:
             empty = 0
-        z = int(round((written + 1) * layer_mm * 1000))
+        z = int(_um32(np.array([np.float32(written + 1) * np.float32(round(layer_mm * 1000)) / np.float32(1000)]))[0])
         chunk = [struct.pack("<Hii", MAKELAYER, z, written)]
         offsets.append(size)
         zs.append(z)

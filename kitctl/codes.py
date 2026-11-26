@@ -27,6 +27,7 @@ CODES = {
     99: ("FW", "Fehler", "Laser nicht kalibriert", "Der Laser ist nicht kalibriert oder die Kalibrierdaten fehlen."),
     100: ("FW", "Fehler", "Laser nicht kalibriert (Druckstart)", "Laser nicht kalibriert oder Kalibrierdaten verloren, Druck abgebrochen."),
     109: ("FW", "Warnung", "Temperaturregelung zurückgesetzt", "Die Temperaturregelung war lange nicht aktiv und wurde zurückgesetzt."),
+    6299: ("FW", "Fehler", "Pyrometer-Fehler", "Das Pyrometer (IR-Sensor für die Pulverbett-Temperatur) meldet einen Fehler. Linse auf Pulverstaub prüfen und vorsichtig reinigen, Stecker prüfen, Fehler am Kit quittieren."),
     112: ("Central", "Warnung", "Chip-ID nicht erkannt", "Central kann die Lizenzdatei nicht lesen."),
 }
 
