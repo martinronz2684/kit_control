@@ -1,0 +1,108 @@
+<svg width="1000" height="1000" viewBox="0 0 1000 1000" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Sintratec Kit mit Kit-Control-Aufsatz – Vorderansicht im Stil der Prusa-Connect-Gerätebilder -->
+  <defs>
+    <linearGradient id="alu" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#c3c7cc"/><stop offset="1" stop-color="#a9aeb4"/>
+    </linearGradient>
+    <linearGradient id="alu2" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#b1b5bb"/><stop offset=".5" stop-color="#c2c6cb"/><stop offset="1" stop-color="#aeb3b9"/>
+    </linearGradient>
+    <linearGradient id="side" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#18191b"/><stop offset=".5" stop-color="#232528"/><stop offset="1" stop-color="#18191b"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e8962e"/><stop offset=".22" stop-color="#9a4f12"/><stop offset=".55" stop-color="#2a1708"/><stop offset="1" stop-color="#140c06"/>
+    </linearGradient>
+    <linearGradient id="scr" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1b2027"/><stop offset="1" stop-color="#0b0d10"/>
+    </linearGradient>
+    <radialGradient id="btn" cx=".4" cy=".35" r=".7">
+      <stop offset="0" stop-color="#f4f5f6"/><stop offset=".6" stop-color="#a9adb2"/><stop offset="1" stop-color="#6d7176"/>
+    </radialGradient>
+    <g id="screw"><circle r="6.5" fill="#9ea2a7"/><circle r="4" fill="#d9dcdf"/><circle r="1.6" fill="#7d8186"/></g>
+    <g id="warn"><path d="M0 -26 L26 20 H-26 Z" fill="#f2c200" stroke="#1b1b1b" stroke-width="3.4" stroke-linejoin="round"/></g>
+  </defs>
+
+  <g transform="translate(500 500) scale(0.92) translate(-500 -500)">
+  <!-- Schatten -->
+  <ellipse cx="500" cy="948" rx="410" ry="10" fill="#000" opacity=".25"/>
+
+  <!-- ===== Unterteil (Kit) ===== -->
+  <rect x="122" y="336" width="756" height="604" rx="6" fill="url(#side)"/>
+  <!-- silberne Front: Querband mit Schrägen und Mittelsäule -->
+  <path d="M126 340 H874 V362 L652 512 V936 H348 V512 L126 362 Z" fill="url(#alu2)"/>
+  <path d="M126 362 L348 512 V936" stroke="#8e9297" stroke-width="2"/>
+  <path d="M874 362 L652 512 V936" stroke="#8e9297" stroke-width="2"/>
+  <!-- Sichtfenster mit Heizlicht -->
+  <rect x="378" y="466" width="244" height="64" rx="2" fill="#0d0907" stroke="#3a3c3f" stroke-width="3"/>
+  <rect x="381" y="469" width="238" height="58" fill="url(#glow)"/>
+  <rect x="404" y="494" width="9" height="28" rx="4" fill="none" stroke="#ff5a3c" stroke-width="2.4" opacity=".85"/>
+  <rect x="417" y="498" width="9" height="24" rx="4" fill="none" stroke="#ff5a3c" stroke-width="2.4" opacity=".6"/>
+  <!-- Warnzeichen und Laseraufkleber -->
+  <use href="#warn" x="500" y="440" transform="scale(1)"/>
+  <circle cx="500" cy="446" r="5" fill="#1b1b1b"/>
+  <g stroke="#1b1b1b" stroke-width="2">
+    <path d="M500 431 V438 M500 454 V461 M485 446 H492 M508 446 H515 M489 435 L494 440 M506 452 L511 457 M511 435 L506 440 M494 452 L489 457"/>
+  </g>
+  <rect x="380" y="540" width="90" height="38" rx="3" fill="#f2c200" stroke="#1b1b1b" stroke-width="2.4"/>
+  <g stroke="#1b1b1b" stroke-width="2.2" opacity=".75"><path d="M392 550 H458 M388 558 H462 M388 566 H462"/></g>
+  <use href="#warn" x="500" y="586"/>
+  <path d="M488 598 H512 M492 590 q3 -6 0 -12 M500 590 q3 -6 0 -12 M508 590 q3 -6 0 -12" stroke="#1b1b1b" stroke-width="2.4" stroke-linecap="round"/>
+  <!-- Türgriff -->
+  <rect x="862" y="518" width="26" height="150" rx="5" fill="#121315" stroke="#2d2f32" stroke-width="2"/>
+  <rect x="868" y="530" width="12" height="44" rx="2" fill="#232528"/>
+  <!-- Schrauben unten -->
+  <use href="#screw" x="186" y="362"/><use href="#screw" x="500" y="358"/><use href="#screw" x="814" y="362"/>
+  <use href="#screw" x="395" y="447"/><use href="#screw" x="605" y="447"/>
+  <use href="#screw" x="372" y="612"/><use href="#screw" x="628" y="612"/>
+  <use href="#screw" x="390" y="926"/><use href="#screw" x="610" y="926"/>
+
+  <!-- ===== Aufsatz (Kit Control) ===== -->
+  <rect x="112" y="64" width="776" height="274" rx="4" fill="url(#alu)"/>
+  <rect x="108" y="58" width="784" height="12" rx="3" fill="#d0d4d8"/>
+  <path d="M112 338 H888" stroke="#7f8388" stroke-width="3"/>
+  <!-- Display -->
+  <rect x="380" y="104" width="250" height="150" rx="12" fill="#0a0b0d"/>
+  <rect x="396" y="116" width="218" height="126" rx="3" fill="url(#scr)"/>
+  <!-- Oberfläche angedeutet -->
+  <rect x="400" y="121" width="16" height="116" rx="4" fill="#161a20"/>
+  <rect x="403" y="125" width="10" height="10" rx="3" fill="#2fa6cc"/>
+  <rect x="403" y="146" width="10" height="7" rx="2" fill="#2fa6cc" opacity=".9"/>
+  <g fill="#5d646e"><rect x="404" y="166" width="8" height="4" rx="1"/><rect x="404" y="182" width="8" height="4" rx="1"/><rect x="404" y="198" width="8" height="4" rx="1"/><rect x="404" y="226" width="8" height="4" rx="1"/></g>
+  <rect x="421" y="122" width="40" height="5" rx="2" fill="#e9edf1"/>
+  <rect x="490" y="122" width="38" height="5" rx="2.5" fill="#d0483e"/>
+  <rect x="532" y="122" width="36" height="5" rx="2.5" fill="#3a4049"/><rect x="572" y="122" width="38" height="5" rx="2.5" fill="#3a4049"/>
+  <rect x="421" y="132" width="110" height="96" rx="4" fill="#12161b" stroke="#262c34" stroke-width="1"/>
+  <rect x="438" y="168" width="40" height="38" fill="none" stroke="#7f8b96" stroke-width="1.2"/>
+  <rect x="480" y="168" width="36" height="38" fill="none" stroke="#7f8b96" stroke-width="1.2"/>
+  <rect x="443" y="182" width="12" height="9" rx="1" fill="#2fa6cc"/><rect x="458" y="186" width="14" height="8" rx="1" fill="#2fa6cc"/>
+  <rect x="446" y="150" width="14" height="10" rx="2" fill="#e8a24a" opacity=".8"/><rect x="466" y="150" width="14" height="10" rx="2" fill="#e8a24a" opacity=".8"/>
+  <rect x="426" y="221" width="100" height="3" rx="1.5" fill="#2a3038"/><rect x="426" y="221" width="34" height="3" rx="1.5" fill="#2fa6cc"/>
+  <rect x="536" y="132" width="36" height="28" rx="4" fill="#1a1f26"/><rect x="576" y="132" width="34" height="28" rx="4" fill="#1a1f26"/>
+  <rect x="540" y="141" width="22" height="7" rx="2" fill="#ff8a5c"/><rect x="580" y="141" width="22" height="7" rx="2" fill="#e9edf1"/>
+  <rect x="536" y="164" width="74" height="38" rx="4" fill="#1a1f26"/>
+  <rect x="541" y="168" width="28" height="30" rx="2" fill="none" stroke="#7f8b96" stroke-width="1"/>
+  <rect x="574" y="170" width="20" height="5" rx="2" fill="#e9edf1"/>
+  <rect x="536" y="207" width="74" height="10" rx="5" fill="#5f6fb4"/>
+  <rect x="536" y="221" width="74" height="10" rx="5" fill="#c94456"/>
+  <!-- Taster links -->
+  <circle cx="196" cy="200" r="21" fill="#8c9095"/><circle cx="196" cy="200" r="16" fill="url(#btn)"/><circle cx="196" cy="200" r="9" fill="none" stroke="#c4c8cc" stroke-width="2"/>
+  <circle cx="282" cy="200" r="21" fill="#8c9095"/><circle cx="282" cy="200" r="16" fill="url(#btn)"/><circle cx="282" cy="200" r="9" fill="none" stroke="#c4c8cc" stroke-width="2"/>
+  <!-- Taster rechts und Schlüsselschalter -->
+  <circle cx="722" cy="186" r="21" fill="#8c9095"/><circle cx="722" cy="186" r="16" fill="url(#btn)"/><circle cx="722" cy="186" r="9" fill="none" stroke="#c4c8cc" stroke-width="2"/>
+  <circle cx="808" cy="180" r="24" fill="#7b7f84"/><circle cx="808" cy="180" r="18" fill="url(#btn)"/>
+  <rect x="804" y="166" width="8" height="28" rx="2" fill="#2a2b2d"/>
+  <rect x="801" y="150" width="14" height="30" rx="5" fill="#141516"/>
+  <circle cx="806" cy="206" r="9" fill="none" stroke="#9aa0a6" stroke-width="3"/>
+  <path d="M800 214 L792 262 L800 266 L806 248 L802 246 L807 232 Z" fill="#b8bcc1" stroke="#7d8186" stroke-width="1.5"/>
+  <path d="M813 212 L826 232 L816 274 L824 276 L834 236 Z" fill="#141516"/>
+  <!-- Warnzeichen Strom -->
+  <g transform="translate(742 112) scale(1.45)">
+    <path d="M0 -26 L26 20 H-26 Z" fill="#f2c200" stroke="#1b1b1b" stroke-width="2.6" stroke-linejoin="round"/>
+    <path d="M3 -14 L-6 3 H1 L-4 15 L8 -3 H1 Z" fill="#1b1b1b"/>
+  </g>
+  <!-- Schrauben oben -->
+  <use href="#screw" x="164" y="96"/><use href="#screw" x="500" y="92"/><use href="#screw" x="846" y="96"/>
+  <use href="#screw" x="168" y="304"/><use href="#screw" x="500" y="306"/><use href="#screw" x="838" y="304"/>
+  </g>
+</svg>
