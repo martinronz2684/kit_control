@@ -45,6 +45,7 @@ TILT = 10.0          # Grad: große flache Teile leicht kippen (gegen Verzug / C
 
 
 _QCACHE: dict = {}
+_VOXCACHE: dict = {}
 
 
 def quality(p: Part, rot) -> dict:
@@ -174,7 +175,12 @@ class _Ctx:
     def shape_of(self, p: Part, rot):
         key = (mesh_uid(p.mesh), tuple(rot), tuple(p.scale))
         if key not in self.cache:
-            vox, lo = _voxelize(p.transform(p.simple(6000), rot), self.res)
+            vk = key + (round(self.res, 4),)
+            if vk not in _VOXCACHE:                       # Rasterung bleibt über mehrere Anordnen-Läufe erhalten
+                if len(_VOXCACHE) > 4000:
+                    _VOXCACHE.clear()
+                _VOXCACHE[vk] = _voxelize(p.transform(p.simple(6000), rot), self.res)
+            vox, lo = _VOXCACHE[vk]
             if any(v > s for v, s in zip(vox.shape, self.shape)):
                 self.cache[key] = None
             else:
@@ -655,6 +661,18 @@ def _layer_spread(occ: np.ndarray) -> float:
     return float(a.std() / max(a.mean(), 1e-9))
 
 
+def _score_state(scene: Scene, area: float, height: float):
+    """(Bauhöhe, leere Höhe) einer gültigen Anordnung – None, wenn Teile überlappen oder herausragen."""
+    if not scene.parts or scene.collision_pairs():
+        return None
+    h = area / 2
+    for p in scene.parts:
+        lo, hi = p.bbox()
+        if lo[0] < -h - 1e-6 or lo[1] < -h - 1e-6 or hi[0] > h + 1e-6 or hi[1] > h + 1e-6 or hi[2] > height + 1e-6:
+            return None
+    return (round(max(p.bbox()[1][2] for p in scene.parts), 1), round(empty_height(scene.parts), 1))
+
+
 def _state(parts):
     return [(p, p.rot_x, p.rot_y, p.rot_z, p.x, p.y, p.z_lift) for p in parts]
 
@@ -696,6 +714,9 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     ctx = _Ctx(area, height, gap, wall, floor, res)
     occ0 = _fixed_occ(ctx, fixed)
     vols = {id(p): volume(p) for p in movers}
+    # bisherige Anordnung als Kandidat: Anordnen darf nie schlechter werden als das, was schon da liegt
+    st0 = _state(scene.parts)
+    prev = _score_state(scene, area, height) if only is None else None
 
     def dims(p):
         return sorted(p.size(), reverse=True)
@@ -762,8 +783,19 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     _apply(ctx, best[1])
     settle(scene, movers, gap, floor=floor)
     cover_bands(scene, movers, gap)
+    kept = False
+    if prev is not None:
+        new_st, new_sc = _state(scene.parts), _score_state(scene, area, height)
+        _restore(st0)                                # bisherige Lage nur nachverdichten (absenken, Lücken schließen)
+        settle(scene, movers, gap, floor=floor)
+        cover_bands(scene, movers, gap)
+        old_sc = _score_state(scene, area, height)
+        if old_sc is not None and (new_sc is None or old_sc < new_sc):
+            kept = True                              # bisherige (nachverdichtete) Anordnung ist besser
+        else:
+            _restore(new_st)
     empty = best[2]
-    if not fixed:                                # Anordnung mittig (gleichmäßigste Temperatur)
+    if not fixed and not kept:                   # Anordnung mittig (gleichmäßigste Temperatur)
         lo = np.min([q.bbox()[0] for q in scene.parts], axis=0)
         hi = np.max([q.bbox()[1] for q in scene.parts], axis=0)
         dx, dy = -(lo[0] + hi[0]) / 2, -(lo[1] + hi[1]) / 2
@@ -776,7 +808,7 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     if progress:
         progress(1.0)
     return {"ok": bool(total_h <= height + 1e-6), "height": round(total_h, 1),
-            "density": round(float(dens) * 100, 1), "passes": tried,
+            "density": round(float(dens) * 100, 1), "passes": tried, "kept": kept,
             "empty_mm": round(empty_height(scene.parts), 1)}
 
 

@@ -353,6 +353,14 @@ class NestingTest(unittest.TestCase):
         self.assertLessEqual(r["height"], 30.5)                # alles in einer Lage: Klötze in den Bechern
         self.assertEqual(r["empty_mm"], 0.0)
 
+    def test_arranging_again_never_gets_worse(self):
+        from kitslice import packing
+        sc = Scene([Part(f"b{i}", obox(20 + i * 4, 18, 10 + i * 3), lock_orient=(i % 2 == 0)) for i in range(7)])
+        h1 = packing.auto_pack(sc, time_budget=1.0)["height"]
+        h2 = packing.auto_pack(sc, time_budget=0.3)["height"]   # kurzer Lauf: darf trotzdem nicht höher werden
+        self.assertLessEqual(h2, h1 + 1e-6)
+        self.assertEqual(sc.problems(), [])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -423,6 +423,8 @@ class Backend(QObject):
             if not r.get("ok"):
                 return r.get("error") or f"Angeordnet, aber höher als der ideale Bereich ({r.get('height')} mm)"
             lk = f" – {r['locked']} gesperrte Teile wurden nicht bewegt" if r.get("locked") else ""
+            if r.get("kept"):
+                lk = " – die bisherige Anordnung war niedriger, sie wurde nur nachverdichtet" + lk
             return f"Angeordnet{lk}: Bauhöhe {r['height']} mm, Packdichte {r['density']} %, leere Schichten {r.get('empty_mm', 0)} mm ({r['passes']} Durchläufe)" + (
                 " – Ausrichtungsregeln gelockert, weil die Teile sonst nicht passen" if r.get("relaxed") else "")
         self._pack_job(fn, msg)
