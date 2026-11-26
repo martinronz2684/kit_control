@@ -165,7 +165,8 @@ class StartFromPiTest(unittest.TestCase):
         w._start_job(meta["id"], q)
         self.assertTrue(q.get_nowait()["ok"])
         self.assertTrue(w.snapshot()["job_result"]["ok"], w.snapshot())
-        self.assertEqual(w.snapshot()["lamps"]["left"], 80)
+        # wie Central: beim Start kein Profil, keine Heizstrahler-Befehle
+        self.assertNotIn("lamps", w.snapshot())
 
 
 if __name__ == "__main__":

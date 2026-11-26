@@ -383,24 +383,22 @@ class KitWorker(threading.Thread):
             with self.usb:
                 tr["phase"] = "Kit bereit machen"
                 self._set(transfer=dict(tr))
-                ready = self._wait_idle()
-                prof = meta.get("profile")
+                self._wait_idle()
+                self._check_codes()
                 warn = []
-                if prof and not ready:
-                    warn = ["Pulverprofil (Kit blieb im Vorheizen)"]
-                elif prof:
-                    # Central setzt beim Start gar kein Profil (nur Vorheizen, Job, Start). Lehnt die Firmware einen
-                    # Profilwert ab, starten wir trotzdem mit den Werten, die am Kit eingestellt sind, und melden es.
-                    tr["phase"] = "Pulverprofil einstellen"
-                    self._set(transfer=dict(tr))
-                    warn = self._apply_profile(prof)
+                # Wie Central (PrintPaneController): nur Vorheizen ein, Job übertragen, Druck starten – kein
+                # Pulverprofil, keine Heizstrahler. Temperaturen und Laser gelten so, wie sie am Kit eingestellt sind.
                 tr["phase"] = "Vorheizen einschalten"
                 self._strict(P.cmd_warmup(True), "Vorheizen")
                 warm = True
                 tr["phase"] = "Übertrage Job zum Kit"
                 self._set(transfer=dict(tr))
-                ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress,
-                              log=lambda m: print(m, flush=True))
+                try:
+                    ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress,
+                                  log=lambda m: print(m, flush=True))
+                except ftp.TransferError as e:
+                    why = self._codes_text()
+                    raise ftp.TransferError(str(e) + (f" – Kit meldet: {why}" if why else "")) from e
                 tr["phase"] = "Druck starten"
                 self._set(transfer=dict(tr))
                 self.kit.command(P.cmd_simple(P.COM_STARTPRINT), strict=True)
@@ -422,33 +420,42 @@ class KitWorker(threading.Thread):
             if isinstance(e, (OSError,)) and not isinstance(e, ftp.TransferError):
                 raise   # USB weg -> Hauptschleife verbindet neu
 
-    def _wait_idle(self, timeout: float = 20.0) -> bool:
-        """Vor dem Start soll der Kit „Bereit“ sein, sonst lehnt die Firmware Sollwerte ab:
-        Pulvervorbereitung beenden bzw. ein schon laufendes Vorheizen kurz ausschalten (es wird gleich wieder
-        eingeschaltet) und warten. Liefert False, wenn der Kit im Vorheizen bleibt – dann wird ohne Profil
-        gestartet, wie bei Central (Vorheizen, Job, Start). Andere Zustände (Tür offen, Fehler) brechen ab."""
+    def _wait_idle(self, timeout: float = 20.0) -> None:
+        """Pulvervorbereitung beenden (Central schließt das Pulverfenster vor dem Druck) und warten, bis der Kit
+        „Bereit“ ist. Heizt er schon vor, ist das in Ordnung – Central schickt dann auch nur „Vorheizen ein“."""
         t_end = time.time() + timeout
-        sent = set()
+        sent = False
         st = None
         while time.time() < t_end:
             try:
                 st = self.kit.request("state").state
             except P.ProtocolError:
                 st = None
-            if st == P.STATE_IDLE:
-                self._set(state=st, state_name=P.STATE_NAMES.get(st, f"Zustand {st}"))
-                return True
-            if st == P.STATE_POWDER_PREP and "prep" not in sent:
+            if st in (P.STATE_IDLE, 5, 6):
+                return
+            if st == P.STATE_POWDER_PREP and not sent:
                 self.kit.command(P.cmd_simple(P.COM_EXIT_POWDERPREPARATION))
-                sent.add("prep")
-            elif st in (5, 6) and "warm" not in sent:
-                self.kit.command(P.cmd_warmup(False))
-                sent.add("warm")
+                sent = True
             time.sleep(0.5)
-        if st in (5, 6):
-            return False
         name = P.STATE_NAMES.get(st, f"Zustand {st}") if st is not None else "unbekannt"
         raise ValueError(f"Kit ist nicht bereit ({name}) – Tür zu? Fehler am Kit quittiert?")
+
+    def _codes_text(self, names=("errors", "warnings")) -> str:
+        from kitctl.codes import describe
+        found = []
+        for name in names:
+            try:
+                found += self.kit.request(name).codes
+            except P.ProtocolError:
+                pass
+        return ", ".join(f"{describe(c)['title']} ({c})" for c in found)
+
+    def _check_codes(self) -> None:
+        """Steht am Kit ein Fehler an, nimmt er keinen Job an – gleich sagen, was los ist. (Warnungen
+        blockieren nicht; manche stehen dauerhaft an. Bricht der Kit die Übertragung ab, werden sie genannt.)"""
+        txt = self._codes_text(("errors",))
+        if txt:
+            raise ValueError(f"Kit meldet {txt} – erst beheben, ggf. Kit aus- und wieder einschalten")
 
     def _strict(self, payload: bytes, what: str, tries: int = 3):
         """Befehl mit Erfolgs-Prüfung; die Firmware lehnt direkt nach einem Zustandswechsel gern kurz ab."""
