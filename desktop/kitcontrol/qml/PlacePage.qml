@@ -110,7 +110,7 @@ Item {
             }
             Text {
                 anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.margins: 14
-                width: parent.width - 28; elide: Text.ElideRight
+                width: parent.width - 28; wrapMode: Text.WordWrap; maximumLineCount: 2
                 text: win.t("Bauteil ziehen: verschieben (von oben auf der Platte, von vorne/seitlich auch in der Höhe) · daneben ziehen: drehen · rechte Maustaste: schieben · Mausrad: zoomen")
                 color: win.cDim; font.pixelSize: 11
             }
@@ -162,8 +162,8 @@ Item {
                                 color: win.cAcc; font.pixelSize: 11
                             }
                         }
-                        KButton { text: "↶"; kind: "ghost"; implicitWidth: 38; enabled: backend.canUndo; onClicked: backend.undo(); ToolTip.visible: hovered; ToolTip.text: win.t("Rückgängig") }
-                        KButton { text: "↷"; kind: "ghost"; implicitWidth: 38; enabled: backend.canRedo; onClicked: backend.redo(); ToolTip.visible: hovered; ToolTip.text: win.t("Wiederholen") }
+                        KButton { text: "↶"; kind: "ghost"; implicitWidth: 38; leftPadding: 0; rightPadding: 0; enabled: backend.canUndo; onClicked: backend.undo(); ToolTip.visible: hovered; ToolTip.text: win.t("Rückgängig") }
+                        KButton { text: "↷"; kind: "ghost"; implicitWidth: 38; leftPadding: 0; rightPadding: 0; enabled: backend.canRedo; onClicked: backend.redo(); ToolTip.visible: hovered; ToolTip.text: win.t("Wiederholen") }
                     }
                     // Gleiche Teile zusammengefasst: Vorschaubild, Name, Anzahl mit + / −, aufklappbar
                     ListView {
@@ -212,7 +212,7 @@ Item {
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 1
                                         Text { text: (modelData.locked ? "🔒 " : "") + modelData.name; color: win.cInk; font.pixelSize: 13; elide: Text.ElideRight; Layout.fillWidth: true }
-                                        Text { text: modelData.size[0] + " × " + modelData.size[1] + " × " + modelData.size[2] + win.t(" mm"); color: win.cMut; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true }
+                                        Text { text: win.fnum(modelData.size[0], 1) + " × " + win.fnum(modelData.size[1], 1) + " × " + win.fnum(modelData.size[2], 1) + win.t(" mm"); color: win.cMut; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true }
                                     }
                                     // Anzahl
                                     Row {
@@ -293,7 +293,7 @@ Item {
                         NumField { Layout.fillWidth: true; label: win.t("Höhe über Platte"); unit: "mm"; value: pg.cur ? pg.cur.z.toFixed(1) : ""; onCommitted: (v) => backend.setPart(pg.sel, "z_lift", v) }
                         Text {
                             Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 8
-                            elide: Text.ElideRight
+                            wrapMode: Text.WordWrap
                             text: pg.cur ? win.fnum(pg.cur.size[0], 1) + " × " + win.fnum(pg.cur.size[1], 1) + " × " + win.fnum(pg.cur.size[2], 1) + win.t(" mm") : ""
                             color: win.cMut; font.pixelSize: 12
                         }

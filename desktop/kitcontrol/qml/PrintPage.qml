@@ -304,9 +304,9 @@ Item {
                             }
                             RowLayout {
                                 spacing: 8
-                                KButton { text: win.t("Temperaturprotokolle"); kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.openFolder("logs") }
+                                KButton { text: win.t("Protokolle"); kind: "ghost"; leftPadding: 6; rightPadding: 6; Layout.fillWidth: true; Layout.preferredWidth: 1; onClicked: backend.openFolder("logs"); ToolTip.visible: hovered; ToolTip.text: win.t("Temperaturprotokolle öffnen") }
                                 KButton {
-                                    text: win.t("Herunterfahren"); kind: "ghost"; Layout.fillWidth: true; Layout.preferredWidth: 1
+                                    text: win.t("Herunterfahren"); kind: "ghost"; leftPadding: 6; rightPadding: 6; Layout.fillWidth: true; Layout.preferredWidth: 1
                                     enabled: backend.connected && win.remoteOn && k.printing !== true && !k.transfer
                                     ToolTip.visible: hovered; ToolTip.text: win.t("Kit Control (Pi) sauber herunterfahren – schont die SD-Karte")
                                     onClicked: confirm.ask(win.t("Kit Control herunterfahren? Den Strom erst trennen, wenn das Display schwarz ist.")

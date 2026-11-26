@@ -37,6 +37,8 @@ Window {
     property bool targetsLoaded: false
     property bool warm: false
     property var moved: ({ print: 0, reservoir: 0 })
+    property var zero: ({ print: 0, reservoir: 0 })     // „0 setzen“: Anzeige zählt ab hier
+    function rel(k) { return Math.round((win.moved[k] - win.zero[k]) * 1000) / 1000 }
     // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
     readonly property var baseDepth: ({ print: 70, reservoir: 30 })
     // Job, den der Kit druckt (vom Pi gestartet oder von Central über den Pi übertragen)
@@ -538,11 +540,11 @@ Window {
                         Lbl { x: 14; y: 12; text: modelData[0] }
                         Row {
                             x: 14; y: 28; spacing: 4
-                            Text { text: (win.moved[ax.key] > 0 ? "−" : win.moved[ax.key] < 0 ? "+" : "") + Api.de(Math.abs(win.moved[ax.key]))
+                            Text { text: (win.rel(ax.key) > 0 ? "−" : win.rel(ax.key) < 0 ? "+" : "") + Api.de(Math.abs(win.rel(ax.key)))
                                 color: win.cInk; font.family: win.fontName; font.pixelSize: 40; font.weight: Font.Light; font.letterSpacing: -1.4 }
                             Text { y: 21; text: "mm"; color: win.cMut; font.family: win.fontName; font.pixelSize: 16 }
                         }
-                        Lbl { x: 14; y: 78; text: win.st.printing ? "Während des Drucks gesperrt" : "seit Start"; font.pixelSize: 11 }
+                        Lbl { x: 14; y: 78; text: win.st.printing ? "Während des Drucks gesperrt" : (win.zero[ax.key] !== 0 ? "seit Nullpunkt" : "seit Start"); font.pixelSize: 11 }
 
                         // Schacht: dünnes Blech, Pulver mit Korn, massive Platte
                         Item {
@@ -585,8 +587,8 @@ Window {
                             readonly property real h: (ax.height - 108 - 16 - 16 - 44) / 2
                             KButton { width: 76; height: parent.h; text: "▲"; size: 22; ok: !win.st.printing; onClicked: win.jog(ax.key, -win.step) }
                             KButton { width: 76; height: parent.h; text: "▼"; size: 22; ok: !win.st.printing; onClicked: win.jog(ax.key, win.step) }
-                            KButton { width: 76; height: 44; text: "Start"; size: 13; ok: !win.st.printing && win.moved[ax.key] !== 0
-                                onClicked: win.jog(ax.key, -win.moved[ax.key]) }
+                            KButton { width: 76; height: 44; text: "0 setzen"; size: 13; ok: win.rel(ax.key) !== 0
+                                onClicked: { var z = { print: win.zero.print, reservoir: win.zero.reservoir }; z[ax.key] = win.moved[ax.key]; win.zero = z } }
                         }
                     }
                 }
@@ -963,7 +965,7 @@ Window {
                                 text: "Fährt Bauplattform, Vorrat und Beschichter auf ihre Ausgangsposition – wie „Home all axes“ in Central." }
                             KButton { width: parent.width; height: 46; text: "Referenzfahrt starten"; ok: !calPage.locked
                                 onClicked: win.ask("Referenzfahrt?", "Alle Achsen fahren auf ihre Ausgangsposition. Bauraum frei?", function () {
-                                    win.send({ cmd: "pattern", name: "home", confirmed: true }, function (ok) { if (ok) win.moved = { print: 0, reservoir: 0 } }) }) }
+                                    win.send({ cmd: "pattern", name: "home", confirmed: true }, function (ok) { if (ok) { win.moved = { print: 0, reservoir: 0 }; win.zero = { print: 0, reservoir: 0 } } }) }) }
                         }
                     }
                 }

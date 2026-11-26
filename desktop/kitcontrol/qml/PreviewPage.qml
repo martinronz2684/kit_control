@@ -130,46 +130,51 @@ Item {
                 GridLayout {
                     id: st
                     anchors.fill: parent; anchors.margins: 14
-                    columns: 2; rowSpacing: 14; columnSpacing: 10
-                    Stat { label: win.t("Schichten"); value: vp.m.layers ? win.fnum(vp.m.layers, 0) : "–" }
-                    Stat { label: win.t("Bauhöhe"); value: vp.m.height_mm !== undefined ? win.fnum(vp.m.height_mm, 1) + win.t(" mm") : "–" }
-                    Stat { label: win.t("Pulver laden"); value: vp.m.powder_mm !== undefined ? win.fnum(vp.m.powder_mm, 1) + win.t(" mm") : "–"; tint: win.cAcc }
-                    Stat { label: win.t("Pulver einfüllen"); value: backend.powder.fill_l !== undefined ? win.fnum(backend.powder.fill_l, 2) + " l" : "–"; tint: win.cAcc }
-                    Stat { label: win.t("Pulvergewicht"); value: backend.powder.fill_g !== undefined ? win.fnum(backend.powder.fill_g, 0) + " g" : "–" }
-                    Stat { label: win.t("Teilegewicht"); value: backend.powder.parts_g !== undefined ? win.fnum(backend.powder.parts_g, 0) + " g" : "–" }
-                    Stat { label: win.t("Teilevolumen"); value: backend.powder.parts_cm3 !== undefined ? win.fnum(backend.powder.parts_cm3, 1) + " cm³" : "–" }
+                    columns: 2; rowSpacing: 9; columnSpacing: 10
+                    Stat { size: 18; label: win.t("Schichten"); value: vp.m.layers ? win.fnum(vp.m.layers, 0) : "–" }
+                    Stat { size: 18; label: win.t("Bauhöhe"); value: vp.m.height_mm !== undefined ? win.fnum(vp.m.height_mm, 1) + win.t(" mm") : "–" }
+                    Stat { size: 18; label: win.t("Pulver laden"); value: vp.m.powder_mm !== undefined ? win.fnum(vp.m.powder_mm, 1) + win.t(" mm") : "–"; tint: win.cAcc }
+                    Stat { size: 18; label: win.t("Pulver einfüllen"); value: backend.powder.fill_l !== undefined ? win.fnum(backend.powder.fill_l, 2) + " l" : "–"; tint: win.cAcc }
+                    Stat { size: 18; label: win.t("Pulvergewicht"); value: backend.powder.fill_g !== undefined ? win.fnum(backend.powder.fill_g, 0) + " g" : "–" }
+                    Stat { size: 18; label: win.t("Teilegewicht"); value: backend.powder.parts_g !== undefined ? win.fnum(backend.powder.parts_g, 0) + " g" : "–" }
+                    Stat { size: 18; label: win.t("Teilevolumen"); value: backend.powder.parts_cm3 !== undefined ? win.fnum(backend.powder.parts_cm3, 1) + " cm³" : "–" }
                     Stat {
+                        size: 18
                         label: win.t("Materialkosten")
                         value: backend.powder.parts_eur !== undefined ? win.fnum(backend.powder.parts_eur, 2) + " €" : win.t("kein Preis")
                         tint: backend.powder.parts_eur !== undefined ? win.cAcc : win.cMut
                     }
                     Stat {
+                        size: 18
                         label: win.t("Druckzeit")
                         value: backend.estimate.seconds !== undefined ? win.fmtTime(backend.estimate.seconds) : "–"
                         tint: win.cAcc
                     }
                     Stat {
+                        size: 18
                         label: win.t("Fertig ca.")
                         value: backend.estimate.seconds !== undefined ? Qt.formatTime(new Date(Date.now() + (backend.estimate.seconds + vp.heatS) * 1000), "hh:mm") + win.t(" Uhr") : "–"
                         tint: win.cAcc
                     }
-                    Stat { label: win.t("Laserweg"); value: vp.m.est_scan_m !== undefined ? win.fnum(vp.m.est_scan_m, 0) + " m" : "–" }
+                    Stat { size: 18; label: win.t("Laserweg"); value: vp.m.est_scan_m !== undefined ? win.fnum(vp.m.est_scan_m, 0) + " m" : "–" }
                 }
             }
 
             Text {
                 visible: vp.done && backend.estimate.seconds !== undefined
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
-                text: win.t("Druckzeit ohne Aufheizen, Fertig-Uhrzeit mit ca. 1,5 h Aufheizen. Berechnet mit ") + Math.round(backend.estimate.laser_mm_s || 0) + win.t(" mm/s")
-                      + (backend.estimate.learned > 0 ? win.t(", an ") + backend.estimate.learned + win.t(" echten Drucken angepasst.") : win.t(" – wird mit jedem Druck genauer."))
-                      + (backend.powder.fill_l !== undefined ? "\n" + win.t("Pulver: Bauraum 110 × 110 mm × (Bauhöhe + 5 mm), ") + win.fnum(backend.powder.bulk_g_ml, 2) + win.t(" g/ml Schüttdichte. Teile: ") + win.fnum(backend.powder.part_g_cm3, 2) + win.t(" g/cm³") + (backend.powder.price_eur_kg ? ", " + win.fnum(backend.powder.price_eur_kg, 2) + win.t(" €/kg") : "") + win.t(" – änderbar unter Parameter.") : "")
+                text: win.t("Druckzeit ohne Aufheizen, Fertig mit ca. 1,5 h Aufheizen (") + Math.round(backend.estimate.laser_mm_s || 0) + win.t(" mm/s")
+                      + (backend.estimate.learned > 0 ? win.t(", an ") + backend.estimate.learned + win.t(" Drucken angepasst).") : win.t(").")) + win.t(" Pulver = Bauraum × (Bauhöhe + 5 mm).")
                 color: win.cMut; font.pixelSize: 11
             }
 
             Item { Layout.fillHeight: true }
 
-            KButton { visible: vp.done; Layout.fillWidth: true; text: win.t("Druckdatei speichern …"); kind: "ghost"; onClicked: saveJob.open() }
-            KButton { visible: vp.done; Layout.fillWidth: true; text: win.t("Weiter zum Drucken"); kind: "pri"; onClicked: win.page = 4 }
+            RowLayout {
+                visible: vp.done; Layout.fillWidth: true; spacing: 8
+                KButton { text: win.t("Speichern …"); kind: "ghost"; onClicked: saveJob.open(); ToolTip.visible: hovered; ToolTip.text: win.t("Druckdatei speichern …") }
+                KButton { Layout.fillWidth: true; text: win.t("Weiter zum Drucken"); kind: "pri"; onClicked: win.page = 4 }
+            }
         }
     }
 }

@@ -273,7 +273,7 @@ Item {
                         Text {
                             text: pp.ro ? win.t("Änderungen legen automatisch ein eigenes Profil an.") : win.t("Änderungen werden sofort gespeichert.")
                             color: win.cMut; font.pixelSize: 12
-                            Layout.fillWidth: true; elide: Text.ElideRight
+                            Layout.fillWidth: true; wrapMode: Text.WordWrap
                         }
                         KButton { text: win.t("Als neues Profil speichern"); onClicked: pp.save(true, false) }
                         KButton {
