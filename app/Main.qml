@@ -450,7 +450,8 @@ Window {
                     Column {
                         anchors.right: parent.right; anchors.rightMargin: 14; y: 12; z: 2
                         Text { anchors.right: parent.right; text: win.st.printing ? win.st.percent + " %" : ""; color: "#5cc3e3"; font.family: win.fontName; font.pixelSize: 26; font.weight: Font.DemiBold }
-                        Lbl { anchors.right: parent.right; text: win.st.printing ? "Druck läuft" : (win.st.waiting_for_sd ? "Wartet auf SD-Karte" : "Bereit") }
+                        Lbl { anchors.right: parent.right; text: win.st.transfer && win.st.transfer.waiting ? "Heizt vor – Job wartet"
+                              : win.st.state_name ? win.st.state_name : (win.st.printing ? "Druck läuft" : "Bereit") }
                     }
                     Chamber {
                         id: chamber

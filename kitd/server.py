@@ -301,6 +301,7 @@ class KitWorker(threading.Thread):
                 codes = self.kit.request(key).codes
             except P.ProtocolError:
                 continue
+            codes = [c for c in codes if c]                 # 0 = leerer Eintrag, kein Fehler
             if key == "warnings":
                 # Auf Wunsch ausgeblendete Warnungen (Standard: 81 Beschichter-Referenzfahrt)
                 out["hidden_warnings"] = [describe(c) for c in codes if c in IGNORED_WARNINGS]
@@ -549,7 +550,7 @@ class KitWorker(threading.Thread):
         found = []
         for name in names:
             try:
-                found += self.kit.request(name).codes
+                found += [c for c in self.kit.request(name).codes if c]
             except P.ProtocolError:
                 pass
         return ", ".join(f"{describe(c)['title']} ({c})" for c in found)
