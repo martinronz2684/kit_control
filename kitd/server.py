@@ -649,6 +649,20 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if self.path.startswith("/api/trace"):
+            # USB-Mitschnitt als Text: /api/trace?min=10 (letzte 10 Minuten), &only=central|kitd
+            from urllib.parse import parse_qs, urlparse
+            from kitctl import trace
+            q = parse_qs(urlparse(self.path).query)
+            mins = float((q.get("min") or ["30"])[0])
+            body = trace.text(time.time() - mins * 60, (q.get("only") or [""])[0]).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain; charset=utf-8")
+            self.send_header("Content-Disposition", 'attachment; filename="kit-usb-mitschnitt.txt"')
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if self.path == "/api/update":
             from kitd import update
             return self._json(update.status())

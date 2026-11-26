@@ -80,6 +80,7 @@ class Session(socketserver.BaseRequestHandler):
         self.request.sendall(struct.pack(">iI", status, len(data)) + data)
 
     def handle(self):
+        threading.current_thread().kit_bridge = True        # Mitschnitt: Transfers dieses Threads sind von Central
         peer = self.client_address[0]
         if not _allowed(peer):
             return

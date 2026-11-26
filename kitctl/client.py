@@ -167,6 +167,8 @@ class UsbTransport:
                 raise P.ProtocolError(f"USB {what} (EP {ep:02x}): {e2} · {getattr(self, 'diag', '')}") from e2
 
     def write(self, data: bytes) -> None:
+        from kitctl import trace
+        trace.add(">", data)
         n = self._retry("Senden", P.EP_OUT, lambda: self.dev.write(P.EP_OUT, data, timeout=self.timeout))
         if n != len(data):
             raise P.ProtocolError(f"nur {n} von {len(data)} Bytes gesendet")
@@ -176,7 +178,14 @@ class UsbTransport:
         self._flush()
 
     def read(self, size: int) -> bytes:
-        return bytes(self._retry("Empfangen", P.EP_IN, lambda: self.dev.read(P.EP_IN, max(size, P.BULK_BUFFER), timeout=self.timeout)))
+        from kitctl import trace
+        try:
+            r = bytes(self._retry("Empfangen", P.EP_IN, lambda: self.dev.read(P.EP_IN, max(size, P.BULK_BUFFER), timeout=self.timeout)))
+        except Exception as e:
+            trace.add("<", b"", f"Fehler: {e}")
+            raise
+        trace.add("<", r)
+        return r
 
     def close(self) -> None:
         if self.dev is not None:
