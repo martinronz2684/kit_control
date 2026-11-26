@@ -4,7 +4,7 @@ import QtQuick
 
 Item {
     id: c
-    property bool printing: false
+    property bool printing: false       // Kit druckt wirklich Schichten (Laser, Beschichter, frische Schicht)
     property bool heating: printing     // Heizstrahler an (Vorheizen, Pulvervorbereitung, Druck)
     // Tiefe der Platten unter der Pulverebene in mm (0 = oben, 110 = ganz unten)
     property real buildDepth: 70
