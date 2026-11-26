@@ -222,50 +222,90 @@ class KitWorker(threading.Thread):
             except OSError:
                 pass
 
+    # Abfrage-Takt wie Central (ConnectedPrinterPropertyModelKit): Zustand alle 3 s, Pulverbett- und
+    # Kammertemperatur alle 2 s, Fortschritt und Countdown alle 3 s nur während eines Drucks. Fehler-/Warnlisten
+    # fragt Central nie von sich aus ab – hier nur, wenn sich die Anzahl im Zustand ändert. Live-Parameter
+    # (Sollwerte) beim Verbinden, nach Änderungen und selten im Leerlauf. Mehr Verkehr stört die Firmware.
+    POLL = {"state": 3.0, "surface": 2.0, "chamber": 2.0, "print": 3.0, "countdown": 3.0, "live": 60.0}
+    PRINT_STATES = (6, 7, 8, 9)
+
+    def _due(self, name: str, now: float) -> bool:
+        nxt = self.__dict__.setdefault("_next_poll", {})
+        if now >= nxt.get(name, 0.0):
+            nxt[name] = now + self.POLL[name]
+            return True
+        return False
+
+    def refresh_soon(self, *names):
+        """Nach einem Befehl die betroffenen Werte beim nächsten Durchlauf neu holen."""
+        nxt = self.__dict__.setdefault("_next_poll", {})
+        for n in names or ("state", "live"):
+            nxt[n] = 0.0
+
     def _poll(self):
-        snap = self.kit.snapshot()
-        out = {}
-        st = snap["state"]
-        if not isinstance(st, Exception):
-            out.update(state=st.state, state_name=P.STATE_NAMES.get(st.state, f"Zustand {st.state}"),
-                       warning_code=st.warnings, error_code=st.errors,
-                       waiting_for_sd=st.state == P.STATE_WAITING_FOR_SD_CARD)
-        pr = snap["print"]
-        if not isinstance(pr, Exception):
-            out.update(printing=pr.printing, layer=pr.layer, elapsed_s=pr.elapsed_s, percent=pr.percent)
-        for k in ("surface", "chamber"):
-            v = snap[k]
-            if not isinstance(v, Exception):
-                out[k] = round(v.celsius, 1)
-        lv = snap["live"]
-        if not isinstance(lv, Exception):
-            out.update(target_chamber_warmup=lv.chamber_warmup, target_surface_warmup=lv.surface_warmup,
-                       target_chamber_print=lv.chamber_print, target_surface_print=lv.surface_print,
-                       laser_speed=lv.laser_speed)
-        cd = snap["countdown"]
-        if not isinstance(cd, Exception):
-            out.update(countdown_on=cd.enabled, countdown_s=cd.seconds)
         now = time.time()
-        if now - getattr(self, "_frames_at", 0) > 5:
-            self._frames_at = now
-            from kitctl.codes import describe
-            for key, name in (("errors", "errors"), ("warnings", "warnings")):
-                try:
-                    codes = self.kit.request(name).codes
-                    if key == "warnings":
-                        # Auf Wunsch ausgeblendete Warnungen (Standard: 81 Beschichter-Referenzfahrt)
-                        out["hidden_warnings"] = [describe(c) for c in codes if c in IGNORED_WARNINGS]
-                        codes = [c for c in codes if c not in IGNORED_WARNINGS]
-                    out[key] = [describe(c) for c in codes]
-                except P.ProtocolError as e:
-                    snap[name] = e
-        errs = [f"{k}: {v}" for k, v in snap.items() if isinstance(v, Exception)]
+        out, errs = {}, []
+
+        def req(name):
+            try:
+                return self.kit.request(name)
+            except P.ProtocolError as e:
+                errs.append(f"{name}: {e}")
+                return None
+        cur = self.snapshot()
+        state = cur.get("state")
+        if self._due("state", now):
+            st = req("state")
+            if st is not None:
+                state = st.state
+                out.update(state=st.state, state_name=P.STATE_NAMES.get(st.state, f"Zustand {st.state}"),
+                           warning_code=st.warnings, error_code=st.errors,
+                           waiting_for_sd=st.state == P.STATE_WAITING_FOR_SD_CARD,
+                           printing=st.state in self.PRINT_STATES)
+                key = (st.warnings, st.errors)
+                if key != getattr(self, "_codes_key", None):          # nur bei Änderung die Listen holen
+                    self._codes_key = key
+                    self._fetch_codes(out)
+        for k in ("surface", "chamber"):
+            if self._due(k, now):
+                v = req(k)
+                if v is not None:
+                    out[k] = round(v.celsius, 1)
+        printing = state in self.PRINT_STATES
+        if printing and self._due("print", now):
+            pr = req("print")
+            if pr is not None:
+                out.update(layer=pr.layer, elapsed_s=pr.elapsed_s, percent=pr.percent)
+        if printing and self._due("countdown", now):
+            cd = req("countdown")
+            if cd is not None:
+                out.update(countdown_on=cd.enabled, countdown_s=cd.seconds)
+        if not printing and self._due("live", now):
+            lv = req("live")
+            if lv is not None:
+                out.update(target_chamber_warmup=lv.chamber_warmup, target_surface_warmup=lv.surface_warmup,
+                           target_chamber_print=lv.chamber_print, target_surface_print=lv.surface_print,
+                           laser_speed=lv.laser_speed)
         out["message"] = "; ".join(errs)
-        self._set(**out)
+        if out:
+            self._set(**out)
         try:
             PRINTLOG.update(self.snapshot())
         except Exception:
             pass
+
+    def _fetch_codes(self, out: dict):
+        from kitctl.codes import describe
+        for key in ("errors", "warnings"):
+            try:
+                codes = self.kit.request(key).codes
+            except P.ProtocolError:
+                continue
+            if key == "warnings":
+                # Auf Wunsch ausgeblendete Warnungen (Standard: 81 Beschichter-Referenzfahrt)
+                out["hidden_warnings"] = [describe(c) for c in codes if c in IGNORED_WARNINGS]
+                codes = [c for c in codes if c not in IGNORED_WARNINGS]
+            out[key] = [describe(c) for c in codes]
 
     # -- commands --------------------------------------------------------------
     def submit(self, cmd: dict, timeout=8.0) -> dict:
@@ -287,6 +327,8 @@ class KitWorker(threading.Thread):
                 cmd, reply = self.cmds.get(timeout=max(0.0, deadline - time.time()))
             except queue.Empty:
                 return
+            # nach einem Befehl Zustand (und bei Sollwerten die Live-Parameter) gleich neu holen
+            self.refresh_soon("state", *(("live",) if cmd.get("cmd") in ("targets", "target", "laser_speed") else ()))
             try:
                 if cmd.get("cmd") == "job_start":
                     if getattr(self, "pending", None):

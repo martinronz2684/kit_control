@@ -361,6 +361,24 @@ class NestingTest(unittest.TestCase):
         self.assertLessEqual(h2, h1 + 1e-6)
         self.assertEqual(sc.problems(), [])
 
+class CalibrationPartTest(unittest.TestCase):
+    def test_mesh_is_watertight_and_first_layer_is_full(self):
+        """Wie Central: Schicht 1 (Z 0,1) enthält schon den Boden – vorher blieb sie leer (T-Stöße im Netz)."""
+        from collections import Counter
+        from kitcontrol.core import calibration_mesh
+        from kitslice.central import part_sections
+        m = calibration_mesh()
+        e = Counter()
+        for tri in m:
+            for a, b in ((0, 1), (1, 2), (2, 0)):
+                e[(tuple(tri[a]), tuple(tri[b]))] += 1
+        self.assertFalse([k for k, n in e.items() if e.get((k[1], k[0]), 0) != n])   # keine offenen Kanten
+        vol = np.einsum("ij,ij->i", m[:, 0], np.cross(m[:, 1], m[:, 2])).sum() / 6
+        self.assertAlmostEqual(vol, 40 * 40 * 5 - 30 * 30 * 5 - 5 * 5 * 1)
+        s = part_sections(m, 0.1)
+        self.assertEqual(sorted(s)[0], 0)
+        self.assertEqual(len(s[0]), 2)                              # außen + innen schon in der ersten Schicht
+
 
 if __name__ == "__main__":
     unittest.main()

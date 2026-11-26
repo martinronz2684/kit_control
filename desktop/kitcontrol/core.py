@@ -104,6 +104,38 @@ def quat(R: np.ndarray) -> list:
     return [float(w), float(x), float(y), float(z)]
 
 
+def calibration_mesh() -> np.ndarray:
+    """Dichtes, sauberes Netz des Kalibrierteils (wie eine Volumen-STL): Gitter aus Quadern, Flächen nur
+    zwischen vollen und leeren Zellen. Alle Flächen teilen ihre Kanten vollständig – keine T-Stöße und keine
+    inneren Flächen, sonst erkennt der Slicer (wie Central) z. B. die Bodenfläche nicht und Schicht 1 bleibt leer."""
+    xs, ys, zs = [0, 5, 17.5, 22.5, 35, 40], [0, 5, 35, 40], [0, 4, 5]
+
+    def full(i, j, k):
+        if not (0 <= i < len(xs) - 1 and 0 <= j < len(ys) - 1 and 0 <= k < len(zs) - 1):
+            return False
+        cx, cy = (xs[i] + xs[i + 1]) / 2, (ys[j] + ys[j + 1]) / 2
+        ring = not (5 < cx < 35 and 5 < cy < 35)
+        groove = k == 1 and 17.5 < cx < 22.5 and cy > 35          # Nut oben auf dem hinteren Steg (Y)
+        return ring and not groove
+    t = []
+
+    def quad(a, b, c, d):                                         # gegen den Uhrzeigersinn von außen gesehen
+        t.extend([[a, b, c], [a, c, d]])
+    for i in range(len(xs) - 1):
+        for j in range(len(ys) - 1):
+            for k in range(len(zs) - 1):
+                if not full(i, j, k):
+                    continue
+                x0, x1, y0, y1, z0, z1 = xs[i], xs[i + 1], ys[j], ys[j + 1], zs[k], zs[k + 1]
+                if not full(i - 1, j, k): quad((x0, y0, z0), (x0, y0, z1), (x0, y1, z1), (x0, y1, z0))
+                if not full(i + 1, j, k): quad((x1, y0, z0), (x1, y1, z0), (x1, y1, z1), (x1, y0, z1))
+                if not full(i, j - 1, k): quad((x0, y0, z0), (x1, y0, z0), (x1, y0, z1), (x0, y0, z1))
+                if not full(i, j + 1, k): quad((x0, y1, z0), (x0, y1, z1), (x1, y1, z1), (x1, y1, z0))
+                if not full(i, j, k - 1): quad((x0, y0, z0), (x0, y1, z0), (x1, y1, z0), (x1, y0, z0))
+                if not full(i, j, k + 1): quad((x0, y0, z1), (x1, y0, z1), (x1, y1, z1), (x0, y1, z1))
+    return np.array(t, float)
+
+
 class AppCore:
     def __init__(self):
         self.scene = Scene()
@@ -371,23 +403,7 @@ class AppCore:
         """Kalibrierteil wie bei Sintratec: Rahmen 40 × 40 mm, innen 30 × 30 mm offen, 5 mm hoch;
         oben auf dem hinteren Steg (Y-Seite) eine Nut 5 mm breit, 1 mm tief als Richtungsmarke.
         Soll: X 40, Y 40, Z 5 mm (innen 30 mm)."""
-        def extrude(loops, rects, z0, z1):
-            """Geschlossener Körper: Seitenwände nur am Rand (loops, außen gegen, Löcher im Uhrzeigersinn),
-            Deckel/Boden aus Rechtecken – keine inneren Flächen (sonst Laserlinien mitten im Teil)."""
-            t = []
-            for loop in loops:
-                for (x0, y0), (x1, y1) in zip(loop, loop[1:] + loop[:1]):
-                    t += [[(x0, y0, z0), (x1, y1, z0), (x1, y1, z1)], [(x0, y0, z0), (x1, y1, z1), (x0, y0, z1)]]
-            for x0, y0, x1, y1 in rects:
-                t += [[(x0, y0, z1), (x1, y0, z1), (x1, y1, z1)], [(x0, y0, z1), (x1, y1, z1), (x0, y1, z1)],
-                      [(x0, y0, z0), (x1, y1, z0), (x1, y0, z0)], [(x0, y0, z0), (x0, y1, z0), (x1, y1, z0)]]
-            return np.array(t, float)
-        ring = [[(0, 0), (40, 0), (40, 40), (0, 40)], [(5, 5), (5, 35), (35, 35), (35, 5)]]
-        ring_rects = [(0, 0, 40, 5), (0, 5, 5, 35), (35, 5, 40, 35), (0, 35, 40, 40)]
-        c_loop = [[(0, 0), (40, 0), (40, 40), (22.5, 40), (22.5, 35), (35, 35), (35, 5), (5, 5), (5, 35),
-                   (17.5, 35), (17.5, 40), (0, 40)]]
-        c_rects = [(0, 0, 40, 5), (0, 5, 5, 35), (35, 5, 40, 35), (0, 35, 17.5, 40), (22.5, 35, 40, 40)]
-        mesh = np.concatenate([extrude(ring, ring_rects, 0, 4), extrude(c_loop, c_rects, 4, 5)])
+        mesh = calibration_mesh()
         self._push()
         p = Part("Kalibrierteil 40 × 40 × 5 mm", mesh)
         self.scene.add(p)
