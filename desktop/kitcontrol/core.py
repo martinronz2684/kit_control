@@ -479,7 +479,7 @@ class AppCore:
     def layer_fill(self, step: float = 1.0) -> list:
         """Belegung je Höhe (Anteil des idealen Bereichs in %, je `step` mm) – zeigt leere oder sehr volle Schichten."""
         from kitslice import scene as _sc
-        from kitslice.scene import _columns
+        from kitslice.scene import part_dexels
         if not self.scene.parts:
             return []
         res = 1.0
@@ -487,14 +487,8 @@ class AppCore:
         n = int(np.ceil(top / step)) + 1
         diff = np.zeros(n + 2)
         for p in self.scene.parts:
-            key = ("fill", p.rot_x, p.rot_y, p.rot_z, tuple(p.scale), p.x, p.y, p.z_lift)
-            cc = p.__dict__.setdefault("_fillcache", {})
-            if key not in cc:
-                cc.clear()
-                cols = _columns(p.light(6000), res)
-                lohi = np.array(list(cols.values()), float) if cols else np.zeros((0, 2))
-                cc[key] = lohi
-            lohi = cc[key]
+            _, z0, z1 = part_dexels(p, res)                  # echte Form: Hohlräume zählen nicht als belegt
+            lohi = np.stack([z0, z1], axis=1)
             if not len(lohi):
                 continue
             a = np.clip(np.floor(lohi[:, 0] / step).astype(int), 0, n)

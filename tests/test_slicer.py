@@ -329,6 +329,30 @@ class LayerTimeFitTest(unittest.TestCase):
         self.assertAlmostEqual(t, 100 * m["recoat_s"], places=3)
         self.assertIsNone(fit_layer_times([{"rows": rows[:10]}]))   # zu wenig Schichten
 
+def cup(w=34, h=30, t=2):
+    """Oben offener Becher aus dicht aneinanderliegenden Quadern."""
+    return np.concatenate([obox(w, w, t), obox(t, w, h - t, 0, 0, t), obox(t, w, h - t, w - t, 0, t),
+                           obox(w - 2 * t, t, h - t, t, 0, t), obox(w - 2 * t, t, h - t, t, w - t, t)])
+
+
+class NestingTest(unittest.TestCase):
+    def test_true_shape_keeps_cavity_free(self):
+        from kitslice.scene import dexels, dexels_overlap
+        c = dexels(cup(), 0.5)
+        inside = dexels(obox(10, 10, 10, 12, 12, 6), 0.5)
+        self.assertFalse(dexels_overlap(c, inside))            # Klotz im Becher berührt nichts
+        self.assertTrue(dexels_overlap(c, dexels(obox(10, 10, 10, 12, 12, 0), 0.5)))   # im Boden: ja
+
+    def test_small_parts_go_into_cups_without_interlocking(self):
+        from kitslice import packing
+        parts = [Part(f"becher{i}", cup(), lock_orient=True) for i in range(4)] + \
+                [Part(f"klotz{i}", obox(14, 14, 14)) for i in range(4)]
+        sc = Scene(parts)
+        r = packing.auto_pack(sc, time_budget=2.0)
+        self.assertEqual(sc.problems(), [])
+        self.assertLessEqual(r["height"], 30.5)                # alles in einer Lage: Klötze in den Bechern
+        self.assertEqual(r["empty_mm"], 0.0)
+
 
 if __name__ == "__main__":
     unittest.main()

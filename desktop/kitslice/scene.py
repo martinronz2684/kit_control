@@ -282,7 +282,7 @@ class Scene:
         return out
 
     def collisions(self, tol: float = 0.05) -> list[tuple[str, str]]:
-        """Paare, deren Säulen (je Rasterzelle unterste bis oberste Fläche) sich in der Höhe überschneiden."""
+        """Paare, die sich wirklich durchdringen (echte Teilform, Hohlräume bleiben frei)."""
         return [(self.parts[i].name, self.parts[j].name) for i, j in self.collision_pairs(tol)]
 
     def collision_pairs(self, tol: float = 0.05) -> list[tuple[int, int]]:
@@ -297,15 +297,8 @@ class Scene:
                 for k in (i, j):
                     if k not in cols:
                         q = self.parts[k]
-                        key = ("cols", q.rot_x, q.rot_y, q.rot_z, tuple(q.scale), q.x, q.y, q.z_lift)
-                        cc = q.__dict__.setdefault("_colcache", {})
-                        if key not in cc:
-                            cc.clear()
-                            cc[key] = _columns(q.light(12000), 0.5)   # fein genug auch für 1 mm Abstand
-                        cols[k] = cc[key]
-                ca, cb = cols[i], cols[j]
-                common = set(ca) & set(cb)
-                if any(max(ca[c][0], cb[c][0]) < min(ca[c][1], cb[c][1]) - tol for c in common):
+                        cols[k] = part_dexels(q)
+                if dexels_overlap(cols[i], cols[j], tol):
                     out.append((i, j))
         return out
 
@@ -382,6 +375,108 @@ def _samples(tris: np.ndarray, step: float) -> np.ndarray:
     return np.concatenate(out)
 
 
+# ---------------------------------------------------------------- echte Teilform (Dexel)
+# Je Rasterzelle die Höhenbereiche, in denen das Teil wirklich Material hat (senkrechter Strahl durchs Netz,
+# innen/außen nach Parität). Anders als „unterste bis oberste Fläche“ bleiben Hohlräume, Becher-Innenräume
+# und der Raum unter Überhängen frei – so lassen sich Teile ineinander verschachteln.
+KX = 1 << 21
+_K0 = 1 << 20
+_RAY = (0.4737, 0.5213)          # Strahl leicht neben der Zellmitte: keine Treffer genau auf Kanten/Ecken
+
+
+def dexels(tris: np.ndarray, res: float, merge: float | None = None):
+    """(keys, z0, z1) nach Schlüssel sortiert. Zelle (ix, iy) deckt [ix·res, (ix+1)·res) ab, key = ix·KX + iy.
+    Auf der sicheren Seite: jeder Oberflächenpunkt in der Zelle liegt in einem Bereich; Lücken unter `merge`
+    (Standard: res) werden geschlossen."""
+    tris = np.asarray(tris, dtype=float)
+    merge = res if merge is None else merge
+    rk, rz0, rz1 = [], [], []
+    xy = tris[:, :, :2]
+    ox, oy = _RAY[0] * res, _RAY[1] * res
+    x0 = np.ceil((xy[:, :, 0].min(1) - ox) / res).astype(np.int64)
+    x1 = np.floor((xy[:, :, 0].max(1) - ox) / res).astype(np.int64)
+    y0 = np.ceil((xy[:, :, 1].min(1) - oy) / res).astype(np.int64)
+    y1 = np.floor((xy[:, :, 1].max(1) - oy) / res).astype(np.int64)
+    nx, ny = np.maximum(x1 - x0 + 1, 0), np.maximum(y1 - y0 + 1, 0)
+    a, b, c = tris[:, 0], tris[:, 1], tris[:, 2]
+    v0, v1 = b - a, c - a
+    den = v0[:, 0] * v1[:, 1] - v1[:, 0] * v0[:, 1]
+    ok = (np.abs(den) > 1e-12) & (nx > 0) & (ny > 0)
+    tid = np.flatnonzero(ok)
+    cnt = (nx * ny)[tid]
+    if cnt.sum():
+        t = np.repeat(tid, cnt)
+        loc = np.arange(cnt.sum()) - np.repeat(np.cumsum(cnt) - cnt, cnt)
+        ix = x0[t] + loc % nx[t]
+        iy = y0[t] + loc // nx[t]
+        px, py = ix * res + ox - a[t, 0], iy * res + oy - a[t, 1]
+        u = (px * v1[t, 1] - v1[t, 0] * py) / den[t]
+        v = (v0[t, 0] * py - px * v0[t, 1]) / den[t]
+        m = (u >= 0) & (v >= 0) & (u + v <= 1)
+        t, ix, iy, u, v = t[m], ix[m], iy[m], u[m], v[m]
+        z = a[t, 2] + u * v0[t, 2] + v * v1[t, 2]
+        key = (ix + _K0) * KX + (iy + _K0)
+        o = np.lexsort((z, key))
+        key, z = key[o], z[o]
+        if len(key):
+            uk, st, ct = np.unique(key, return_index=True, return_counts=True)
+            ev = ct % 2 == 0
+            # gerade Trefferzahl: Paare (ein, aus)
+            ge = np.repeat(ev, ct)
+            rank = np.arange(len(key)) - np.repeat(st, ct)
+            s0 = ge & (rank % 2 == 0)
+            idx = np.flatnonzero(s0)
+            rk.append(key[idx]); rz0.append(z[idx]); rz1.append(z[idx + 1])
+            # ungerade (Netz nicht dicht): ganze Säule
+            od = ~ev
+            rk.append(uk[od]); rz0.append(z[st[od]]); rz1.append(z[st[od] + ct[od] - 1])
+    # Oberflächenpunkte: nichts darf durchs Raster fallen (dünne Wände, Kanten)
+    pts = _samples(tris, res * 0.7)
+    # Punkte genau auf einer Zellgrenze zählen zur unteren Zelle (sonst wird ein 26-mm-Teil eine Zelle breiter)
+    fx = np.ceil(pts[:, 0] / res - 1e-9).astype(np.int64) - 1
+    fy = np.ceil(pts[:, 1] / res - 1e-9).astype(np.int64) - 1
+    pk = (fx + _K0) * KX + (fy + _K0)
+    q = max(merge, 1e-3) / 2                                 # Punkte je Zelle auf kleine Höhenstufen zusammenfassen
+    code = pk * (1 << 20) + np.floor(pts[:, 2] / q).astype(np.int64) + (1 << 19)
+    o = np.argsort(code, kind="stable")
+    code, z = code[o], pts[o, 2]
+    st = np.flatnonzero(np.concatenate([[True], code[1:] != code[:-1]]))
+    rk.append(code[st] >> 20); rz0.append(np.minimum.reduceat(z, st)); rz1.append(np.maximum.reduceat(z, st))
+    return _merge_rows(np.concatenate(rk), np.concatenate(rz0), np.concatenate(rz1), merge)
+
+
+def _merge_rows(k, z0, z1, gap=0.0):
+    """Bereiche je Schlüssel vereinigen (überlappend oder näher als gap)."""
+    if not len(k):
+        return k, z0, z1
+    o = np.lexsort((z0, k))
+    k, z0, z1 = k[o], z0[o], z1[o]
+    grp = np.concatenate([[0], np.cumsum(k[1:] != k[:-1])])
+    big = float(max(np.abs(z0).max(), np.abs(z1).max()) * 4 + 1e3)
+    cm = np.maximum.accumulate(z1 + grp * big) - grp * big
+    start = np.ones(len(k), bool)
+    start[1:] = (grp[1:] != grp[:-1]) | (z0[1:] > cm[:-1] + gap)
+    st = np.flatnonzero(start)
+    return k[st], np.minimum.reduceat(z0, st), np.maximum.reduceat(z1, st)
+
+
+def _pairs(A, B):
+    """Indexpaare (a, b) mit gleichem Schlüssel (B nach Schlüssel sortiert)."""
+    l = np.searchsorted(B[0], A[0], "left")
+    r = np.searchsorted(B[0], A[0], "right")
+    n = r - l
+    if not n.sum():
+        return np.zeros(0, int), np.zeros(0, int)
+    ai = np.repeat(np.arange(len(A[0])), n)
+    bi = np.repeat(l, n) + (np.arange(n.sum()) - np.repeat(np.cumsum(n) - n, n))
+    return ai, bi
+
+
+def dexels_overlap(A, B, tol: float = 0.05) -> bool:
+    ai, bi = _pairs(A, B)
+    return bool(len(ai) and (np.maximum(A[1][ai], B[1][bi]) < np.minimum(A[2][ai], B[2][bi]) - tol).any())
+
+
 def _profile(tris: np.ndarray, res: float):
     """Unterste und oberste Fläche je Rasterzelle (NaN = leer) samt Lage der Zelle (0, 0) in mm."""
     pts = _samples(tris, res * 0.7)
@@ -423,15 +518,14 @@ def _dilate(H: np.ndarray, g: int) -> np.ndarray:
     return out
 
 
-def _columns(tris: np.ndarray, res: float) -> dict:
-    """{(ix, iy): (z_unten, z_oben)} im globalen Raster – für die Kollisionsprüfung."""
-    pts = _samples(tris, res * 0.7)
-    ix = np.floor(pts[:, 0] / res).astype(np.int64)
-    iy = np.floor(pts[:, 1] / res).astype(np.int64)
-    key = ix * 100003 + iy
-    order = np.argsort(key)
-    key, z = key[order], pts[order, 2]
-    uniq, start = np.unique(key, return_index=True)
-    lo = np.minimum.reduceat(z, start)
-    hi = np.maximum.reduceat(z, start)
-    return dict(zip(uniq.tolist(), zip(lo.tolist(), hi.tolist())))
+def part_dexels(q, res: float = 0.5):
+    """Echte Teilform in aktueller Lage (zwischengespeichert, Höhe nur verschoben)."""
+    key = ("dex", q.rot_x, q.rot_y, q.rot_z, tuple(q.scale), q.x, q.y, res)
+    cc = q.__dict__.setdefault("_dexcache", {})
+    if key not in cc:
+        cc.clear()
+        k, z0, z1 = dexels(q.light(12000) - np.array([0.0, 0.0, q.z_lift]), res)
+        cc[key] = (k, z0, z1)
+    k, z0, z1 = cc[key]
+    return k, z0 + q.z_lift, z1 + q.z_lift
+
