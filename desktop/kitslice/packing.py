@@ -511,22 +511,24 @@ def cover_bands(scene: Scene, movers, gap: float, rounds: int = 8) -> int:
             break
         top = max(q.bbox()[1][2] for q in scene.parts)
         before = empty_height(scene.parts)
-        a, b = bands[0]
         best = None
-        for p in scene.parts:
-            if id(p) not in mover_ids:
-                continue
-            lo, hi = p.bbox()
-            need = b - hi[2] + 0.15
-            if hi[2] > a + 1e-6 or need <= 0 or lo[2] + need > a - 0.05 or hi[2] + need > top:
-                continue
-            if _room_up(scene, p, gap, grown=grown) < need:
-                continue
-            p.z_lift += need
-            after = empty_height(scene.parts)
-            p.z_lift -= need
-            if after < before - 0.05 and (best is None or (after, need) < best[0]):
-                best = ((after, need), p)
+        for a, b in bands:                           # jede Lücke versuchen, nicht nur die unterste
+            for p in scene.parts:
+                if id(p) not in mover_ids:
+                    continue
+                lo, hi = p.bbox()
+                if hi[2] > a + 1e-6 or lo[2] > a - 0.2:
+                    continue
+                room = _room_up(scene, p, gap, grown=grown)
+                # ganz überbrücken, sonst so weit es geht (teilweise füllen hilft auch)
+                lift = min(b - hi[2] + 0.15, room, a - 0.05 - lo[2], top - hi[2])
+                if lift <= 0 or hi[2] + lift <= a + 0.05:
+                    continue
+                p.z_lift += lift
+                after = empty_height(scene.parts)
+                p.z_lift -= lift
+                if after < before - 0.05 and (best is None or (after, lift) < best[0]):
+                    best = ((after, lift), p)
         if best is None:
             break
         best[1].z_lift += best[0][1]
