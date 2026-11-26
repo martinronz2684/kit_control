@@ -381,15 +381,16 @@ class KitWorker(threading.Thread):
         warm = False
         try:
             with self.usb:
-                if snap.get("state") == P.STATE_POWDER_PREP:
-                    self.kit.command(P.cmd_simple(P.COM_EXIT_POWDERPREPARATION))
+                tr["phase"] = "Kit bereit machen"
+                self._set(transfer=dict(tr))
+                self._wait_idle()
                 prof = meta.get("profile")
                 if prof:
                     tr["phase"] = "Pulverprofil einstellen"
                     self._set(transfer=dict(tr))
                     self._apply_profile(prof)
                 tr["phase"] = "Vorheizen einschalten"
-                self.kit.command(P.cmd_warmup(True), strict=True)
+                self._strict(P.cmd_warmup(True), "Vorheizen")
                 warm = True
                 ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress)
                 tr["phase"] = "Druck starten"
@@ -410,6 +411,37 @@ class KitWorker(threading.Thread):
             if isinstance(e, (OSError,)) and not isinstance(e, ftp.TransferError):
                 raise   # USB weg -> Hauptschleife verbindet neu
 
+    def _wait_idle(self, timeout: float = 20.0):
+        """Vor dem Start muss der Kit „Bereit“ sein: Pulvervorbereitung (auch während sie noch aufheizt) beenden
+        und warten, bis die Firmware wieder bereit ist – sonst lehnt sie Sollwerte und Start ab."""
+        t_end = time.time() + timeout
+        sent = False
+        st = None
+        while time.time() < t_end:
+            try:
+                st = self.kit.request("state").state
+            except P.ProtocolError:
+                st = None
+            if st == P.STATE_IDLE:
+                self._set(state=st, state_name=P.STATE_NAMES.get(st, f"Zustand {st}"))
+                return
+            if st in (P.STATE_POWDER_PREP, 5, 6) and not sent:
+                self.kit.command(P.cmd_simple(P.COM_EXIT_POWDERPREPARATION))
+                sent = True
+            time.sleep(0.5)
+        name = P.STATE_NAMES.get(st, f"Zustand {st}") if st is not None else "unbekannt"
+        raise ValueError(f"Kit ist nicht bereit ({name}) – Tür zu? Fehler am Kit quittiert?")
+
+    def _strict(self, payload: bytes, what: str, tries: int = 3):
+        """Befehl mit Erfolgs-Prüfung; die Firmware lehnt direkt nach einem Zustandswechsel gern kurz ab."""
+        for n in range(tries):
+            try:
+                return self.kit.command(payload, strict=True)
+            except P.ProtocolError as e:
+                if n == tries - 1:
+                    raise P.ProtocolError(f"{what}: {e}") from e
+                time.sleep(1.0)
+
     def _apply_profile(self, prof: dict):
         """Sollwerte, Lasergeschwindigkeit und Heizstrahler aus dem Pulverprofil des Jobs (falls angegeben)."""
         t = prof.get("temps")
@@ -418,16 +450,16 @@ class KitWorker(threading.Thread):
             for v, lim in zip(vals, (P.MAX_SURFACE, P.MAX_CHAMBER, P.MAX_SURFACE, P.MAX_CHAMBER)):
                 if not 0 <= v <= lim:
                     raise ValueError(f"Profil: Temperatur außerhalb 0–{lim:g} °C")
-            self.kit.command(P.cmd_targets(*vals), strict=True)
+            self._strict(P.cmd_targets(*vals), "Solltemperaturen")
         for key, which in (("laser_speed_mm_s", "general"), ("contour_speed_mm_s", "contour")):
             if prof.get(key) is not None:
                 v = float(prof[key])
                 if not P.MIN_LASER <= v <= P.MAX_LASER:
                     raise ValueError("Profil: Lasergeschwindigkeit außerhalb des erlaubten Bereichs")
-                self.kit.command(P.cmd_laser_speed(which, v), strict=True)
+                self._strict(P.cmd_laser_speed(which, v), "Lasergeschwindigkeit" + (" Kontur" if which == "contour" else ""))
         for w, pct in (prof.get("lamps") or {}).items():
             if w in ("left", "right", "front") and 0 <= float(pct) <= 100:
-                self.kit.command(P.cmd_lamp(w, float(pct)), strict=True)
+                self._strict(P.cmd_lamp(w, float(pct)), "Heizstrahler")
                 self._remember_lamp(w, float(pct))
 
     def ready_for_net_start(self) -> str:
