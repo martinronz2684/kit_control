@@ -122,7 +122,7 @@ EN: dict[str, str] = {
     "Nur übertragen": "Transfer only", "Übertragen und starten": "Transfer and start",
     "Job zum Kit übertragen und den Druck sofort starten? Der Kit heizt dann auf.": "Transfer the job to the Kit and start printing right away? The Kit will heat up.",
     "Jobs am Kit": "Jobs on the Kit",
-    "Pulver einfüllen": "Powder to fill", "Pulvergewicht": "Powder weight", "Protokolle": "Logs", "Temperaturprotokolle öffnen": "Open temperature logs", "Speichern …": "Save …",
+    "Pulver einfüllen": "Powder to fill", "Pulvergewicht": "Powder weight", "Protokolle": "Logs", "Druckzeit ohne Aufheizen, „Fertig ca.“ mit ca. 1,5 h Aufheizen": "Print time without heat-up, “Done approx.” with approx. 1.5 h heat-up", " – an ": " – adjusted to ", "Temperaturprotokolle öffnen": "Open temperature logs", "Speichern …": "Save …",
     "Druckzeit ohne Aufheizen, Fertig mit ca. 1,5 h Aufheizen (": "Print time without heat-up, finish time with approx. 1.5 h heat-up (",
     " Drucken angepasst).": " prints).", ").": ").", " Pulver = Bauraum × (Bauhöhe + 5 mm).": " Powder = build area × (build height + 5 mm).", "Teilegewicht": "Part weight", "Teilevolumen": "Part volume", "Materialkosten": "Material cost", "kein Preis": "no price", "In den Teilen": "In the parts", "Materialkosten Teile": "Material cost of parts",
     "Preis im Profil fehlt": "No price in profile", "Pulver: Bauraum 110 × 110 mm × (Bauhöhe + 5 mm), ": "Powder: build area 110 × 110 mm × (build height + 5 mm), ",

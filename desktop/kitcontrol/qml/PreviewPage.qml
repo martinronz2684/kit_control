@@ -163,8 +163,8 @@ Item {
             Text {
                 visible: vp.done && backend.estimate.seconds !== undefined
                 Layout.fillWidth: true; wrapMode: Text.WordWrap
-                text: win.t("Druckzeit ohne Aufheizen, Fertig mit ca. 1,5 h Aufheizen (") + Math.round(backend.estimate.laser_mm_s || 0) + win.t(" mm/s")
-                      + (backend.estimate.learned > 0 ? win.t(", an ") + backend.estimate.learned + win.t(" Drucken angepasst).") : win.t(").")) + win.t(" Pulver = Bauraum × (Bauhöhe + 5 mm).")
+                text: win.t("Druckzeit ohne Aufheizen, „Fertig ca.“ mit ca. 1,5 h Aufheizen")
+                      + (backend.estimate.learned > 0 ? win.t(" – an ") + backend.estimate.learned + win.t(" Drucken angepasst.") : ".") + win.t(" Pulver = Bauraum × (Bauhöhe + 5 mm).")
                 color: win.cMut; font.pixelSize: 11
             }
 
