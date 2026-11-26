@@ -40,6 +40,7 @@ def main() -> int:
             except Exception:
                 time.sleep(0.2)
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+        os.environ.setdefault("QT_QUICK_BACKEND", "software")   # Software-Zeichnen: Fenster lässt sich abfotografieren
         from PySide6.QtCore import QTimer, QUrl
         from PySide6.QtGui import QGuiApplication, QWindow
         from PySide6.QtQml import QQmlApplicationEngine
@@ -52,10 +53,6 @@ def main() -> int:
             print("Oberfläche lädt nicht:\n" + "\n".join(log))
             return 1
         win = eng.rootObjects()[0]
-        from PySide6.QtQuick import QQuickWindow
-        if not isinstance(win, QQuickWindow):          # als QQuickWindow ansprechen (für grabWindow)
-            import shiboken6
-            win = shiboken6.wrapInstance(shiboken6.getCppPointer(win)[0], QQuickWindow)
         win.setProperty("visibility", QWindow.Windowed)
         win.resize(800, 450)
 
@@ -67,7 +64,8 @@ def main() -> int:
 
         def shoot(name):
             wait(900)
-            win.grabWindow().save(os.path.join(OUT, name + ".png"))
+            img = app.primaryScreen().grabWindow(win.winId(), 0, 0, 800, 450)
+            img.save(os.path.join(OUT, name + ".png"))
 
         wait(3000)                                   # Startbild ausblenden, ersten Zustand holen
         for p in PAGES:
