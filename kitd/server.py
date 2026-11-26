@@ -484,7 +484,7 @@ class KitWorker(threading.Thread):
 
     def _wait_idle(self, timeout: float = 20.0) -> None:
         """Pulvervorbereitung beenden (Central schließt das Pulverfenster vor dem Druck) und warten, bis der Kit
-        „Bereit“ ist. Heizt er schon vor, ist das in Ordnung – Central schickt dann auch nur „Vorheizen ein“."""
+        „Bereit“ ist oder vorheizt (die Zustände, in denen Central „Drucken“ anbietet)."""
         t_end = time.time() + timeout
         sent = False
         st = None
@@ -493,8 +493,8 @@ class KitWorker(threading.Thread):
                 st = self.kit.request("state").state
             except P.ProtocolError:
                 st = None
-            if st in (P.STATE_IDLE, 5, 6):
-                return
+            if st in (P.STATE_IDLE, P.STATE_WARMUP, P.STATE_ERROR):
+                return          # wie Central „Drucken“ in 1 und 5; bei Fehler trotzdem Vorheizen (s. o.)
             if st == P.STATE_POWDER_PREP and not sent:
                 self.kit.command(P.cmd_simple(P.COM_EXIT_POWDERPREPARATION))
                 sent = True

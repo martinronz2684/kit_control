@@ -32,7 +32,7 @@ class DemoTransport:
         if c == P.COM_IDENTIFY:
             self._next = P.code(P.SIG_IDENTIFY) + struct.pack("<III", 4, 4, 12) + bytes(16)
         elif c == P.COM_REQUESTGENERALPRINTERSTATE:
-            st = 7 if self.printing else (4 if self.powder else (5 if getattr(self, "warm", False) else 1))
+            st = 8 if self.printing else (4 if self.powder else (5 if getattr(self, "warm", False) else 1))
             self._next = P.code(P.SIG_GENERALPRINTERSTATE) + bytes([st]) + le(0) + le(0)
         elif c == P.COM_REQUESTPRINTSTATUS:
             layer = min(self.layers, int(t / 2)) if self.printing else 0
