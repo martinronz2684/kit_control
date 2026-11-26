@@ -45,6 +45,15 @@ class FtpTest(unittest.TestCase):
         ftp.send_file(t, data)
         self.assertEqual(t.file, data)
 
+    def test_frames_are_always_512_bytes_like_central(self):
+        t = DemoTransport()
+        sizes = []
+        w = t.write
+        t.write = lambda d: (sizes.append(len(d)), w(d))
+        ftp.send_file(t, b"y" * 1300)
+        self.assertEqual([n for n in sizes if n > 7], [512, 512, 512])
+        self.assertEqual(t.file, b"y" * 1300)
+
     def test_not_ready(self):
         class Busy:
             def write(self, d): pass

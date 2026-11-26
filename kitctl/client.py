@@ -171,6 +171,10 @@ class UsbTransport:
         if n != len(data):
             raise P.ProtocolError(f"nur {n} von {len(data)} Bytes gesendet")
 
+    def drain(self) -> None:
+        """Alte Antworten im Eingang verwerfen."""
+        self._flush()
+
     def read(self, size: int) -> bytes:
         return bytes(self._retry("Empfangen", P.EP_IN, lambda: self.dev.read(P.EP_IN, max(size, P.BULK_BUFFER), timeout=self.timeout)))
 

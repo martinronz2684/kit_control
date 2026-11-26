@@ -397,7 +397,10 @@ class KitWorker(threading.Thread):
                 tr["phase"] = "Vorheizen einschalten"
                 self._strict(P.cmd_warmup(True), "Vorheizen")
                 warm = True
-                ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress)
+                tr["phase"] = "Übertrage Job zum Kit"
+                self._set(transfer=dict(tr))
+                ftp.send_file(self.kit.t, data, ftp.PRINT_FILE, progress=progress,
+                              log=lambda m: print(m, flush=True))
                 tr["phase"] = "Druck starten"
                 self._set(transfer=dict(tr))
                 self.kit.command(P.cmd_simple(P.COM_STARTPRINT), strict=True)

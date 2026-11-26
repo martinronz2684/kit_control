@@ -101,7 +101,7 @@ class DemoTransport:
 
     def _ftp_next(self):
         if len(self.ftp) >= self.ftp_size:
-            self.file, self.ftp = self.ftp, None
+            self.file, self.ftp = self.ftp[: self.ftp_size], None   # letzter Rahmen ist auf 512 Byte aufgefüllt
             return P.code(3103) + b"\x05"
         self.want_frame = True
         time.sleep(0.0005)
