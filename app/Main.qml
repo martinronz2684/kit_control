@@ -53,7 +53,11 @@ Window {
         win.zero = z; win.anchor = a; win.zeroed = d
     }
     function dur(sec) { var m = Math.round(sec / 60); return m >= 60 ? Math.floor(m / 60) + " h " + (m % 60) + " min" : m + " min" }
-    function rel(k) { return Math.round((win.moved[k] - win.zero[k]) * 1000) / 1000 }
+    // Während des Drucks fährt der Kit selbst: je Schicht Bauplattform eine Schichtdicke runter, Vorrat hoch.
+    // Das zählt zur Anzeige dazu; bei Druckende wird es in „moved“ übernommen (die Platten bleiben ja dort)
+    property real printOff: 0
+    function off(k) { return k === "print" ? win.printOff : -win.printOff }
+    function rel(k) { return Math.round((win.moved[k] + win.off(k) - win.zero[k]) * 1000) / 1000 }
     // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
     readonly property var baseDepth: ({ print: 70, reservoir: 0 })
     // Job, den der Kit druckt (vom Pi gestartet oder von Central über den Pi übertragen)
@@ -117,7 +121,7 @@ Window {
             send({ cmd: "powder_prep_off" })
         lastPage = page
     }
-    function depth(k) { return Math.max(0, Math.min(110, win.anchor[k] + win.moved[k] - win.zero[k])) }
+    function depth(k) { return Math.max(0, Math.min(110, win.anchor[k] + win.moved[k] + win.off(k) - win.zero[k])) }
     property int lastLayer: -1
     property bool kitdUp: false
     property var upd: ({ current: "", latest: null, available: false, running: false, log: [] })
@@ -158,6 +162,13 @@ Window {
             win.kitdUp = true
             if (j.printing && win.lastLayer >= 0 && j.layer !== win.lastLayer) chamber.sweep()
             win.lastLayer = j.layer === undefined ? -1 : j.layer
+            var lmm = j.current_job && j.current_job.layer_mm ? j.current_job.layer_mm : 0
+            if (j.printing) {
+                if (j.layer > 0 && lmm > 0) win.printOff = j.layer * lmm
+            } else if (win.printOff !== 0) {
+                var m = { print: win.moved.print + win.printOff, reservoir: win.moved.reservoir - win.printOff }
+                win.moved = m; win.printOff = 0
+            }
             win.st = j
             win.addTemp(j)
         })
