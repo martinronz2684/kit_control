@@ -78,11 +78,11 @@ Window {
                 toast.show(cj.error ? cj.error
                            : cj.started === true ? "Job von Central gespeichert und gestartet"
                            : cj.started === false ? "Job von Central gespeichert – nicht gestartet (Autostart aus)"
-                           : "Job von Central wird gespeichert …")
+                           : "Job von Central wird gespeichert …", !!cj.error)
             seenCentral = cj.ts; loadJobs()
         }
         if (jr && jr.ts !== seenResult) {
-            if (seenResult >= 0) toast.show(jr.ok ? "„" + jr.name + "“ gestartet" : "Start fehlgeschlagen – " + jr.error)
+            if (seenResult >= 0) toast.show(jr.ok ? "„" + jr.name + "“ gestartet" : "Start fehlgeschlagen – " + jr.error, !jr.ok)
             seenResult = jr.ts; loadJobs()
         }
         if (seenCentral < 0) seenCentral = 0
@@ -115,8 +115,8 @@ Window {
 
     function send(body, after) {
         Api.cmd(body, function (j) {
-            if (!j) { toast.show("Dienst nicht erreichbar"); return }
-            if (!j.ok) toast.show(j.error || "Fehler")
+            if (!j) { toast.show("Dienst nicht erreichbar", true); return }
+            if (!j.ok) toast.show(j.error || "Fehler", true)
             if (after) after(j.ok)
         })
     }
@@ -142,7 +142,20 @@ Window {
             if (j.printing && win.lastLayer >= 0 && j.layer !== win.lastLayer) chamber.sweep()
             win.lastLayer = j.layer === undefined ? -1 : j.layer
             win.st = j
+            win.addTemp(j)
         })
+    }
+    // Temperaturverlauf für die Heizungsseite: alle 5 s ein Wert, 30 Minuten
+    property var tHist: []
+    property real tLast: 0
+    function addTemp(j) {
+        var now = Date.now()
+        if (!j.connected || j.surface === undefined || now - tLast < 5000) return
+        tLast = now
+        var h = tHist.slice(-359)
+        h.push({ s: j.surface, c: j.chamber, ts: j.printing ? j.target_surface_print : j.target_surface_warmup,
+                 tc: j.printing ? j.target_chamber_print : j.target_chamber_warmup })
+        tHist = h
     }
     Timer { interval: 15000; running: true; repeat: true; triggeredOnStart: true; onTriggered: win.loadWifi(false) }
 
@@ -380,10 +393,12 @@ Window {
                 }
                 Text {
                     anchors.verticalCenter: parent.verticalCenter; x: backBtn.width + (backBtn.visible ? 10 : 4)
-                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "System · Kalibrieren", params: "System · Material & Parameter", sys: "System" })[win.page]
+                    width: Math.max(0, chips.x - x - 12); elide: Text.ElideRight
+                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "Kalibrieren", params: "Material & Parameter", sys: "System" })[win.page]
                     color: win.cInk; font.family: win.fontName; font.pixelSize: 22; font.weight: Font.Medium; font.letterSpacing: -0.6
                 }
                 Row {
+                    id: chips
                     anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 6
                     Chip {
                         readonly property var e: win.st.errors || []
@@ -632,6 +647,7 @@ Window {
 
             // ======= Heizung =======
             Item {
+                id: heatPage
                 opacity: win.page === "heat" ? 1 : 0; visible: opacity > 0
                 Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
@@ -694,12 +710,65 @@ Window {
                         }
                     }
                     Panel {
-                        width: parent.width; height: 150
+                        id: trendPanel
+                        width: parent.width; height: heatPage.height - 52 - 8 - 96 - 8
+                        Lbl { x: 12; y: 10; text: "Verlauf · 30 min" }
+                        Row {
+                            anchors.right: parent.right; anchors.rightMargin: 12; y: 10; spacing: 10
+                            Row { spacing: 4; Rectangle { width: 10; height: 3; radius: 1.5; color: win.cHeat; anchors.verticalCenter: parent.verticalCenter } Lbl { text: "Pulverbett" } }
+                            Row { spacing: 4; Rectangle { width: 10; height: 3; radius: 1.5; color: "#d6dbe1"; anchors.verticalCenter: parent.verticalCenter } Lbl { text: "Kammer" } }
+                        }
+                        Canvas {
+                            id: trend
+                            x: 12; y: 32; width: parent.width - 24; height: parent.height - 44
+                            property var data: win.tHist
+                            onDataChanged: requestPaint()
+                            onPaint: {
+                                var g = getContext("2d"); g.reset()
+                                var d = data, n = d.length
+                                g.font = "11px " + win.fontName
+                                if (n < 2) {
+                                    g.fillStyle = "#6b7079"; g.fillText("Verlauf erscheint nach den ersten Messwerten", 0, height / 2)
+                                    return
+                                }
+                                var lo = 1e9, hi = -1e9
+                                for (var i = 0; i < n; i++) {
+                                    lo = Math.min(lo, d[i].s, d[i].c, d[i].tc || 1e9); hi = Math.max(hi, d[i].s, d[i].c, d[i].ts || -1e9)
+                                }
+                                lo = Math.floor((lo - 5) / 10) * 10; hi = Math.ceil((hi + 5) / 10) * 10
+                                var L = 28, W = width - L, H = height - 4
+                                function X(k) { return L + W * k / 359 }
+                                function Y(v) { return 2 + H * (1 - (v - lo) / (hi - lo)) }
+                                g.strokeStyle = "rgba(255,255,255,0.06)"; g.lineWidth = 1; g.fillStyle = "#6b7079"
+                                var step = (hi - lo) > 80 ? 40 : 20
+                                for (var v = lo; v <= hi; v += step) {
+                                    g.beginPath(); g.moveTo(L, Y(v)); g.lineTo(width, Y(v)); g.stroke()
+                                    g.fillText(v + "°", 0, Y(v) + 4)
+                                }
+                                var off = 360 - n
+                                function line(key, col, w, dash) {
+                                    g.strokeStyle = col; g.lineWidth = w; g.setLineDash(dash || [])
+                                    g.beginPath(); var started = false
+                                    for (var i = 0; i < n; i++) {
+                                        var v = d[i][key]; if (v === undefined || v === null || isNaN(v)) { started = false; continue }
+                                        if (!started) { g.moveTo(X(off + i), Y(v)); started = true } else g.lineTo(X(off + i), Y(v))
+                                    }
+                                    g.stroke(); g.setLineDash([])
+                                }
+                                line("ts", "rgba(255,138,92,0.45)", 1, [4, 4])
+                                line("tc", "rgba(214,219,225,0.35)", 1, [4, 4])
+                                line("c", "#d6dbe1", 2)
+                                line("s", "#ff8a5c", 2)
+                            }
+                        }
+                    }
+                    Panel {
+                        width: parent.width; height: 96
                         Column {
-                            anchors.fill: parent; anchors.margins: 12; spacing: 6
+                            anchors.fill: parent; anchors.margins: 12; spacing: 4
                             Lbl { text: "So heizt der Kit" }
-                            Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 12
-                                text: "Die IR-Heizer regelt der Kit selbst auf den Sollwert des Pulverbetts, die Kammerheizung auf den Kammer-Sollwert. Eine eigene Leistungsvorgabe für die Heizstrahler gibt es wie in Central nicht." }
+                            Lbl { width: parent.width; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 11; maximumLineCount: 4
+                                text: "Die IR-Heizer regelt der Kit selbst auf den Sollwert des Pulverbetts, die Kammerheizung auf den Kammer-Sollwert. Gestrichelt: Sollwerte." }
                         }
                     }
                 }
@@ -945,7 +1014,7 @@ Window {
                                         for (var i = 0; i < 3; i++) {
                                             var k = keys[i], f = 1 + win.scKit(k) / 100
                                             var p = (f * calcOvl.soll[k] / calcOvl.ist[k] - 1) * 100
-                                            if (Math.abs(p) > 5.0005) { toast.show(k.toUpperCase() + ": mehr als ±5 % – bitte mechanisch nachjustieren"); return }
+                                            if (Math.abs(p) > 5.0005) { toast.show(k.toUpperCase() + ": mehr als ±5 % – bitte mechanisch nachjustieren", true); return }
                                             e[k] = Math.round(p * 100) / 100
                                         }
                                         win.scEdit = e; win.scDirty = true; calcOvl.visible = false
@@ -1123,7 +1192,7 @@ Window {
                 Row {
                     y: msgPanel.height + 8; spacing: 8
                     KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13; text: "Kalibrieren"; onClicked: win.page = "cal" }
-                    KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13; text: "Material & Parameter"; onClicked: win.page = "params" }
+                    KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13; text: "Parameter"; onClicked: win.page = "params" }
                 }
                 Panel {
                     id: infoPanel
@@ -1281,7 +1350,7 @@ Window {
                     }
                     KButton { width: 70; height: 46; text: wifiOvl.showPw ? "•••" : "abc"; onClicked: wifiOvl.showPw = !wifiOvl.showPw }
                     KButton { width: 150; height: 46; kind: "pri"; ok: !wifiOvl.busy; text: wifiOvl.busy ? "Verbinde …" : "Verbinden"
-                        onClicked: { if (wifiOvl.pw.length < 8) toast.show("Passwort hat mindestens 8 Zeichen"); else wifiOvl.connect() } }
+                        onClicked: { if (wifiOvl.pw.length < 8) toast.show("Passwort hat mindestens 8 Zeichen", true); else wifiOvl.connect() } }
                 }
                 Repeater {
                     model: wifiOvl.sym ? ["1234567890", "!@#$%&*()=", "-_+.,:;/?'", "\"<>[]{}~^\\|"] : ["1234567890", "qwertzuiop", "asdfghjklü", "yxcvbnmöä"]
@@ -1378,11 +1447,13 @@ Window {
         // ---------- Hinweis ----------
         Rectangle {
             id: toast
-            function show(t) { tt.text = t; visible = true; tTimer.restart() }
+            property bool err: false
+            function show(t, isErr) { tt.text = t; err = isErr === true; visible = true; tTimer.restart() }
             visible: false; z: 10
             anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; anchors.bottomMargin: 14
-            width: Math.min(tt.implicitWidth, 620) + 32; height: tt.height + 20; radius: 12; color: "#2a1416"; border.color: "#80e5484d"
-            Text { id: tt; anchors.centerIn: parent; width: Math.min(implicitWidth, 620); wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; color: "#ffb3b5"; font.family: win.fontName; font.pixelSize: 13 }
+            width: Math.min(tt.implicitWidth, 620) + 32; height: tt.height + 20; radius: 12
+            color: err ? "#2a1416" : "#1c2228"; border.color: err ? "#80e5484d" : "#552fa6cc"
+            Text { id: tt; anchors.centerIn: parent; width: Math.min(implicitWidth, 620); wrapMode: Text.WordWrap; horizontalAlignment: Text.AlignHCenter; color: toast.err ? "#ffb3b5" : win.cInk; font.family: win.fontName; font.pixelSize: 13 }
             Timer { id: tTimer; interval: Math.max(6000, tt.text.length * 70); onTriggered: toast.visible = false }
             MouseArea { anchors.fill: parent; onClicked: toast.visible = false }
         }
