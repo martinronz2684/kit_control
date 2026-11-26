@@ -6,9 +6,9 @@ Grundlage ist ein echtes 3D-Belegungsraster (Voxel, Standard 2 mm) des idealen D
     dürfen dort hinein (Verschachteln)
   - für alle Positionen zugleich wird per FFT-Korrelation geprüft, wo das Teil frei ist
     (Bauraum vorher um den Mindestabstand aufgeblasen – Abstand gilt in X, Y und Z)
-  - verhakungsfrei: erlaubt sind nur Positionen, die von oben auf einem freien Weg erreichbar sind
-    (Flutfüllung im Raum der freien Positionen, wie bei Cui et al. 2023). In umgekehrter Reihenfolge lässt
-    sich so jedes Teil aus dem Pulverkuchen ziehen – keine Kettenglieder, nichts eingeschlossen
+  - verhakungsfrei: am Ende wird geprüft, ob sich alle Teile in irgendeiner Reihenfolge aus dem Pulverkuchen
+    nehmen lassen (Flutfüllung im Raum der kollisionsfreien Positionen von oben, wie bei Cui et al. 2023;
+    zum Herausnehmen braucht es keinen Abstand). Verhakte Teile werden an erreichbarer Stelle neu gesetzt
   - gewählt wird die Lage mit der niedrigsten Oberkante, dann die, die leere Schichten mit abdeckt, dann
     die tiefste, dann die mit dem meisten Kontakt zu Nachbarn und Wänden (dicht packen, volle Schichten)
   - mehrere Durchläufe mit verschiedenen Reihenfolgen im Zeitbudget; Sieger: geringste Bauhöhe, dann
@@ -100,7 +100,7 @@ def _quality(p: Part, rot) -> dict:
             "down": down / d, "height": h}
 
 
-def _voxelize(tris: np.ndarray, res: float):
+def _voxelize(tris: np.ndarray, res: float, rz: float | None = None):
     """Teil -> Belegung (nx, ny, nz) samt Lage der Zelle (0,0,0) in mm. Echte Form (Hohlräume bleiben frei),
     auf der sicheren Seite gerastert (jede Zelle mit Material ist belegt)."""
     lo = tris.reshape(-1, 3).min(axis=0)
@@ -109,8 +109,9 @@ def _voxelize(tris: np.ndarray, res: float):
     k, z0, z1 = _sc.dexels(t, res / f, merge=res / f)
     ix = (k // _sc.KX - _sc._K0).clip(0) // f
     iy = (k % _sc.KX - _sc._K0).clip(0) // f            # (Zelle −1 = Punkt genau auf x = 0 → Zelle 0)
-    k0 = np.floor(z0 / res - 1e-6).clip(0).astype(int)
-    k1 = np.floor(z1 / res - 1e-6).clip(0).astype(int)
+    rz = res if rz is None else rz                        # Höhe feiner gerastert als die Fläche
+    k0 = np.floor(z0 / rz - 1e-6).clip(0).astype(int)
+    k1 = np.floor(z1 / rz - 1e-6).clip(0).astype(int)
     n = np.array([ix.max() + 1, iy.max() + 1, k1.max() + 1])
     d = np.zeros((n[0], n[1], n[2] + 1), np.int32)
     np.add.at(d, (ix, iy, k0), 1)
@@ -144,12 +145,13 @@ def _reachable(free: np.ndarray) -> np.ndarray:
     return reach
 
 
-def _dilate3(a: np.ndarray, g: int) -> np.ndarray:
-    """Quader-Dilatation um g Zellen in allen Richtungen (Mindestabstand)."""
+def _dilate3(a: np.ndarray, g) -> np.ndarray:
+    """Quader-Dilatation um g Zellen (Zahl oder je Achse) – Mindestabstand."""
+    gs = (g, g, g) if np.isscalar(g) else g
     out = a.copy()
     for ax in range(3):
         cur = out.copy()
-        for s in range(1, g + 1):
+        for s in range(1, gs[ax] + 1):
             dst, src = [slice(None)] * 3, [slice(None)] * 3
             dst[ax], src[ax] = slice(s, None), slice(None, -s)
             cur[tuple(dst)] |= out[tuple(src)]
@@ -160,26 +162,29 @@ def _dilate3(a: np.ndarray, g: int) -> np.ndarray:
 
 
 class _Ctx:
-    def __init__(self, area, height, gap, wall, floor, res):
+    def __init__(self, area, height, gap, wall, floor, res, rz=None):
         if gap >= 1.0:                           # Raster so wählen, dass der Abstand genau aufgeht
             res = min(res, max(1.0, gap / max(1, round(gap / res))))
         self.res = res
+        self.rz = rz = res if rz is None else min(res, rz)   # Höhe gleich fein oder feiner als die Fläche
+        self.rv = np.array([res, res, rz])
         inner = area - 2 * wall
         self.nx = self.ny = max(1, int(math.floor(inner / res)))
-        self.nz = max(1, int(math.floor((height - floor) / res)))
+        self.nz = max(1, int(math.floor((height - floor) / rz)))
         self.origin = np.array([-inner / 2, -inner / 2, floor])
-        self.g = max(0, int(math.ceil(gap / res)))
+        gx, gz = max(0, int(math.ceil(gap / res - 1e-9))), max(0, int(math.ceil(gap / rz - 1e-9)))
+        self.g = (gx, gx, gz)
         self.shape = (self.nx, self.ny, self.nz)
         self.cache = {}
 
     def shape_of(self, p: Part, rot):
         key = (mesh_uid(p.mesh), tuple(rot), tuple(p.scale))
         if key not in self.cache:
-            vk = key + (round(self.res, 4),)
+            vk = key + (round(self.res, 4), round(self.rz, 4))
             if vk not in _VOXCACHE:                       # Rasterung bleibt über mehrere Anordnen-Läufe erhalten
                 if len(_VOXCACHE) > 4000:
                     _VOXCACHE.clear()
-                _VOXCACHE[vk] = _voxelize(p.transform(p.simple(6000), rot), self.res)
+                _VOXCACHE[vk] = _voxelize(p.transform(p.simple(6000), rot), self.res, self.rz)
             vox, lo = _VOXCACHE[vk]
             if any(v > s for v, s in zip(vox.shape, self.shape)):
                 self.cache[key] = None
@@ -225,23 +230,31 @@ def _orientations(p: Part, allow: bool, ctx: _Ctx, quality_w: float = 0.5):
     return cand
 
 
-def _free(ctx: _Ctx, occF, shape):
-    """Freie und von oben erreichbare Positionen einer Form (verhakungsfrei)."""
+def _free(ctx: _Ctx, occF, shape, occR=None):
+    """Freie Positionen einer Form (mit Mindestabstand). occR (FFT der Belegung ohne Abstand): zusätzlich nur
+    Positionen, die von oben auf einem kollisionsfreien Weg erreichbar sind (zum Herausnehmen braucht es
+    keinen Abstand, nur Platz)."""
     sx, sy, sz = shape[0].shape
     corr = np.fft.irfftn(occF * shape[2], s=ctx.shape, axes=(0, 1, 2))
-    return _reachable(corr[: ctx.nx - sx + 1, : ctx.ny - sy + 1, : ctx.nz - sz + 1] < 0.5)
+    free = corr[: ctx.nx - sx + 1, : ctx.ny - sy + 1, : ctx.nz - sz + 1] < 0.5
+    if occR is None:
+        return free
+    c2 = np.fft.irfftn(occR * shape[2], s=ctx.shape, axes=(0, 1, 2))
+    return free & _reachable(c2[: ctx.nx - sx + 1, : ctx.ny - sy + 1, : ctx.nz - sz + 1] < 0.5)
 
 
-def _best(ctx: _Ctx, occF, shell, shape, cur_top, empty=None):
+def _best(ctx: _Ctx, occF, shell, shape, cur_top, empty=None, occR=None):
     """Beste freie Position einer Form: (Score, i, j, k) oder None.
     empty: Präfixsumme der leeren Schichten unterhalb der aktuellen Oberkante (abdecken bevorzugt)."""
     sx, sy, sz = shape[0].shape
-    free = _free(ctx, occF, shape)
+    free = _free(ctx, occF, shape, occR)
     if not free.any():
         return None
     ii, jj, kk = np.nonzero(free)
     top = kk + sz
-    total = np.maximum(top, cur_top)
+    q = max(1, int(round(ctx.res / ctx.rz)))               # Höhe in Stufen von einem Rasterfeld bewerten,
+    top = -(-top // q) * q                                 # Feinheit nur zum Stapeln: dicht vor knapp tiefer
+    total = np.maximum(top, -(-cur_top // q) * q)
     if empty is not None and empty[-1] > 0:
         cover = empty[np.minimum(top, len(empty) - 1)] - empty[np.minimum(kk, len(empty) - 1)]
     else:
@@ -318,21 +331,15 @@ def _compact(ctx: _Ctx, occ0: np.ndarray, plan):
             others = occ.copy()
             others[i:i + sx, j:j + sy, k:k + sz] &= ~v
             # Nachbarn im Teil-Fenster aufblasen (Mindestabstand), dann tiefste freie Höhe suchen
-            g = ctx.g
+            g = ctx.g[0]
             a0, a1 = max(0, i - g), min(ctx.nx, i + sx + g)
             b0, b1 = max(0, j - g), min(ctx.ny, j + sy + g)
-            win = _dilate3(others[a0:a1, b0:b1, :], g)[i - a0:i - a0 + sx, j - b0:j - b0 + sy, :]
+            win = _dilate3(others[a0:a1, b0:b1, :], ctx.g)[i - a0:i - a0 + sx, j - b0:j - b0 + sy, :]
             new_k = k
             for kk in range(0, k):
                 if not (win[:, :, kk:kk + sz] & v).any():
                     new_k = kk
                     break
-            if new_k != k:
-                # verhakungsfrei bleiben: neue Lage muss mit allen anderen Teilen von oben erreichbar sein
-                fr = _free(ctx, np.fft.rfftn(_dilate3(others, g).astype(np.float32)), sh)
-                if not fr[i, j, new_k]:
-                    ks = [kk for kk in range(new_k, k) if fr[i, j, kk]]
-                    new_k = ks[0] if ks else k
             if new_k != k:
                 occ = others
                 occ[i:i + sx, j:j + sy, new_k:new_k + sz] |= v
@@ -585,7 +592,7 @@ def _improve(ctx: _Ctx, occ0, plan, allow_rot, quality_w, deadline, cancel=None)
         e_old = _empty_layers(_stamp(ctx, occ0, plan))
         cand = plan[:n] + plan[n + 1:] + [(p, best[1], best[2], best[3], best[4], best[5])]
         e_new = _empty_layers(_stamp(ctx, occ0, cand))
-        if (max(rest_top, new_top), e_new, new_top) < (old_total, e_old, tops[n]):
+        if (max(rest_top, new_top), new_top, e_new) < (old_total, tops[n], e_old):
             plan = cand                                  # ans Ende: verhakungsfrei geprüft gegen alle anderen
             tried.clear()
     return plan
@@ -628,11 +635,85 @@ def _reorient(ctx: _Ctx, occ0, plan, deadline, cancel=None):
     return [e for e in plan if e is not None]
 
 
+def _stuck(ctx: _Ctx, occ0, plan) -> list:
+    """Teile, die sich in KEINER Reihenfolge herausnehmen lassen (verhakt/eingeschlossen). Prüfung im Raster:
+    wiederholt alle Teile entfernen, die mit den übrigen von oben kollisionsfrei erreichbar sind."""
+    left = list(range(len(plan)))
+    while left:
+        occ = _stamp(ctx, occ0, [plan[n] for n in left])
+        out = []
+        for n in left:
+            p, rot, i, j, k, sh = plan[n]
+            v = sh[0]
+            o = occ.copy()
+            o[i:i + v.shape[0], j:j + v.shape[1], k:k + v.shape[2]] &= ~v
+            sx, sy, sz = v.shape
+            c = np.fft.irfftn(np.fft.rfftn(o.astype(np.float32)) * sh[2], s=ctx.shape, axes=(0, 1, 2))
+            if _reachable(c[: ctx.nx - sx + 1, : ctx.ny - sy + 1, : ctx.nz - sz + 1] < 0.5)[i, j, k]:
+                out.append(n)
+        if not out:
+            break
+        left = [n for n in left if n not in out]
+    return left
+
+
+def _untangle(ctx: _Ctx, occ0, plan, allow_rot, quality_w):
+    """Verhakte Teile herausnehmen und an einer Stelle neu einsetzen, die von oben erreichbar ist."""
+    bad = _stuck(ctx, occ0, plan)
+    if not bad:
+        return plan, 0
+    keep = [e for n, e in enumerate(plan) if n not in bad]
+    moved = [plan[n] for n in bad]
+    for p, rot0, *_ in moved:
+        occ = _stamp(ctx, occ0, keep)
+        occ_d = _dilate3(occ, ctx.g)
+        occF = np.fft.rfftn(occ_d.astype(np.float32))
+        occR = np.fft.rfftn(occ.astype(np.float32))
+        best = None
+        for rot in _orientations(p, allow_rot, ctx, quality_w):
+            sh = ctx.shape_of(p, rot)
+            if sh is None:
+                continue
+            r = _best(ctx, occF, _shell_fn(occ_d), sh, _top_of(keep), None, occR)
+            if r and (best is None or r[0] < best[0]):
+                best = (r[0], rot, r[1], r[2], r[3], sh)
+        if best is None:
+            keep.append(next(e for e in moved if e[0] is p))   # kein besserer Platz: lassen (selten)
+        else:
+            keep.append((p,) + best[1:])
+    return keep, len(bad)
+
+
+def _improve_existing(ctx: _Ctx, occ0, scene, movers, allow_rot, quality_w, deadline, cancel=None) -> int:
+    """Vorhandene Anordnung weiter verdichten: ins Raster übernehmen, dann wie _improve das höchste Teil
+    herausnehmen und tiefer einsetzen. Nur umgesetzte Teile bekommen eine neue Lage, alle anderen bleiben
+    millimetergenau, wo sie sind. Liefert die Zahl der umgesetzten Teile."""
+    plan = []
+    for p in movers:
+        rot = (p.rot_x, p.rot_y, p.rot_z)
+        sh = ctx.shape_of(p, rot)
+        if sh is None:
+            return 0
+        ijk = np.round((np.array([p.x, p.y, p.z_lift]) - ctx.origin + sh[1]) / ctx.rv).astype(int)
+        lim = np.array(ctx.shape) - np.array(sh[0].shape)
+        if (ijk < 0).any() or (ijk > lim).any():
+            return 0
+        plan.append((p, rot, int(ijk[0]), int(ijk[1]), int(ijk[2]), sh))
+    orig = {id(e) for e in plan}
+    plan = _improve(ctx, occ0, plan, allow_rot, quality_w, deadline, cancel)
+    moved = [e for e in plan if id(e) not in orig]
+    if moved:
+        plan2, _ = _untangle(ctx, occ0, plan, allow_rot, quality_w)
+        moved = [e for e in plan2 if id(e) not in orig]
+        _apply(ctx, moved)
+    return len(moved)
+
+
 def _fixed_occ(ctx: _Ctx, parts) -> np.ndarray:
     occ = np.zeros(ctx.shape, dtype=bool)
     for q in parts:
-        vox, lo = _voxelize(q.light(6000), ctx.res)
-        o = np.floor((lo - ctx.origin) / ctx.res).astype(int)
+        vox, lo = _voxelize(q.light(6000), ctx.res, ctx.rz)
+        o = np.floor((lo - ctx.origin) / ctx.rv).astype(int)
         a0 = np.maximum(o, 0)
         a1 = np.minimum(o + np.array(vox.shape), ctx.shape)
         if (a1 <= a0).any():
@@ -647,7 +728,7 @@ def _apply(ctx: _Ctx, plan):
     for p, rot, i, j, k, sh in plan:
         p.rot_x, p.rot_y, p.rot_z = rot
         p._cache = None
-        pos = ctx.origin + np.array([i, j, k]) * ctx.res - sh[1]
+        pos = ctx.origin + np.array([i, j, k]) * ctx.rv - sh[1]
         p.x, p.y, p.z_lift = float(pos[0]), float(pos[1]), float(pos[2])
 
 
@@ -711,8 +792,13 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     fixed = [p for p in scene.parts if p not in movers]
     if not movers:
         return {"ok": True, "height": 0.0, "density": 0.0, "passes": 0}
-    ctx = _Ctx(area, height, gap, wall, floor, res)
-    occ0 = _fixed_occ(ctx, fixed)
+    # zwei Raster treten gegeneinander an: Höhe so grob wie die Fläche, und Höhe in 1 mm (genaues Stapeln).
+    # Die schrittweise Platzierung reagiert empfindlich auf Rundung – das niedrigere Ergebnis in mm gewinnt.
+    ctxs = [_Ctx(area, height, gap, wall, floor, res, rz) for rz in (None, 1.0)]
+    if ctxs[0].rz == ctxs[1].rz:
+        ctxs = ctxs[:1]
+    occ0s = [_fixed_occ(c, fixed) for c in ctxs]
+    ctx, occ0 = ctxs[0], occ0s[0]
     vols = {id(p): volume(p) for p in movers}
     # bisherige Anordnung als Kandidat: Anordnen darf nie schlechter werden als das, was schon da liegt
     st0 = _state(scene.parts)
@@ -734,8 +820,10 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     while True:
         if k and time.time() - t0 > 0.6 * time_budget:
             break
-        if k < len(orders):
-            order = orders[k]
+        ci = (k + k // len(orders)) % len(ctxs)             # Reihenfolgen und Raster verschränkt
+        ctx, occ0 = ctxs[ci], occ0s[ci]
+        if k < len(orders) * len(ctxs):
+            order = orders[k % len(orders)]
         else:
             if time.time() - t0 > 0.6 * time_budget or len(movers) < 3:
                 break
@@ -753,14 +841,14 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
             break                                    # mit den besten Lagen passt es nicht
         if r:
             top, occ, plan = _compact(ctx, occ0, r[2])
-            key = (top, _empty_layers(occ), round(_layer_spread(occ), 2))
+            key = (round(top * ctx.rz, 1), round(_empty_layers(occ) * ctx.rz, 1), round(_layer_spread(occ), 2))
             if best is None or key < best[0]:
-                best = (key, plan, _empty_layers(occ) * ctx.res)
+                best = (key, plan, _empty_layers(occ) * ctx.rz, ci)
         if progress:
-            progress(min(0.99, max(k / (len(orders) + 1), (time.time() - t0) / max(time_budget, 0.1))))
+            progress(min(0.99, max(k / (len(orders) * len(ctxs) + 1), (time.time() - t0) / max(time_budget, 0.1))))
         if len(movers) <= 1:
             break
-        if k >= len(orders) and time.time() - t0 > 0.6 * time_budget:
+        if k >= len(orders) * len(ctxs) and time.time() - t0 > 0.6 * time_budget:
             break
     if best is None and quality_w > 0 and not (cancel and cancel()):
         # mit den besten Lagen passt es nicht -> alle Lagen erlauben
@@ -774,20 +862,26 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     if best is None:
         return {"ok": False, "height": 0.0, "density": 0.0, "passes": tried,
                 "error": "Teile passen nicht in den idealen Bereich – Abstand verringern oder Teile verkleinern"}
+    ctx, occ0 = ctxs[best[3]], occ0s[best[3]]
     if len(movers) > 1:
         plan = _improve(ctx, occ0, best[1], allow_rotation, quality_w, max(t0 + time_budget, time.time() + 0.3), cancel)
         top, occ, plan = _compact(ctx, occ0, plan)
         if reorient:
             plan = _reorient(ctx, occ0, plan, time.time() + max(1.0, 0.3 * time_budget), cancel)
             top, occ, plan = _compact(ctx, occ0, plan)
-        best = ((top, 0, 0), plan, _empty_layers(occ) * ctx.res)
+        best = ((top, 0, 0), plan, _empty_layers(occ) * ctx.rz, best[3])
+    plan, n_untangled = _untangle(ctx, occ0, best[1], allow_rotation, quality_w)
+    if n_untangled:
+        best = (best[0], plan, best[2], best[3])
     _apply(ctx, best[1])
     settle(scene, movers, gap, floor=floor)
     cover_bands(scene, movers, gap)
     kept = False
     if prev is not None:
         new_st, new_sc = _state(scene.parts), _score_state(scene, area, height)
-        _restore(st0)                                # bisherige Lage nur nachverdichten (absenken, Lücken schließen)
+        _restore(st0)                                # bisherige Lage weiter verdichten
+        _improve_existing(ctx, occ0, scene, movers, allow_rotation, quality_w,
+                          time.time() + max(1.0, 0.35 * time_budget), cancel)
         settle(scene, movers, gap, floor=floor)
         cover_bands(scene, movers, gap)
         old_sc = _score_state(scene, area, height)
@@ -809,7 +903,7 @@ def _auto_pack(scene: Scene, gap: float = 3.0, wall: float = 2.0, allow_rotation
     if progress:
         progress(1.0)
     return {"ok": bool(total_h <= height + 1e-6), "height": round(total_h, 1),
-            "density": round(float(dens) * 100, 1), "passes": tried, "kept": kept,
+            "density": round(float(dens) * 100, 1), "passes": tried, "kept": kept, "untangled": n_untangled,
             "empty_mm": round(empty_height(scene.parts), 1)}
 
 
