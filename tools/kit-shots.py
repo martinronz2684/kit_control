@@ -41,7 +41,7 @@ def main() -> int:
                 time.sleep(0.2)
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         os.environ.setdefault("QT_QUICK_BACKEND", "software")   # Software-Zeichnen: Fenster lässt sich abfotografieren
-        from PySide6.QtCore import QTimer, QUrl
+        from PySide6.QtCore import QObject, QTimer, QUrl
         from PySide6.QtGui import QGuiApplication, QWindow
         from PySide6.QtQml import QQmlApplicationEngine
         app = QGuiApplication(sys.argv[:1])
@@ -53,6 +53,7 @@ def main() -> int:
             print("Oberfläche lädt nicht:\n" + "\n".join(log))
             return 1
         win = eng.rootObjects()[0]
+        win.setProperty("updOffered", True)          # Demo meldet immer ein Update – Angebot beim Start unterdrücken
         win.setProperty("visibility", QWindow.Windowed)
         win.resize(800, 450)
 
@@ -85,6 +86,12 @@ def main() -> int:
         for p in PAGES:
             win.setProperty("page", p)
             shoot(f"print-{p}")
+        # Software-Fenster einmal zeigen
+        win.setProperty("page", "sys")
+        upd = win.findChild(QObject, "updOvl")
+        if upd is not None:
+            upd.setProperty("visible", True)
+            shoot("overlay-update")
         with open(os.path.join(OUT, "qml.log"), "w") as f:
             f.write("\n".join(log))
         print("\n".join(log[-30:]))
