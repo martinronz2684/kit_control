@@ -47,7 +47,7 @@ def _jump_length(layers) -> float:
     return n
 
 
-def estimate_seconds(meta: dict, laser_mm_s: float, recoat_s: float = 30.0, jump_mm_s: float = 2000.0,
+def estimate_seconds(meta: dict, laser_mm_s: float, recoat_s: float = 20.0, jump_mm_s: float = 2000.0,
                      factor: float = 1.0, scan_k: float = 1.0) -> float:
     """Geschätzte Druckzeit ohne Aufheizen: Belichtung + Leerfahrten + je Schicht Beschichten und Aufwärmen.
     recoat_s und scan_k werden aus den gemessenen Schichtzeiten echter Drucke gelernt."""

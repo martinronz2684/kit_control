@@ -695,11 +695,11 @@ class AppCore:
             secs = estimate_seconds(meta, self.laser_speed(), lt["recoat_s"], float(self.settings.get("est_jump_mm_s", 2000.0)),
                                     1.0, lt["scan_k"])
         else:
-            secs = estimate_seconds(meta, self.laser_speed(), float(self.settings.get("est_recoat_s", 30.0)),
+            secs = estimate_seconds(meta, self.laser_speed(), float(self.settings.get("est_recoat_s", 20.0)),
                                     float(self.settings.get("est_jump_mm_s", 2000.0)), float(self.settings.get("est_factor", 1.0)))
         return {"seconds": round(secs), "laser_mm_s": self.laser_speed(),
                 "learned": len(self.settings.get("est_history", [])), "layer_model": lt or {},
-                "recoat_s": (lt or {}).get("recoat_s", float(self.settings.get("est_recoat_s", 30.0)))}
+                "recoat_s": (lt or {}).get("recoat_s", float(self.settings.get("est_recoat_s", 20.0)))}
 
     def learn_layer_times(self, prints: list) -> dict | None:
         """Gemessene Schichtzeiten vom Pi auswerten (ersetzt den groben Faktor, sobald genug Schichten da sind)."""

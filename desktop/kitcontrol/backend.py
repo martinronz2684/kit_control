@@ -93,7 +93,7 @@ class Backend(QObject):
     # -- Einstellungen (Zahnrad unten links) --------------------------------------
     DEFAULTS = {"lang": "de", "ideal_xy": 90.0, "ideal_z": 110.0, "pack_gap": 3.0, "pack_wall": 2.0,
                 "check_updates": True, "auto_connect": True, "kit_laser_speed": 200.0, "notify": True,
-                "theme": "dark", "est_recoat_s": 30.0}
+                "theme": "dark", "est_recoat_s": 20.0}
 
     @Property("QVariant", notify=settingsChanged)
     def settings(self):
