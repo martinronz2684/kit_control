@@ -420,8 +420,9 @@ Window {
                         readonly property var e: win.st.errors || []
                         readonly property var w: win.st.warnings || []
                         visible: e.length + w.length > 0
-                        tint: e.length ? "#2ee5484d" : "#24ff6a3d"
-                        text: e.length ? "Fehler: " + e[0].title : (w.length ? "Warnung: " + w[0].title : "")
+                        // Meldungen des Kits sind Hinweise: er druckt weiter (Central zeigt nur „Errors or warnings present“)
+                        tint: "#24ff6a3d"
+                        text: "Hinweis: " + (e.length ? e[0].title : (w.length ? w[0].title : "")) + (e.length + w.length > 1 ? " +" + (e.length + w.length - 1) : "")
                         onClicked: win.page = "sys"
                     }
                     Chip { text: "WLAN · " + (win.wifi.available === false ? "aus" : (win.wifi.current || "nicht verbunden")); onClicked: wifiOvl.open() }
@@ -1191,13 +1192,13 @@ Window {
                         anchors.fill: parent; anchors.margins: 12; contentHeight: msgCol.height; clip: true
                         Column {
                             id: msgCol; width: parent.width; spacing: 6
-                            Lbl { text: "Meldungen vom Kit" }
-                            Text { visible: !(win.st.errors || []).length && !(win.st.warnings || []).length; text: "Keine Fehler oder Warnungen."; color: win.cInk; font.family: win.fontName; font.pixelSize: 13 }
+                            Lbl { text: "Hinweise vom Kit (der Kit druckt trotzdem)" }
+                            Text { visible: !(win.st.errors || []).length && !(win.st.warnings || []).length; text: "Keine Hinweise."; color: win.cInk; font.family: win.fontName; font.pixelSize: 13 }
                             Repeater {
                                 model: (win.st.errors || []).map(function (m) { m.err = true; return m }).concat(win.st.warnings || [])
                                 Rectangle {
                                     width: msgCol.width; height: mc.height + 16; radius: 12
-                                    color: modelData.err ? "#1fe5484d" : "#1aff6a3d"; border.color: modelData.err ? "#59e5484d" : "#40ff6a3d"
+                                    color: "#1aff6a3d"; border.color: "#40ff6a3d"
                                     Column { id: mc; x: 10; y: 8; width: parent.width - 20; spacing: 2
                                         Text { width: parent.width; wrapMode: Text.WordWrap; text: modelData.code + " · " + modelData.title; color: win.cInk; font.family: win.fontName; font.pixelSize: 13; font.weight: Font.DemiBold }
                                         Text { width: parent.width; wrapMode: Text.WordWrap; text: modelData.text; color: "#c9cfd8"; font.family: win.fontName; font.pixelSize: 12 } }

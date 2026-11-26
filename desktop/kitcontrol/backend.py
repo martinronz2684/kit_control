@@ -842,7 +842,7 @@ class Backend(QObject):
         old = {e.get("code") for e in (prev.get("errors") or []) if isinstance(e, dict)}
         for e in st.get("errors") or []:
             if isinstance(e, dict) and e.get("code") not in old:
-                self.notify("Fehler am Kit", f"{e.get('code', '')} {e.get('title', '')}".strip())
+                self.notify("Hinweis vom Kit", f"{e.get('code', '')} {e.get('title', '')}".strip())
 
     def _fetch_printlog(self):
         host = self._host

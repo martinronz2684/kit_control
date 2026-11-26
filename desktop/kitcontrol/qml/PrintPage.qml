@@ -324,7 +324,7 @@ Item {
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 14
                             spacing: 6
-                            Caption { text: win.t("Meldungen") }
+                            Caption { text: win.t("Hinweise vom Kit") }
                             ListView {
                                 Layout.fillWidth: true; Layout.fillHeight: true
                                 clip: true; spacing: 6
@@ -333,17 +333,17 @@ Item {
                                     width: ListView.view.width
                                     implicitHeight: mc.implicitHeight + 14
                                     radius: 8
-                                    color: modelData.kind === "Fehler" ? win.cErrBg : "#2a2112"
+                                    color: win.th("#2a2112", "#fdf1e1")          // Hinweis, kein Abbruch – der Kit druckt weiter
                                     ColumnLayout {
                                         id: mc
                                         anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top; anchors.margins: 7
                                         spacing: 1
-                                        Text { text: modelData.code + " · " + modelData.title; color: modelData.kind === "Fehler" ? win.cErrInk : win.cWarnInk; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
+                                        Text { text: modelData.code + " · " + modelData.title; color: win.cWarnInk; font.pixelSize: 12; font.weight: Font.DemiBold; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                         Text { text: modelData.text; color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; wrapMode: Text.WordWrap }
                                     }
                                 }
                             }
-                            Text { visible: !(k.errors && k.errors.length) && !(k.warnings && k.warnings.length); text: pr.live ? win.t("Keine Fehler oder Warnungen") : "–"; color: win.cMut; font.pixelSize: 12 }
+                            Text { visible: !(k.errors && k.errors.length) && !(k.warnings && k.warnings.length); text: pr.live ? win.t("Keine Hinweise") : "–"; color: win.cMut; font.pixelSize: 12 }
                         }
                     }
                 }
