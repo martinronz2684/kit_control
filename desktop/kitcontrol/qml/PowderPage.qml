@@ -26,8 +26,8 @@ Item {
                 RowLayout {
                     anchors.fill: parent; anchors.margins: 22
                     spacing: 30
-                    Stat { label: win.t("Pulver laden"); value: pw.m.powder_mm !== undefined ? pw.m.powder_mm.toFixed(1) + win.t(" mm") : "–"; tint: win.cAcc }
-                    Stat { label: win.t("Bauhöhe"); value: pw.m.height_mm !== undefined ? pw.m.height_mm.toFixed(1) + win.t(" mm") : "–" }
+                    Stat { label: win.t("Pulver laden"); value: pw.m.powder_mm !== undefined ? win.fnum(pw.m.powder_mm, 1) + win.t(" mm") : "–"; tint: win.cAcc }
+                    Stat { label: win.t("Bauhöhe"); value: pw.m.height_mm !== undefined ? win.fnum(pw.m.height_mm, 1) + win.t(" mm") : "–" }
                     Stat { label: win.t("Pulver einfüllen"); value: backend.powder.fill_l !== undefined ? win.fnum(backend.powder.fill_l, 2) + " l · " + win.fnum(backend.powder.fill_g, 0) + " g" : "–"; tint: win.cAcc }
                     Body {
                         Layout.fillWidth: true

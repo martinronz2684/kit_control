@@ -373,6 +373,8 @@ def _layout_check(root, where: str, only=None) -> list:
                 wrap = (it.property("lineCount") or 1) > 1
                 if not elide and not wrap and cr > it.width() + 2:
                     out.append(f"{where}: Text ragt über seinen Platz: „{t[:40]}“ ({cr:.0f} > {it.width():.0f} px)")
+                if elide and not in_list(it):
+                    out.append(f"{where}: Text gekürzt („…“): „{t[:40]}“")
                 # tatsächlich bemalte Fläche (nicht die ganze Breite eines linksbündigen Felds)
                 cw = min(cr, it.width()) if cr else it.width()
                 al = _qml_int(it, "effectiveHorizontalAlignment", 1)
@@ -405,6 +407,14 @@ def _layout_check(root, where: str, only=None) -> list:
             out.append(f"{where}: außerhalb des Fensters: {str(nm)[:40]} ({r.right():.0f}, {r.bottom():.0f})")
         for c in it.childItems():
             walk(c, anc + (id(it),), clip, scroll_x)
+
+    def in_list(it):
+        p = it.parentItem()
+        while p is not None:
+            if p.metaObject().className().startswith(("QQuickListView", "QQuickGridView")):
+                return True
+            p = p.parentItem()
+        return False
 
     def anc_clipped(it):
         p = it.parentItem()

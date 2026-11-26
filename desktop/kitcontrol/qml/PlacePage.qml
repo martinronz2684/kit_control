@@ -158,7 +158,7 @@ Item {
                             Caption { text: win.t("Bauteile (") + pg.parts.length + ")" }
                             Text {
                                 visible: pg.parts.length > 0
-                                text: win.t("Bauhöhe ") + backend.density.height.toFixed(1) + win.t(" mm · Packdichte ") + backend.density.density.toFixed(1) + " %"
+                                text: win.t("Bauhöhe ") + win.fnum(backend.density.height, 1) + win.t(" mm · Packdichte ") + win.fnum(backend.density.density, 1) + " %"
                                 color: win.cAcc; font.pixelSize: 11
                             }
                         }
@@ -241,7 +241,7 @@ Item {
                                     RowLayout {
                                         anchors.fill: parent; anchors.leftMargin: 34; anchors.rightMargin: 8
                                         Text { text: (part.lock_pos || part.lock_orient ? "🔒 " : "") + "#" + (index + 1); color: win.cMut; font.pixelSize: 11 }
-                                        Text { text: part.x !== undefined ? "X " + part.x.toFixed(1) + "  Y " + part.y.toFixed(1) + "  Z " + part.z.toFixed(1) : ""; color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
+                                        Text { text: part.x !== undefined ? "X " + win.fnum(part.x, 1) + "  Y " + win.fnum(part.y, 1) + "  Z " + win.fnum(part.z, 1) : ""; color: win.cMut; font.pixelSize: 11; Layout.fillWidth: true; elide: Text.ElideRight }
                                     }
                                     MouseArea { id: sma; anchors.fill: parent; hoverEnabled: true; onClicked: (m) => backend.selectPart(modelData, (m.modifiers & Qt.ControlModifier) ? "toggle" : "set") }
                                 }
@@ -294,7 +294,7 @@ Item {
                         Text {
                             Layout.fillWidth: true; Layout.preferredWidth: 1; Layout.alignment: Qt.AlignBottom; Layout.bottomMargin: 8
                             elide: Text.ElideRight
-                            text: pg.cur ? pg.cur.size[0].toFixed(1) + " × " + pg.cur.size[1].toFixed(1) + " × " + pg.cur.size[2].toFixed(1) + win.t(" mm") : ""
+                            text: pg.cur ? win.fnum(pg.cur.size[0], 1) + " × " + win.fnum(pg.cur.size[1], 1) + " × " + win.fnum(pg.cur.size[2], 1) + win.t(" mm") : ""
                             color: win.cMut; font.pixelSize: 12
                         }
                     }

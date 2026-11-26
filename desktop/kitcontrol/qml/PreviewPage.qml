@@ -81,7 +81,7 @@ Item {
                     }
                     KButton { text: "▶"; implicitWidth: 40; onClicked: { slider.increase(); vp.show() } }
                     Text {
-                        text: win.t("Schicht ") + Math.round(slider.value) + " / " + Math.round(slider.to) + (view.layerData.z !== undefined ? "  ·  z " + view.layerData.z.toFixed(2) + win.t(" mm") : "")
+                        text: win.t("Schicht ") + Math.round(slider.value) + " / " + Math.round(slider.to) + (view.layerData.z !== undefined ? "  ·  z " + win.fnum(view.layerData.z, 2) + win.t(" mm") : "")
                         color: win.cInk; font.pixelSize: 13
                         Layout.preferredWidth: 230; elide: Text.ElideRight
                     }
@@ -131,9 +131,18 @@ Item {
                     id: st
                     anchors.fill: parent; anchors.margins: 14
                     columns: 2; rowSpacing: 14; columnSpacing: 10
-                    Stat { label: win.t("Schichten"); value: vp.m.layers || "–" }
-                    Stat { label: win.t("Bauhöhe"); value: vp.m.height_mm !== undefined ? vp.m.height_mm.toFixed(1) + win.t(" mm") : "–" }
-                    Stat { label: win.t("Pulver laden"); value: vp.m.powder_mm !== undefined ? vp.m.powder_mm.toFixed(1) + win.t(" mm") : "–"; tint: win.cAcc }
+                    Stat { label: win.t("Schichten"); value: vp.m.layers ? win.fnum(vp.m.layers, 0) : "–" }
+                    Stat { label: win.t("Bauhöhe"); value: vp.m.height_mm !== undefined ? win.fnum(vp.m.height_mm, 1) + win.t(" mm") : "–" }
+                    Stat { label: win.t("Pulver laden"); value: vp.m.powder_mm !== undefined ? win.fnum(vp.m.powder_mm, 1) + win.t(" mm") : "–"; tint: win.cAcc }
+                    Stat { label: win.t("Pulver einfüllen"); value: backend.powder.fill_l !== undefined ? win.fnum(backend.powder.fill_l, 2) + " l" : "–"; tint: win.cAcc }
+                    Stat { label: win.t("Pulvergewicht"); value: backend.powder.fill_g !== undefined ? win.fnum(backend.powder.fill_g, 0) + " g" : "–" }
+                    Stat { label: win.t("Teilegewicht"); value: backend.powder.parts_g !== undefined ? win.fnum(backend.powder.parts_g, 0) + " g" : "–" }
+                    Stat { label: win.t("Teilevolumen"); value: backend.powder.parts_cm3 !== undefined ? win.fnum(backend.powder.parts_cm3, 1) + " cm³" : "–" }
+                    Stat {
+                        label: win.t("Materialkosten")
+                        value: backend.powder.parts_eur !== undefined ? win.fnum(backend.powder.parts_eur, 2) + " €" : win.t("kein Preis")
+                        tint: backend.powder.parts_eur !== undefined ? win.cAcc : win.cMut
+                    }
                     Stat {
                         label: win.t("Druckzeit")
                         value: backend.estimate.seconds !== undefined ? win.fmtTime(backend.estimate.seconds) : "–"
@@ -144,21 +153,7 @@ Item {
                         value: backend.estimate.seconds !== undefined ? Qt.formatTime(new Date(Date.now() + (backend.estimate.seconds + vp.heatS) * 1000), "hh:mm") + win.t(" Uhr") : "–"
                         tint: win.cAcc
                     }
-                    Stat {
-                        label: win.t("Pulver einfüllen")
-                        value: backend.powder.fill_l !== undefined ? win.fnum(backend.powder.fill_l, 2) + " l · " + win.fnum(backend.powder.fill_g, 0) + " g" : "–"
-                        tint: win.cAcc
-                    }
-                    Stat {
-                        label: win.t("In den Teilen")
-                        value: backend.powder.parts_g !== undefined ? win.fnum(backend.powder.parts_cm3, 1) + " cm³ · " + win.fnum(backend.powder.parts_g, 0) + " g" : "–"
-                    }
-                    Stat {
-                        label: win.t("Materialkosten Teile")
-                        value: backend.powder.parts_eur !== undefined ? win.fnum(backend.powder.parts_eur, 2) + " €" : win.t("Preis im Profil fehlt")
-                        tint: backend.powder.parts_eur !== undefined ? win.cAcc : win.cMut
-                    }
-                    Stat { label: win.t("Laserweg"); value: vp.m.est_scan_m !== undefined ? Math.round(vp.m.est_scan_m) + " m" : "–" }
+                    Stat { label: win.t("Laserweg"); value: vp.m.est_scan_m !== undefined ? win.fnum(vp.m.est_scan_m, 0) + " m" : "–" }
                 }
             }
 

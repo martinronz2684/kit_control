@@ -122,7 +122,7 @@ EN: dict[str, str] = {
     "Nur übertragen": "Transfer only", "Übertragen und starten": "Transfer and start",
     "Job zum Kit übertragen und den Druck sofort starten? Der Kit heizt dann auf.": "Transfer the job to the Kit and start printing right away? The Kit will heat up.",
     "Jobs am Kit": "Jobs on the Kit",
-    "Pulver einfüllen": "Powder to fill", "In den Teilen": "In the parts", "Materialkosten Teile": "Material cost of parts",
+    "Pulver einfüllen": "Powder to fill", "Pulvergewicht": "Powder weight", "Teilegewicht": "Part weight", "Teilevolumen": "Part volume", "Materialkosten": "Material cost", "kein Preis": "no price", "In den Teilen": "In the parts", "Materialkosten Teile": "Material cost of parts",
     "Preis im Profil fehlt": "No price in profile", "Pulver: Bauraum 110 × 110 mm × (Bauhöhe + 5 mm), ": "Powder: build area 110 × 110 mm × (build height + 5 mm), ",
     " g/ml Schüttdichte. Teile: ": " g/ml bulk density. Parts: ", " – änderbar unter Parameter.": " – change under Parameters.",
     "Material und Kosten (sofort gespeichert, auch bei Vorlagen)": "Material and cost (saved immediately, also for presets)",
