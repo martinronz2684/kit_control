@@ -25,32 +25,45 @@ if [ -s "$TOKEN_FILE" ]; then
   AUTH=(-H "Authorization: Bearer $(cat "$TOKEN_FILE")")
 fi
 
-# Nur nachsehen, welche Version im Repo liegt (für die Oberfläche)
+# Neueste Version, die GitHubs Prüfung der Oberfläche bestanden hat. Noch laufende oder fehlgeschlagene
+# Stände werden übersprungen – so tut ein Update nie „nichts“ und wird gleich wieder angeboten.
+latest_ok() {
+  curl -fsSL "${AUTH[@]}" "https://api.github.com/repos/$REPO/commits?sha=$BRANCH&per_page=8" | python3 -c '
+import json, subprocess, sys
+auth = sys.argv[1:]
+for c in json.load(sys.stdin):
+    sha = c["sha"]
+    try:
+        out = subprocess.run(["curl", "-fsSL", *auth, "https://api.github.com/repos/'"$REPO"'/commits/%s/check-runs" % sha],
+                             capture_output=True, text=True, timeout=20).stdout
+        runs = [r for r in json.loads(out).get("check_runs", []) if "qml" in r.get("name", "").lower()]
+    except Exception:
+        runs = []
+    if runs and all(r.get("status") == "completed" for r in runs) and not any(r.get("conclusion") == "failure" for r in runs):
+        print(sha); break
+' "${AUTH[@]}"
+}
+
 if [ "${1:-}" = "--check" ]; then
-  curl -fsSL "${AUTH[@]}" -H "Accept: application/vnd.github.sha" \
-    "https://api.github.com/repos/$REPO/commits/$BRANCH" | cut -c1-7
+  if [ -n "${KIT_SKIP_CHECK:-}" ]; then
+    curl -fsSL "${AUTH[@]}" -H "Accept: application/vnd.github.sha" \
+      "https://api.github.com/repos/$REPO/commits/$BRANCH" | cut -c1-7
+  else
+    latest_ok | cut -c1-7
+  fi
   exit 0
 fi
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-SHA="$(curl -fsSL "${AUTH[@]}" -H "Accept: application/vnd.github.sha" "https://api.github.com/repos/$REPO/commits/$BRANCH" || true)"
-if [ -n "$SHA" ] && [ -z "${KIT_SKIP_CHECK:-}" ]; then
-  # Hat GitHub die Oberfläche für diesen Stand geprüft? Fehlgeschlagen -> nicht installieren.
-  VERDICT="$(curl -fsSL "${AUTH[@]}" "https://api.github.com/repos/$REPO/commits/$SHA/check-runs" | python3 -c '
-import json, sys
-runs = [r for r in json.load(sys.stdin).get("check_runs", []) if "qml" in r.get("name", "").lower()]
-if any(r.get("conclusion") == "failure" for r in runs): print("failure")
-elif any(r.get("status") != "completed" for r in runs): print("pending")
-else: print("ok")' 2>/dev/null || echo ok)"
-  if [ "$VERDICT" = failure ]; then
-    echo "Stand ${SHA:0:7} hat die Prüfung der Oberfläche nicht bestanden – Update übersprungen."
-    exit 0
-  fi
-  if [ "$VERDICT" = pending ]; then
-    echo "Stand ${SHA:0:7} wird gerade noch geprüft – bitte in ein paar Minuten erneut versuchen."
-    exit 0
+if [ -n "${KIT_SKIP_CHECK:-}" ]; then
+  SHA="$(curl -fsSL "${AUTH[@]}" -H "Accept: application/vnd.github.sha" "https://api.github.com/repos/$REPO/commits/$BRANCH" || true)"
+else
+  SHA="$(latest_ok || true)"
+  if [ -z "$SHA" ]; then
+    echo "Keine geprüfte Version gefunden – bitte in ein paar Minuten erneut versuchen."
+    exit 1
   fi
 fi
 REF="${SHA:-$BRANCH}"
