@@ -188,7 +188,8 @@ Item {
                             text: !backend.connected ? win.t("Nicht verbunden") : (!k.connected ? (k.message || win.t("Kit nicht am Pi angeschlossen")) : (k.state_name || "–"))
                             color: win.cInk; font.pixelSize: 20; font.weight: Font.DemiBold; Layout.fillWidth: true; elide: Text.ElideRight
                         }
-                        Text { visible: k.printing === true; text: (k.percent || 0) + " %"; color: "#5cc3e3"; font.pixelSize: 26; font.weight: Font.DemiBold }
+                        Text { visible: k.printing === true
+                               text: k.state === 6 && k.countdown_on && k.countdown_s > 0 ? win.t("Heizt auf · ") + win.fmtTime(k.countdown_s) : (k.percent || 0) + " %"; color: "#5cc3e3"; font.pixelSize: 26; font.weight: Font.DemiBold }
                     }
                     Rectangle {
                         Layout.fillWidth: true; Layout.preferredHeight: 8; radius: 4; color: win.cTrack
