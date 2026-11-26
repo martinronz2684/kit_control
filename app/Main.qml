@@ -38,6 +38,20 @@ Window {
     property bool warm: false
     property var moved: ({ print: 0, reservoir: 0 })
     property var zero: ({ print: 0, reservoir: 0 })     // „0 setzen“: Anzeige zählt ab hier
+    // Wo die Platte in den Grafiken steht, wenn „0 setzen“ gedrückt wurde: Bauplattform oben (Nullpunkt =
+    // Druckbeginn), Vorrat auf der Ladetiefe des geladenen Jobs (Bauhöhe + 5 mm) bzw. oben ohne Job
+    property var anchor: ({ print: 70, reservoir: 30 })
+    property var zeroed: ({ print: false, reservoir: false })
+    property bool jobLoaded: false
+    function setZero(k) {
+        var z = { print: win.zero.print, reservoir: win.zero.reservoir }
+        var a = { print: win.anchor.print, reservoir: win.anchor.reservoir }
+        var d = { print: win.zeroed.print, reservoir: win.zeroed.reservoir }
+        z[k] = win.moved[k]
+        a[k] = k === "print" ? 0 : (win.jobLoaded ? Math.min(110, win.jobH + 5) : 0)
+        d[k] = true
+        win.zero = z; win.anchor = a; win.zeroed = d
+    }
     function rel(k) { return Math.round((win.moved[k] - win.zero[k]) * 1000) / 1000 }
     // Angenommene Ausgangstiefe der Platten (mm unter der Pulverebene), bis der Kit echte Werte liefert
     readonly property var baseDepth: ({ print: 70, reservoir: 30 })
@@ -90,7 +104,7 @@ Window {
         if (seenCentral < 0) seenCentral = 0
         if (seenResult < 0) seenResult = 0
         // Bauhöhe des laufenden Jobs für Laden & Entladen übernehmen
-        if (job && job.id !== seenCurrent) { seenCurrent = job.id; if (job.height_mm > 0) jobH = Math.round(job.height_mm) }
+        if (job && job.id !== seenCurrent) { seenCurrent = job.id; if (job.height_mm > 0) { jobH = Math.round(job.height_mm); jobLoaded = true } }
     }
     // Wie Central (Pulver-Fenster): Beim Öffnen von „Bewegung“ geht der Kit in die Pulvervorbereitung,
     // beim Verlassen wieder heraus. Nur darin lassen sich Platten fahren und Schichten auftragen.
@@ -102,7 +116,7 @@ Window {
             send({ cmd: "powder_prep_off" })
         lastPage = page
     }
-    function depth(k) { return Math.max(0, Math.min(110, win.baseDepth[k] + win.moved[k])) }
+    function depth(k) { return Math.max(0, Math.min(110, win.anchor[k] + win.moved[k] - win.zero[k])) }
     property int lastLayer: -1
     property bool kitdUp: false
     property var upd: ({ current: "", latest: null, available: false, running: false, log: [] })
@@ -544,7 +558,7 @@ Window {
                                 color: win.cInk; font.family: win.fontName; font.pixelSize: 40; font.weight: Font.Light; font.letterSpacing: -1.4 }
                             Text { y: 21; text: "mm"; color: win.cMut; font.family: win.fontName; font.pixelSize: 16 }
                         }
-                        Lbl { x: 14; y: 78; text: win.st.printing ? "Während des Drucks gesperrt" : (win.zero[ax.key] !== 0 ? "seit Nullpunkt" : "seit Start"); font.pixelSize: 11 }
+                        Lbl { x: 14; y: 78; text: win.st.printing ? "Während des Drucks gesperrt" : (win.zeroed[ax.key] ? "seit Nullpunkt" : "seit Start"); font.pixelSize: 11 }
 
                         // Schacht: dünnes Blech, Pulver mit Korn, massive Platte
                         Item {
@@ -587,8 +601,8 @@ Window {
                             readonly property real h: (ax.height - 108 - 16 - 16 - 44) / 2
                             KButton { width: 76; height: parent.h; text: "▲"; size: 22; ok: !win.st.printing; onClicked: win.jog(ax.key, -win.step) }
                             KButton { width: 76; height: parent.h; text: "▼"; size: 22; ok: !win.st.printing; onClicked: win.jog(ax.key, win.step) }
-                            KButton { width: 76; height: 44; text: "0 setzen"; size: 13; ok: win.rel(ax.key) !== 0
-                                onClicked: { var z = { print: win.zero.print, reservoir: win.zero.reservoir }; z[ax.key] = win.moved[ax.key]; win.zero = z } }
+                            KButton { width: 76; height: 44; text: "0 setzen"; size: 13; ok: !win.st.printing
+                                onClicked: win.setZero(ax.key) }
                         }
                     }
                 }
@@ -793,7 +807,7 @@ Window {
                 property int pick: 1
                 onSelChanged: {
                     pick = Math.max(1, Math.round(layers * 0.5))
-                    if (sel && sel.height_mm > 0 && !win.st.printing) win.jobH = Math.round(sel.height_mm)   // für Pulver laden / Entladen
+                    if (sel && sel.height_mm > 0 && !win.st.printing) { win.jobH = Math.round(sel.height_mm); win.jobLoaded = true }   // für Pulver laden / Entladen
                 }
                 onVisibleChanged: if (visible) win.loadJobs()
                 function fmtDate(t) { var d = new Date(t * 1000); return ("0" + d.getDate()).slice(-2) + "." + ("0" + (d.getMonth() + 1)).slice(-2) + ". " + d.getHours() + ":" + ("0" + d.getMinutes()).slice(-2) }
@@ -965,7 +979,7 @@ Window {
                                 text: "Fährt Bauplattform, Vorrat und Beschichter auf ihre Ausgangsposition – wie „Home all axes“ in Central." }
                             KButton { width: parent.width; height: 46; text: "Referenzfahrt starten"; ok: !calPage.locked
                                 onClicked: win.ask("Referenzfahrt?", "Alle Achsen fahren auf ihre Ausgangsposition. Bauraum frei?", function () {
-                                    win.send({ cmd: "pattern", name: "home", confirmed: true }, function (ok) { if (ok) { win.moved = { print: 0, reservoir: 0 }; win.zero = { print: 0, reservoir: 0 } } }) }) }
+                                    win.send({ cmd: "pattern", name: "home", confirmed: true }, function (ok) { if (ok) { win.moved = { print: 0, reservoir: 0 }; win.zero = { print: 0, reservoir: 0 }; win.anchor = { print: win.baseDepth.print, reservoir: win.baseDepth.reservoir }; win.zeroed = { print: false, reservoir: false } } }) }) }
                         }
                     }
                 }
