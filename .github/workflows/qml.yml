@@ -3,9 +3,12 @@ name: Oberfläche prüfen
 on:
   push:
     branches: [main]
-    paths: ["app/**", "branding/**", "tools/qml-check.sh", ".github/workflows/qml.yml"]
+    paths: ["app/**", "branding/**", "kitd/**", "tools/qml-check.sh", "tools/kit-shots.py", ".github/workflows/qml.yml"]
   workflow_dispatch:
   workflow_call:
+
+permissions:
+  contents: write
 
 jobs:
   qml:
@@ -19,3 +22,21 @@ jobs:
           sudo apt-get install -y qml-qt6 qml6-module-qtquick qml6-module-qtquick-window qml6-module-qtqml-workerscript qt6-qpa-plugins fonts-inter
       - name: Oberfläche laden
         run: sh tools/qml-check.sh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Bildschirmfotos der Kit-Oberfläche
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          pip install -q "PySide6>=6.6" numpy
+          timeout 240 python tools/kit-shots.py kitshots || true
+      - name: Fotos ablegen (Branch kit-screens)
+        if: github.ref == 'refs/heads/main'
+        run: |
+          cd kitshots || exit 0
+          git init -q -b kit-screens
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A && git commit -q -m "Kit-Oberfläche ${GITHUB_SHA::7}" || exit 0
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" kit-screens:kit-screens
