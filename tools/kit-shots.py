@@ -52,6 +52,10 @@ def main() -> int:
             print("Oberfläche lädt nicht:\n" + "\n".join(log))
             return 1
         win = eng.rootObjects()[0]
+        from PySide6.QtQuick import QQuickWindow
+        if not isinstance(win, QQuickWindow):          # als QQuickWindow ansprechen (für grabWindow)
+            import shiboken6
+            win = shiboken6.wrapInstance(shiboken6.getCppPointer(win)[0], QQuickWindow)
         win.setProperty("visibility", QWindow.Windowed)
         win.resize(800, 450)
 
