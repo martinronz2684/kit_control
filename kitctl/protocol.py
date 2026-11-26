@@ -392,7 +392,8 @@ SIMPLE = {
     "start_print": COM_STARTPRINT,
     "abort_print": COM_ABORTPRINT,
     "stop_sintering": COM_STOPSINTERING_GOCOOLDOWN,
-    "skip_heatup": COM_FORCESTART_SINTERING,          # Centrals „Skip Heat Up“
+    "skip_heatup": COM_FORCESTART_SURFACE_WARMUP,     # Centrals „Skip Heat Up“ (beim Aufheizen, Zustand 6)
+    "force_sinter": COM_FORCESTART_SINTERING,         # Centrals „Force start sintering“ (Pulver vorbereiten, Zustand 7)
     "freeze_motors": COM_FREEZE_ALL_MOTOR_FUNCTIONS,
     "powder_prep_on": COM_GO_POWDERPREPARATION,
     "powder_prep_off": COM_EXIT_POWDERPREPARATION,

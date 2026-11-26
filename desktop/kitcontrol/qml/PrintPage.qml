@@ -291,10 +291,14 @@ Item {
                                 KButton { text: win.t("Heizen aus"); Layout.fillWidth: true; enabled: pr.live && win.remoteOn; onClicked: backend.cmd({ cmd: "warmup", on: false }) }
                             }
                             KButton {
-                                visible: k.state === 6
-                                text: win.t("Aufheizen überspringen"); kind: "hot"; Layout.fillWidth: true; enabled: pr.live && win.remoteOn
-                                ToolTip.visible: hovered; ToolTip.text: win.t("Wie „Skip Heat Up“ in Central: Vorheizen beenden und sofort drucken – nur bei durchgewärmter Kammer")
-                                onClicked: confirm.ask(win.t("Aufheizen überspringen und sofort drucken? Nur sinnvoll, wenn die Kammer schon durchgewärmt ist."), function() { backend.cmd({ cmd: "skip_heatup" }) })
+                                visible: k.state === 6 || k.state === 7
+                                text: k.state === 7 ? win.t("Sintern sofort starten") : win.t("Aufheizen überspringen"); kind: "hot"; Layout.fillWidth: true; enabled: pr.live && win.remoteOn
+                                ToolTip.visible: hovered
+                                ToolTip.text: k.state === 7 ? win.t("Wie „Force start sintering“ in Central: Pulvervorbereitung beenden und mit der ersten Schicht beginnen")
+                                                            : win.t("Wie „Skip Heat Up“ in Central: Aufheizen abkürzen – nur bei durchgewärmter Kammer")
+                                onClicked: k.state === 7
+                                    ? confirm.ask(win.t("Pulvervorbereitung beenden und sofort sintern?"), function() { backend.cmd({ cmd: "force_sinter" }) })
+                                    : confirm.ask(win.t("Aufheizen überspringen? Ein zu kurzes Aufheizen kann den Druck misslingen lassen."), function() { backend.cmd({ cmd: "skip_heatup" }) })
                             }
                             KButton {
                                 text: win.t("Zum Abkühlen springen"); Layout.fillWidth: true; enabled: pr.live && win.remoteOn && k.printing === true

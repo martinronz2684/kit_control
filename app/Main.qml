@@ -536,12 +536,16 @@ Window {
                         kind: !win.st.printing && !waiting ? "pri" : ""
                         text: waiting ? "Start abbrechen (Vorheizen aus)"
                               : win.st.state === 6 ? "Aufheizen überspringen"
+                              : win.st.state === 7 ? "Sintern sofort starten"
                               : win.st.printing ? "Sintern stoppen & abkühlen" : "Job auswählen"
                         onClicked: {
                             if (waiting) win.send({ cmd: "job_cancel" })
-                            else if (win.st.state === 6)
-                                win.ask("Aufheizen überspringen?", "Der Kit beendet das Vorheizen und beginnt sofort mit dem Druck. Nur sinnvoll, wenn die Kammer schon durchgewärmt ist – sonst verziehen sich die ersten Schichten.",
+                            else if (win.st.state === 6)     // wie Centrals „Skip Heat Up“
+                                win.ask("Aufheizen überspringen?", "Ein zu kurzes Aufheizen kann den Druck misslingen lassen. Nur sinnvoll, wenn die Kammer schon durchgewärmt ist.",
                                         function () { win.send({ cmd: "skip_heatup" }) })
+                            else if (win.st.state === 7)     // wie Centrals „Force start sintering“
+                                win.ask("Sintern sofort starten?", "Der Kit beendet das Vorbereiten des Pulvers und beginnt sofort mit der ersten Schicht.",
+                                        function () { win.send({ cmd: "force_sinter" }) })
                             else if (win.st.printing)
                                 win.ask("Sintern stoppen?", "Der Kit hört auf zu belichten und kühlt ab.", function () { win.send({ cmd: "stop_sintering" }) })
                             else win.page = "jobs"
