@@ -375,7 +375,9 @@ function drawLayer(cv, L, mini){
     for (let x = 10; x < PLATE; x += 10) { g.beginPath(); g.moveTo(x*k, 0); g.lineTo(x*k, cv.height); g.moveTo(0, x*k); g.lineTo(cv.width, x*k); g.stroke(); }
   }
   const seg = (a, col, lw) => { if (!a || !a.length) return; g.strokeStyle = col; g.lineWidth = lw * dpr; g.beginPath();
-    for (let i = 0; i + 3 < a.length; i += 4) { g.moveTo(a[i]*k, cv.height - a[i+1]*k); g.lineTo(a[i+2]*k, cv.height - a[i+3]*k); } g.stroke(); };
+    // Koordinaten im Job: Bauplattenmitte = 0 (±55 mm) -> auf die Zeichenfläche verschieben
+    const h = PLATE / 2, X = v => (v + h) * k, Y = v => cv.height - (v + h) * k;
+    for (let i = 0; i + 3 < a.length; i += 4) { g.moveTo(X(a[i]), Y(a[i+1])); g.lineTo(X(a[i+2]), Y(a[i+3])); } g.stroke(); };
   seg(L.infill, "rgba(47,166,204,.55)", mini ? .5 : .8);
   seg(L.contour, "#8fdcf2", mini ? .8 : 1.4);
 }
@@ -476,7 +478,8 @@ const Sim = (() => {
       if (s) rect(c, 40, 40, 70, 70); else circ(c, (x0+x1)/2 + ((n + i*7) % 9) - 4, (y0+y1)/2, Math.min(x1-x0, y1-y0) * .22);
       for (let y = y0 + .8; y < y1; y += 1.6) f.push(x0, y, x1, y);
     });
-    return {layer:n, z_mm:n*0.1, contour:c, infill:f};
+    const mid = v => v - 55;                                  // wie echte Jobs: Bauplattenmitte = 0
+    return {layer:n, z_mm:n*0.1, contour:c.map(mid), infill:f.map(mid)};
   }
   return {
     get(p){
