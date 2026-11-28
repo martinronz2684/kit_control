@@ -76,6 +76,11 @@ def main() -> int:
         try:
             sys.path.insert(0, ROOT)
             from kitctl import auth as A
+            api("/api/cmd", {"cmd": "powder_prep_off"})      # Bewegen-Seite hat die Pulvervorbereitung gestartet
+            for _ in range(20):
+                if api("/api/state").get("state") != 4:
+                    break
+                wait(300)
             a, a_pub = A.keypair()
             r = api("/api/pair/start", {"name": "WERKSTATT-PC", "kind": "pc", "A": format(a_pub, "x")})
             shoot("overlay-pair")
