@@ -1,0 +1,8 @@
+Meldung (ok): Angeordnet – die bisherige Anordnung war niedriger, sie wurde nur nachverdichtet: Bauhöhe 50.7 mm, Packdichte 51.9 %, leere Schichten 0.0 mm (1 Durchläufe)
+Bauhöhe nach Anordnen: 50.7 mm, Probleme: []
+top: Teil 0 bei Bildpunkt 460,478; Position -14.5,-23.2,0.0
+top: nach Klick ausgewählt = 4
+top: verschoben: Teil 4 (1.0, -23.5, 30.0) -> (19.6, -14.2, 30.0)
+front: Teil 0 bei Bildpunkt 453,479; Position -14.5,-23.2,0.0
+front: nach Klick ausgewählt = 2
+front: verschoben: Teil 2 (np.float64(-14.5), np.float64(-23.2), 21.7) -> (2.4, -22.4, 30.1)

@@ -1,0 +1,10 @@
+de 1120×720 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Lasergeschwindigkeit, wenn das Profil ke“
+de 1120×720 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Beschichten + Aufwärmen je Schicht“
+de 1280×760 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Lasergeschwindigkeit, wenn das Profil ke“
+de 1280×760 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Beschichten + Aufwärmen je Schicht“
+de 1366×768 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Lasergeschwindigkeit, wenn das Profil ke“
+de 1366×768 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Beschichten + Aufwärmen je Schicht“
+de 1920×1040 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Lasergeschwindigkeit, wenn das Profil ke“
+de 1920×1040 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Beschichten + Aufwärmen je Schicht“
+de-light 1366×768 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Lasergeschwindigkeit, wenn das Profil ke“
+de-light 1366×768 1-platzieren settingsPop: Text ragt seitlich aus seinem Feld: „Beschichten + Aufwärmen je Schicht“
