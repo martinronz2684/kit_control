@@ -18,6 +18,11 @@ Central schließen, `Install-CentralWLAN.ps1` mit Rechtsklick → *Mit PowerShel
   Der Pi erscheint am PC als Netzwerkadapter und hat dort immer `10.55.0.1` – die Bibliothek findet ihn von selbst.
   Den Pi dann über die GPIO-Pins oder ein Netzteil mit Datendurchleitung versorgen; ein PC-Anschluss liefert zu wenig Strom.
 - Rückgängig: `-Uninstall` stellt die Original-Bibliothek wieder her.
+- **Kopplung:** Beim ersten Verbinden zeigt das Kit-Display einen 6-stelligen Code, Central fragt ihn in einem
+  Fenster ab. Danach meldet sich jede Verbindung mit dem dabei ausgehandelten Schlüssel an (liegt in
+  `%APPDATA%\KitControl\central-pairing.properties`, geht nie übers Netz). Ohne Kopplung findet Central keinen Kit.
+  Koppeln geht nicht, solange der Kit druckt, vorheizt oder Pulver vorbereitet. Entfernen: am Display unter
+  *System → Gekoppelte Geräte*.
 - Firmware- und Bootloader-Befehle werden vom Pi immer abgelehnt.
 - Es kann immer nur ein Central gleichzeitig verbunden sein.
 

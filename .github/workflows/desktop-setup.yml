@@ -79,7 +79,6 @@ jobs:
             shots/*.txt
           if-no-files-found: ignore
       - name: Bildschirmfotos ablegen (Branch screens)
-        if: github.ref == 'refs/heads/main'
         shell: bash
         run: |
           mkdir -p ../screens && cp shots/*.png shots/*.txt desktop/*.log ../screens/ 2>/dev/null || true
@@ -88,7 +87,8 @@ jobs:
           git config user.name "github-actions"
           git config user.email "github-actions@users.noreply.github.com"
           git add -A && git commit -q -m "Bildschirmfotos ${GITHUB_SHA::7}" || exit 0
-          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" screens:screens
+          T=screens; [ "$GITHUB_REF_NAME" = main ] || T="screens-$GITHUB_REF_NAME"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${GITHUB_REPOSITORY}.git" screens:$T
       - name: App bauen (PyInstaller)
         shell: bash
         run: |
