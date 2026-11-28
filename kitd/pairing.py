@@ -40,6 +40,7 @@ class Pairing:
         self.cooldown: dict[str, float] = {}
         self.nonces: dict[str, float] = {}
         self.done = None                 # zuletzt erfolgreich gekoppelt (für die Meldung am Display)
+        self.last_start: dict[str, float] = {}   # wann ein Gerät zuletzt eine Kopplung angefragt hat
         self._seen_dirty = 0.0
 
     # -- Speicher -------------------------------------------------------------
@@ -80,6 +81,7 @@ class Pairing:
         now = time.time()
         name = re.sub(r"[\x00-\x1f]", "", str(name or "")).strip()[:40] or "Unbekanntes Gerät"
         kind = kind if kind in KINDS else "pc"
+        self.last_start[peer] = now
         if busy:
             raise PairError(busy, 409)
         try:

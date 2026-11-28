@@ -78,6 +78,8 @@ EN: dict[str, str] = {
     "Empfohlen: Winkligkeit und Verzerrung aus dem Scan, den Maßstab wie bisher über das Kalibrierteil und die digitale Skalierung im Kit.": "Recommended: squareness and distortion from the scan, scale as before via the calibration part and the Kit's digital scaling.",
     "Auf den Kit übernehmen": "Apply to the Kit",
     "Zum Übernehmen mit dem Kit verbinden.": "Connect to the Kit to apply.",
+    "Zum Übernehmen (oben rechts) mit dem Kit verbinden.": "Connect to the Kit to apply (top right).",
+    "Übernehmen geht nicht während eines Drucks.": "Cannot apply while printing.",
     "Nicht während eines Drucks.": "Not while printing.",
     "Winkligkeit, Verzerrung und Schräglauf aus einem Scan des Kalibriermusters – die Werte liegen am Kit.": "Squareness, distortion and lean from a scan of the calibration pattern – the values are stored on the Kit.",
     "Das Kit Control am Pi braucht dafür ein Update.": "The Kit Control on the Pi needs an update for this.",

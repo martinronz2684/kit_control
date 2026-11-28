@@ -49,6 +49,7 @@ from kitd.printlog import PrintLog  # noqa: E402
 PRINTLOG = PrintLog(STATE_DIR)
 from kitd.pairing import Pairing, PairError  # noqa: E402
 PAIR = Pairing(STATE_DIR)
+REJECTED: dict = {}          # letzter abgewiesener Zugriff ohne Kopplung (Hinweis am Display)
 
 LOCAL_ONLY = {"pc_link", "update_check", "update_start", "wifi_connect", "wifi_disconnect", "demo",
               "remote_control", "job_autostart", "lamp_legacy", "pair_cancel", "pair_remove",
@@ -770,6 +771,7 @@ class Handler(BaseHTTPRequestHandler):
         return PAIR.verify(self.command, self.path, self.headers, body, peer)
 
     def _deny(self):
+        REJECTED.update(peer=self.client_address[0], ts=time.time(), what="pc")
         return self._json({"ok": False, "pair_required": True, "device_id": PAIR.device_id,
                            "error": "Nicht gekoppelt – dieses Gerät zuerst mit dem Code vom Kit-Display koppeln"},
                           HTTPStatus.UNAUTHORIZED)
@@ -859,6 +861,19 @@ class Handler(BaseHTTPRequestHandler):
                     PAIR.abort_if_busy()
                 st["pair"] = PAIR.pending()
                 st["pair_done"] = PAIR.done
+                rej = [dict(REJECTED)] if REJECTED else []
+                try:
+                    from kitd.bridge import STATE as BR
+                    if BR.get("rejected"):
+                        rej.append({**BR["rejected"], "what": "central"})
+                except Exception:
+                    pass
+                # erst nach ein paar Sekunden und nur, wenn das Gerät nicht selbst eine Kopplung angefragt hat
+                # (neue PC-App/Central fragen sofort an – dann ist das kein Fall für einen Hinweis)
+                now = time.time()
+                rej = [r for r in rej if 4 < now - r.get("ts", 0) < 60
+                       and now - PAIR.last_start.get(r.get("peer", ""), 0) > 90]
+                st["rejected"] = max(rej, key=lambda r: r["ts"]) if rej else None
             st["compensation_active"] = _comp_active()
             try:
                 from kitd.bridge import STATE as BR
@@ -882,6 +897,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
         path = self.path.split("?")[0]
         # Handy-Oberfläche: http://<pi>:8080/app
+        if path.startswith("/app/") and path != "/app/":
+            path = path[4:]                         # /app/kitauth.js, /app/phone-icon.png …
         if path in ("/", "/index.html") and not self._local():
             path = "/app"                           # im Netz gibt es die Handy-Oberfläche, nicht die des Displays
         path = "index.html" if path in ("/", "/index.html") else "phone.html" if path in ("/app", "/app/") else path.lstrip("/")

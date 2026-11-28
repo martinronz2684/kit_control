@@ -67,6 +67,12 @@ Popup {
                 Text { text: win.t("Maßstab, Winkligkeit, Schräglauf und Verzerrung – der Kit Control am Pi rechnet jeden Job beim Übertragen danach um.")
                        color: win.cMut; font.pixelSize: 12; Layout.fillWidth: true; elide: Text.ElideRight }
             }
+            KButton {
+                visible: lp.hasRes
+                text: win.t("Auf den Kit übernehmen"); kind: "pri"
+                enabled: lp.hasRes && lp.kitOk && lp.c.enabled !== undefined
+                onClicked: backend.lcApply(lp.useScale)
+            }
             KButton { text: win.t("Schließen"); kind: "ghost"; onClicked: lp.close() }
         }
 
@@ -372,16 +378,10 @@ Popup {
                                 }
                             }
                             Item { Layout.fillHeight: true }
-                            KButton {
-                                Layout.fillWidth: true
-                                text: win.t("Auf den Kit übernehmen"); kind: "pri"
-                                enabled: lp.hasRes && lp.kitOk && lp.c.enabled !== undefined
-                                onClicked: backend.lcApply(lp.useScale)
-                            }
                             Text {
                                 Layout.fillWidth: true; wrapMode: Text.WordWrap; font.pixelSize: 11; color: win.cMut
                                 visible: lp.hasRes && !lp.kitOk
-                                text: !backend.connected ? win.t("Zum Übernehmen mit dem Kit verbinden.") : win.t("Nicht während eines Drucks.")
+                                text: !backend.connected ? win.t("Zum Übernehmen (oben rechts) mit dem Kit verbinden.") : win.t("Übernehmen geht nicht während eines Drucks.")
                             }
                         }
                     }

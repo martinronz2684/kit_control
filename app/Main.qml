@@ -155,6 +155,7 @@ Window {
     property var pairClients: []
     property var comp: ({})
     property real pairDoneTs: -1
+    property var rejSeen: ({})
     function loadClients() { Api.get("/api/pair/clients", function (j) { if (j && j.clients) win.pairClients = j.clients }) }
     function loadComp() { Api.get("/api/compensation", function (j) { if (j && j.enabled !== undefined) win.comp = j }) }
     function dateDe(ts) { return ts ? Qt.formatDateTime(new Date(ts * 1000), "dd.MM.yyyy") : "—" }
@@ -207,6 +208,17 @@ Window {
                 win.loadClients()
             }
             win.pairDoneTs = pd
+            // Zugriff ohne Kopplung (z. B. alte PC-App oder alte Central-Bibliothek nach dem Update): einmal erklären
+            var rj = j.rejected
+            if (rj && rj.peer) {
+                var key = rj.what + rj.peer
+                if (!win.rejSeen[key] || Date.now() - win.rejSeen[key] > 600000) {
+                    var seen = win.rejSeen; seen[key] = Date.now(); win.rejSeen = seen
+                    toast.show(rj.what === "central"
+                        ? "Central auf " + rj.peer + " wurde abgewiesen: nicht gekoppelt. Am PC das Central-Setup neu installieren – danach fragt Central nach dem Code."
+                        : "Gerät " + rj.peer + " wurde abgewiesen: nicht gekoppelt. Ältere Kit-Control-Versionen am PC bitte aktualisieren – die neue zeigt beim Verbinden ein Fenster für den Code.", true)
+                }
+            }
         })
     }
     // Temperaturverlauf für die Heizungsseite: alle 5 s ein Wert, 30 Minuten
