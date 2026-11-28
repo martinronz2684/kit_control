@@ -445,9 +445,9 @@ def combine(results: list[dict]) -> dict:
     out["model"] = {"a": a.tolist(), "b": b.tolist(), "deg": deg}
     Fm = Poly(a, b, deg)
     L = _linear(Fm)
-    out["scale_x_pct"] = (L[0, 0] - 1) * 100
-    out["scale_y_pct"] = (math.hypot(L[0, 1], L[1, 1]) - 1) * 100
-    out["skew_deg"] = math.degrees(math.atan2(-L[0, 1], L[1, 1]))
+    out["scale_x_pct"] = float((L[0, 0] - 1) * 100)
+    out["scale_y_pct"] = float((math.hypot(L[0, 1], L[1, 1]) - 1) * 100)
+    out["skew_deg"] = float(math.degrees(math.atan2(-L[0, 1], L[1, 1])))
     out["rms_um"] = float(np.sqrt(np.mean([r["rms_um"] ** 2 for r in results])))
     out["samples"] = int(sum(r["samples"] for r in results))
     out["scans"] = len(results)

@@ -76,12 +76,14 @@ Popup {
 
             // ================= links: am Kit gespeichert, Schräglauf, Anleitung =================
             Flickable {
+                id: leftFlick
                 Layout.preferredWidth: 380; Layout.fillHeight: true
                 contentHeight: leftCol.implicitHeight; clip: true
                 boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar { policy: leftFlick.contentHeight > leftFlick.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
                 ColumnLayout {
                     id: leftCol
-                    width: parent.width
+                    width: leftFlick.width - (leftFlick.contentHeight > leftFlick.height ? 12 : 0)
                     spacing: 12
 
                     Card {
@@ -183,11 +185,19 @@ Popup {
             }
 
             // ================= rechts: Scans und Ergebnis =================
-            ColumnLayout {
+            Flickable {
+                id: rightFlick
                 Layout.fillWidth: true; Layout.fillHeight: true
+                contentHeight: rightCol.implicitHeight; clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                ScrollBar.vertical: ScrollBar { policy: rightFlick.contentHeight > rightFlick.height ? ScrollBar.AlwaysOn : ScrollBar.AlwaysOff }
+            ColumnLayout {
+                id: rightCol
+                width: rightFlick.width - (rightFlick.contentHeight > rightFlick.height ? 12 : 0)
                 spacing: 12
 
                 Card {
+                    id: scanCard
                     Layout.fillWidth: true
                     implicitHeight: scanCol.implicitHeight + 28
                     ColumnLayout {
@@ -213,13 +223,13 @@ Popup {
                             Repeater {
                                 model: lp.scans
                                 Rectangle {
-                                    Layout.preferredWidth: 168; Layout.preferredHeight: 232
+                                    Layout.preferredWidth: 168; Layout.preferredHeight: 214
                                     radius: 12; color: win.cField; border.color: modelData.error ? win.cErrLine : win.cLine
                                     ColumnLayout {
                                         anchors.fill: parent; anchors.margins: 8
                                         spacing: 6
                                         Rectangle {
-                                            Layout.fillWidth: true; Layout.preferredHeight: 132
+                                            Layout.fillWidth: true; Layout.preferredHeight: 116
                                             radius: 8; color: "#ffffff"; clip: true
                                             Image {
                                                 anchors.centerIn: parent
@@ -271,14 +281,15 @@ Popup {
                 }
 
                 Card {
-                    Layout.fillWidth: true; Layout.fillHeight: true
+                    Layout.fillWidth: true
+                    implicitHeight: Math.max(rightFlick.height - scanCard.height - 12, resCol.implicitHeight + 28, 380)
                     RowLayout {
                         anchors.fill: parent; anchors.margins: 14
                         spacing: 16
 
                         // Muster: Soll grau, gemessen (übertrieben) in Petrol
                         Item {
-                            Layout.fillWidth: true; Layout.fillHeight: true
+                            Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumWidth: 260
                             Canvas {
                                 id: devCanvas
                                 anchors.fill: parent
@@ -313,11 +324,12 @@ Popup {
                                 }
                             }
                             Text {
-                                anchors.top: parent.top; anchors.left: parent.left
+                                anchors.top: parent.top; anchors.left: parent.left; anchors.right: gainRow.left; anchors.rightMargin: 8
                                 text: lp.hasRes ? win.t("Gebrannt ohne Korrektur, Abweichung ×") + devCanvas.gain : win.t("Hier erscheint das gemessene Muster")
-                                color: win.cMut; font.pixelSize: 12
+                                color: win.cMut; font.pixelSize: 12; wrapMode: Text.WordWrap
                             }
                             Row {
+                                id: gainRow
                                 anchors.top: parent.top; anchors.right: parent.right; spacing: 4
                                 visible: lp.hasRes
                                 KButton { text: "−"; implicitHeight: 26; leftPadding: 10; rightPadding: 10; onClicked: lp.gainMul = Math.max(0.25, lp.gainMul / 2) }
@@ -326,7 +338,8 @@ Popup {
                         }
 
                         ColumnLayout {
-                            Layout.preferredWidth: 270; Layout.fillHeight: true
+                            id: resCol
+                            Layout.preferredWidth: 290; Layout.maximumWidth: 290; Layout.fillHeight: true
                             spacing: 8
                             Caption { text: win.t("Ergebnis") }
                             Body {
@@ -373,6 +386,7 @@ Popup {
                         }
                     }
                 }
+            }
             }
         }
     }

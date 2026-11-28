@@ -1273,6 +1273,7 @@ Window {
                 Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
                 Timer { interval: 5000; running: devPage.visible; repeat: true; onTriggered: win.loadClients() }
+                onVisibleChanged: if (visible) win.loadClients()
                 Panel {
                     id: devList
                     width: parent.width; height: parent.height - 62
@@ -1328,6 +1329,7 @@ Window {
                 Behavior on opacity { NumberAnimation { duration: 180 } }
                 y: 42; width: parent.width; height: parent.height - 42
                 Timer { interval: 5000; running: laserPage.visible; repeat: true; onTriggered: win.loadComp() }
+                onVisibleChanged: if (visible) win.loadComp()
                 readonly property var c: win.comp || ({})
                 readonly property bool on: c.enabled !== false
                 readonly property bool any: !!c.active || (Math.abs(c.scale_x_pct || 0) + Math.abs(c.scale_y_pct || 0) + Math.abs(c.skew_deg || 0)

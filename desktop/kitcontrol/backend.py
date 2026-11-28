@@ -1123,8 +1123,9 @@ class Backend(QObject):
             for sc in self._lc_scans:
                 try:
                     r = LC.analyze(sc["gray"], sc["dpi"] / 25.4, rot90=sc["rot"] // 90)
-                    sc["result"] = {k: r[k] for k in ("scale_x_pct", "scale_y_pct", "skew_deg", "rotation_deg",
-                                                      "nonlinear_max_um", "rms_um", "samples", "line_width_mm", "polarity")}
+                    sc["result"] = {k: (r[k] if isinstance(r[k], str) else float(r[k])) for k in (
+                        "scale_x_pct", "scale_y_pct", "skew_deg", "rotation_deg", "nonlinear_max_um", "rms_um", "samples",
+                        "line_width_mm", "polarity")}
                     sc["error"] = ""
                     done.append(r)
                 except Exception as e:
@@ -1135,7 +1136,9 @@ class Backend(QObject):
                 res["comp_scale"] = LC.compensation(res, use_scale=True)
                 res["comp_noscale"] = LC.compensation(res, use_scale=False)
                 res["measured"] = time.time()
-                self._lc_result = res
+                # nur einfache Python-Typen an QML (numpy-Zahlen kommen dort falsch an)
+                import json
+                self._lc_result = json.loads(json.dumps(res, default=lambda o: o.item() if hasattr(o, "item") else str(o)))
             self._lc_busy = False
             self.lcChanged.emit()
         threading.Thread(target=run, daemon=True, name="lasercal").start()

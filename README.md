@@ -54,9 +54,18 @@ Läuft über NetworkManager; das Land ist auf DE gesetzt (`KIT_WIFI_COUNTRY`).
   Firmware automatisch flashen – der Kit Controller bricht stattdessen ab.
 - Fahren und Beschichten sind während des Drucks gesperrt, Fahrwege auf 120 mm begrenzt.
 - Abbrechen, Sintern stoppen, Druck starten und Pulver laden fragen vorher nach.
-- Bedienung über das Netz ist aus (nur am Gerät). `KIT_REMOTE=1` erlaubt sie.
-- Aus dem Netz gehen nur: Zustand und Jobs lesen (Live-Verfolgung am PC) und Jobs von der PC-App annehmen,
-  auf Wunsch gleich starten – aber nur, wenn der Kit verbunden ist, nicht druckt und keine Fehler meldet.
+- **Kopplung:** Jedes Gerät im Netz (Kit Control am PC, Handy-App, Central über WLAN) muss sich einmal mit einem
+  6-stelligen Code vom Kit-Display koppeln. Dabei handeln Gerät und Pi einen Schlüssel aus (Diffie-Hellman, der
+  Code fließt mit ein), danach ist jede Anfrage unterschrieben (HMAC-SHA256 mit Zeit und Einmalnummer). Ohne
+  Kopplung gibt der Pi nichts heraus – weder Zustand noch Jobs. Koppeln geht nicht während Druck, Vorheizen,
+  Pulvervorbereitung oder Übertragung. Geräte entfernen: am Display *System → Gekoppelte Geräte*.
+  Details: `kitctl/auth.py`, `kitd/pairing.py`.
+- Bedienung über das Netz ist zusätzlich abschaltbar (Schalter „Bedienung vom PC“ am Display, `KIT_REMOTE=1` erzwingt ihn).
+- Gekoppelte Geräte dürfen Zustand und Jobs lesen und Jobs von der PC-App übertragen,
+  auf Wunsch gleich starten – aber nur, wenn der Kit verbunden ist und nicht druckt.
+- **Laserkorrektur:** Maßstab, Winkligkeit, Schräglauf und Verzerrung aus der Scan-Auswertung in Kit Control liegen
+  in `/var/lib/kitd/compensation.json`; der Pi rechnet jeden Job beim Übertragen danach um (`kitctl/compensate.py`).
+  Alles auf 0 = Datei geht unverändert zum Kit.
   Abschalten in `/etc/kit/kitd.env`: `KIT_NET_JOBS=0` (keine Jobs aus dem Netz), `KIT_NET_START=0` (nur übertragen).
 
 ## PC: Slicer (Vorstufe der Desktop-App)
