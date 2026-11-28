@@ -15,7 +15,8 @@ from kitcontrol import updater
 from kitcontrol.core import AppCore, TempLogger, documents_dir
 from kitcontrol.version import __version__
 from kitslice import profiles as PR
-from kitslice.net import Pi
+from kitslice import net
+from kitslice.net import NotPaired, PairFailed, Pi
 from kitslice.slicer import SliceCancelled
 
 
@@ -52,6 +53,14 @@ class Backend(QObject):
         self._update = ""
         self._update_progress = -1.0
         self._live_gen = 0
+        self._pair = {"state": "none"}       # Kopplung mit dem Kit (siehe pairInfo)
+        self._pair_pi = None
+        self._kit_device = ""
+        self._kit_name = ""
+        self._comp = {}                       # Laserkorrektur am Kit
+        self._lc_scans = []                   # Scans für die Auswertung
+        self._lc_result = {}
+        self._lc_busy = False
         self._log = TempLogger()
         self.message.connect(lambda *_: None)
 
@@ -766,6 +775,12 @@ class Backend(QObject):
     @Slot(str)
     def connectHost(self, host):
         host = host.strip()
+        if host != self._host:
+            self._pair_pi = None
+            self._pair = {"state": "none"}
+            self._comp = {}
+            self.pairChanged.emit()
+            self.compChanged.emit()
         self._host = host
         self._connected = False
         self._kit = {}
@@ -776,15 +791,26 @@ class Backend(QObject):
             threading.Thread(target=self._live, args=(self._live_gen, host), daemon=True, name="live").start()
 
     def _live(self, gen, host):
-        """Zustand vom Pi per Server-Sent Events; bei Abbruch alle 3 s neu verbinden."""
+        """Zustand vom Pi per Server-Sent Events; bei Abbruch alle 3 s neu verbinden.
+        Vorher Abgleich über /api/pair/hello: Uhr, Geräte-Nummer des Kits und die passende Kopplung."""
         pi = Pi(host, timeout=5)
         while gen == self._live_gen:
             try:
+                hello = pi.hello()
+                if hello:
+                    self._kit_device, self._kit_name = hello.get("device_id", ""), hello.get("name", "")
+                    net.set_auth(host, self._pairings().get(self._kit_device))
+                else:                                        # ältere Pi-Software ohne Kopplung
+                    self._kit_device, self._kit_name = "", ""
+                    net.set_auth(host, None)
                 first = pi.state()
+                if self._pair.get("state") not in ("none", "done"):
+                    self._set_pair("none")
                 self._connected, self._kit = True, first
                 self.kitChanged.emit()
                 self.refreshJobs()
                 self._fetch_printlog()
+                self.refreshComp()
                 for st in pi.events():
                     if gen != self._live_gen:
                         return
@@ -799,6 +825,18 @@ class Backend(QObject):
                     self.kitChanged.emit()
                     if changed_job:
                         self.refreshJobs()
+            except NotPaired:
+                if gen != self._live_gen:
+                    return
+                if self._connected:
+                    self._connected = False
+                    self.kitChanged.emit()
+                self._need_pairing(host)
+                # warten, bis gekoppelt ist (oder ein anderer Kit gewählt wurde), dann neu verbinden
+                while gen == self._live_gen and self._pair.get("state") in ("starting", "code", "confirming"):
+                    time.sleep(0.3)
+                if self._pair.get("state") == "done":
+                    continue
             except Exception:
                 pass
             if gen != self._live_gen:
@@ -807,6 +845,314 @@ class Backend(QObject):
                 self._connected = False
                 self.kitChanged.emit()
             time.sleep(3)
+
+    # -- Kopplung mit dem Kit -------------------------------------------------------
+    # Jeder PC muss sich einmal mit dem Kit koppeln: am Display erscheint ein 6-stelliger Code, den man hier
+    # eingibt. Beide merken sich die Kopplung (PC: Einstellungen „pairings“, je Geräte-Nummer des Kits).
+    pairChanged = Signal()
+
+    def _pairings(self) -> dict:
+        p = self.core.settings.get("pairings")
+        return p if isinstance(p, dict) else {}
+
+    def _set_pair(self, state, **kw):
+        self._pair = {"state": state, **kw}
+        self.pairChanged.emit()
+
+    @Property("QVariant", notify=pairChanged)
+    def pairInfo(self):
+        """state: none | needed | starting | code | confirming | error | dismissed | done"""
+        d = dict(self._pair)
+        d["kit"] = self._kit_name or self._host
+        d["paired"] = self._kit_device in self._pairings()
+        rec = self._pairings().get(self._kit_device) or {}
+        d["since"] = rec.get("paired", 0)
+        d["pc"] = self._pc_name()
+        if d.get("expires"):
+            d["left"] = max(0, int(d["expires"] - time.time()))
+        return d
+
+    @staticmethod
+    def _pc_name() -> str:
+        import socket
+        try:
+            return socket.gethostname()[:32] or "PC"
+        except OSError:
+            return "PC"
+
+    def _need_pairing(self, host):
+        known = self._kit_device in self._pairings()
+        if known:
+            # Der Kit kennt diesen PC nicht mehr (am Display entfernt) – alte Kopplung vergessen
+            pr = dict(self._pairings())
+            pr.pop(self._kit_device, None)
+            self.core.save_settings(pairings=pr)
+            net.set_auth(host, None)
+            self.message.emit("Der Kit kennt diesen PC nicht mehr – bitte neu koppeln", "error")
+        st = self._pair.get("state")
+        if st in ("none", "done") or known:
+            self.pairStart()
+        elif st == "dismissed":
+            self.pairChanged.emit()
+
+    @Slot()
+    def pairStart(self):
+        host = self._host
+        if not host or self._pair.get("state") in ("starting", "confirming"):
+            return
+        self._set_pair("starting")
+
+        def run():
+            pi = Pi(host, timeout=8)
+            try:
+                pi.hello()
+                r = pi.pair_start(self._pc_name(), "pc")
+                self._pair_pi = pi
+                self._set_pair("code", expires=time.time() + float(r.get("expires_in", 120)))
+            except PairFailed as e:
+                self._set_pair("error", error=str(e))
+            except Exception as e:
+                self._set_pair("error", error=f"Kit nicht erreichbar ({e.__class__.__name__})")
+        threading.Thread(target=run, daemon=True, name="pair").start()
+
+    @Slot(str)
+    def pairConfirm(self, code):
+        pi, host = self._pair_pi, self._host
+        if pi is None or self._pair.get("state") not in ("code",):
+            return
+        expires = self._pair.get("expires", 0)
+        self._set_pair("confirming", expires=expires)
+
+        def run():
+            try:
+                p = pi.pair_confirm(code)
+            except PairFailed as e:
+                if e.status == 401:                       # Code falsch, noch Versuche übrig
+                    self._set_pair("code", expires=expires, error=str(e))
+                else:
+                    self._set_pair("error", error=str(e))
+                return
+            except Exception as e:
+                self._set_pair("error", error=f"Kit nicht erreichbar ({e.__class__.__name__})")
+                return
+            pr = dict(self._pairings())
+            dev = p.get("device_id") or self._kit_device
+            pr[dev] = {"client_id": p["client_id"], "key": p["key"], "kit_name": self._kit_name,
+                       "host": host, "paired": int(time.time())}
+            self.core.save_settings(pairings=pr)
+            self._kit_device = dev
+            net.set_auth(host, pr[dev])
+            self._pair_pi = None
+            self._set_pair("done")
+            self.message.emit("Mit dem Kit gekoppelt", "ok")
+        threading.Thread(target=run, daemon=True, name="pair").start()
+
+    @Slot()
+    def pairCancel(self):
+        self._pair_pi = None
+        self._set_pair("dismissed")
+
+    @Slot()
+    def forgetPairing(self):
+        """Kopplung mit dem aktuellen Kit hier vergessen (am Kit bleibt sie, bis sie dort entfernt wird)."""
+        pr = dict(self._pairings())
+        if pr.pop(self._kit_device, None) is not None:
+            self.core.save_settings(pairings=pr)
+        net.set_auth(self._host, None)
+        self._set_pair("dismissed")
+        self.message.emit("Kopplung an diesem PC vergessen – am Kit unter System → Gekoppelte Geräte entfernen", "info")
+        self.connectHost(self._host)
+
+    # -- Laserkorrektur ---------------------------------------------------------------
+    # Werte liegen auf dem Pi (er rechnet jeden Job beim Übertragen um); hier anzeigen, aus Scans des
+    # Kalibriermusters auswerten (kitslice/lasercal.py) und zum Pi schicken.
+    compChanged = Signal()
+    lcChanged = Signal()
+
+    @Property("QVariant", notify=compChanged)
+    def laserComp(self):
+        return self._comp
+
+    @Slot()
+    def refreshComp(self):
+        host = self._host
+
+        def run():
+            try:
+                c = Pi(host, timeout=6).compensation()
+            except Exception:
+                return
+            if isinstance(c, dict) and "enabled" in c:
+                self._comp = c
+                self.compChanged.emit()
+        if host:
+            threading.Thread(target=run, daemon=True).start()
+
+    def _send_comp(self, comp: dict, ok_text: str):
+        host = self._host
+
+        def run():
+            try:
+                r = Pi(host, timeout=10).set_compensation(comp)
+            except NotPaired:
+                r = {"ok": False, "error": "Nicht gekoppelt"}
+            except Exception as e:
+                r = {"ok": False, "error": str(e)}
+            if r.get("ok"):
+                self._comp = r.get("compensation") or self._comp
+                self.compChanged.emit()
+                self.message.emit(ok_text, "ok")
+            elif "not found" in str(r.get("error", "")):
+                self.message.emit("Das Kit Control am Pi kennt die Laserkorrektur noch nicht – bitte am Pi updaten", "error")
+            else:
+                self.message.emit("Laserkorrektur nicht gespeichert: " + str(r.get("error", "")), "error")
+            self.refreshComp()
+        if not host or not self._connected:
+            self.message.emit("Kein Kit verbunden", "error")
+            return
+        threading.Thread(target=run, daemon=True).start()
+
+    @staticmethod
+    def _plain(comp: dict) -> dict:
+        return {k: v for k, v in (comp or {}).items() if k not in ("active", "grid_max_um", "updated")}
+
+    @Slot(float, float)
+    def setLean(self, x, y):
+        """Schräglauf (von Hand gemessen, mm je 100 mm Bauhöhe) – übrige Werte bleiben."""
+        c = self._plain(self._comp)
+        c["lean_x_mm_per_100"], c["lean_y_mm_per_100"] = float(x), float(y)
+        self._send_comp(c, "Schräglauf am Kit gespeichert – gilt ab dem nächsten Druck")
+
+    @Slot(bool)
+    def setCompEnabled(self, on):
+        c = self._plain(self._comp)
+        c["enabled"] = bool(on)
+        self._send_comp(c, "Laserkorrektur " + ("an" if on else "aus"))
+
+    @Slot()
+    def resetComp(self):
+        self._send_comp({}, "Laserkorrektur am Kit auf 0 gesetzt")
+
+    @Property("QVariant", notify=lcChanged)
+    def lcScans(self):
+        return [{k: v for k, v in sc.items() if k != "gray"} for sc in self._lc_scans]
+
+    @Property("QVariant", notify=lcChanged)
+    def lcResult(self):
+        return self._lc_result
+
+    @Property(bool, notify=lcChanged)
+    def lcBusy(self):
+        return self._lc_busy
+
+    @Slot("QVariant")
+    def lcAddScans(self, urls):
+        for u in list(urls or []):
+            p = _path(u)
+            if not p or any(sc["path"] == p for sc in self._lc_scans):
+                continue
+            if len(self._lc_scans) >= 4:
+                self.message.emit("Höchstens 4 Scans", "error")
+                break
+            self._lc_busy = True
+            self.lcChanged.emit()
+            try:
+                from PySide6.QtGui import QImage, QImageReader
+                rd = QImageReader(p)
+                sz = rd.size()
+                if sz.isValid() and sz.width() * sz.height() > 160e6:
+                    raise ValueError(f"Bild zu groß ({sz.width()} × {sz.height()} Pixel) – nur den Bereich ums Muster "
+                                     "scannen (ca. 100 × 100 mm) oder mit 1200 dpi")
+                QImageReader.setAllocationLimit(2048)
+                img = QImage(p)
+                if img.isNull():
+                    raise ValueError("Bild lässt sich nicht öffnen")
+                dpi = img.dotsPerMeterX() * 0.0254
+                g = img.convertToFormat(QImage.Format.Format_Grayscale8)
+                w, h, bpl = g.width(), g.height(), g.bytesPerLine()
+                arr = np.frombuffer(g.constBits(), np.uint8, count=bpl * h).reshape(h, bpl)[:, :w].copy()
+                # 72/96 dpi sind meist nur Platzhalter der Bildbearbeitung – dann nachfragen (Vorgabe 1200)
+                known = dpi > 150
+                self._lc_scans.append({"path": p, "name": os.path.basename(p), "w": w, "h": h,
+                                       "dpi": round(dpi) if known else 1200, "dpi_known": known, "rot": 0,
+                                       "url": QUrl.fromLocalFile(p).toString(), "gray": arr, "result": None, "error": ""})
+            except Exception as e:
+                self.message.emit(f"{os.path.basename(p)}: {e}", "error")
+            finally:
+                self._lc_busy = False
+        self._lc_result = {}
+        self.lcChanged.emit()
+
+    @Slot(int, "QVariant")
+    def lcSet(self, i, changes):
+        if not 0 <= i < len(self._lc_scans):
+            return
+        sc = self._lc_scans[i]
+        ch = dict(changes or {})
+        if "rot" in ch:
+            sc["rot"] = int(ch["rot"]) % 360
+        if "dpi" in ch:
+            try:
+                v = float(str(ch["dpi"]).replace(",", "."))
+                if 100 <= v <= 9600:
+                    sc["dpi"] = v
+            except ValueError:
+                pass
+        sc["result"], sc["error"] = None, ""
+        self._lc_result = {}
+        self.lcChanged.emit()
+
+    @Slot(int)
+    def lcRemove(self, i):
+        if 0 <= i < len(self._lc_scans):
+            del self._lc_scans[i]
+            self._lc_result = {}
+            self.lcChanged.emit()
+
+    @Slot()
+    def lcAnalyze(self):
+        if self._lc_busy or not self._lc_scans:
+            return
+        self._lc_busy = True
+        self._lc_result = {}
+        self.lcChanged.emit()
+
+        def run():
+            from kitslice import lasercal as LC
+            done = []
+            for sc in self._lc_scans:
+                try:
+                    r = LC.analyze(sc["gray"], sc["dpi"] / 25.4, rot90=sc["rot"] // 90)
+                    sc["result"] = {k: r[k] for k in ("scale_x_pct", "scale_y_pct", "skew_deg", "rotation_deg",
+                                                      "nonlinear_max_um", "rms_um", "samples", "line_width_mm", "polarity")}
+                    sc["error"] = ""
+                    done.append(r)
+                except Exception as e:
+                    sc["result"], sc["error"] = None, str(e)
+            if done:
+                res = LC.combine(done)
+                res["lines"] = LC.deviation_lines(res)
+                res["comp_scale"] = LC.compensation(res, use_scale=True)
+                res["comp_noscale"] = LC.compensation(res, use_scale=False)
+                res["measured"] = time.time()
+                self._lc_result = res
+            self._lc_busy = False
+            self.lcChanged.emit()
+        threading.Thread(target=run, daemon=True, name="lasercal").start()
+
+    @Slot(bool)
+    def lcApply(self, use_scale):
+        r = self._lc_result
+        if not r:
+            return
+        comp = dict(r["comp_scale"] if use_scale else r["comp_noscale"])
+        cur = self._plain(self._comp)
+        comp["lean_x_mm_per_100"] = float(cur.get("lean_x_mm_per_100") or 0.0)   # Schräglauf bleibt
+        comp["lean_y_mm_per_100"] = float(cur.get("lean_y_mm_per_100") or 0.0)
+        comp["info"] = {"measured": r.get("measured", time.time()), "rms_um": round(r.get("rms_um", 0.0), 1),
+                        "scans": r.get("scans", 1), "rotation_deg": round(r.get("rotation_deg", 0.0), 3),
+                        "scale_from_scan": bool(use_scale), "source": "scan"}
+        self._send_comp(comp, "Laserkorrektur am Kit gespeichert – gilt ab dem nächsten Druck")
 
     # -- Live: Temperaturverlauf, Ereignisse, Druckverlauf ------------------------
     tempsChanged = Signal()

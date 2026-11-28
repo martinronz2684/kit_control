@@ -85,9 +85,21 @@ class BridgeCaptureTest(unittest.TestCase):
     def setUp(self):
         self.w = FakeWorker()
         bridge.Session.worker = self.w
+        # Gekoppeltes Central (wie die neue Bibliothek): Schlüssel direkt eintragen und anmelden
+        import json
+        from kitctl import auth as A
+        from kitd.pairing import Pairing
+        pr = Pairing(tempfile.mkdtemp(prefix="kitd-pair-"))
+        key = os.urandom(32)
+        pr.data["clients"]["c1"] = {"name": "Central", "kind": "central", "key": key.hex(), "created": 0, "last_seen": 0}
+        bridge.Session.pairing = pr
         self.srv = bridge._Server(("127.0.0.1", 0), bridge.Session)
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
         self.s = socket.create_connection(self.srv.server_address)
+        st, n = self._xfer(b"N", b"{}")
+        nonce = json.loads(n)["nonce"]
+        st, _ = self._xfer(b"A", json.dumps({"client_id": "c1", "mac": A.mac(key, "bridge", nonce)}).encode())
+        self.assertEqual(st, 0)
 
     def tearDown(self):
         self.s.close()
@@ -95,7 +107,7 @@ class BridgeCaptureTest(unittest.TestCase):
         self.srv.server_close()
 
     def _xfer(self, op, data=b"", n=0):
-        self.s.sendall(struct.pack(">cBII", op, 6, 2000, len(data) if op == b"W" else n) + data)
+        self.s.sendall(struct.pack(">cBII", op, 6, 2000, len(data) if op != b"R" else n) + data)
         st, ln = struct.unpack(">iI", bridge._recv(self.s, 8))
         return st, bridge._recv(self.s, ln)
 

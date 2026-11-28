@@ -52,6 +52,8 @@ public final class LibUsb {
         NetLink probe = null;
         try {
             probe = new NetLink(host, port);
+            // Erst anmelden (gekoppelt?), sonst zeigt der Pi keinen Kit – die Kopplung läuft dann im Hintergrund an
+            if (!Pairing.authenticate(probe, host, port)) return 0;
             int status = ((Integer) probe.call('H', 0, 1000, null, 0)[0]).intValue();
             if (status == SUCCESS) list.devices.add(new Device(host, port));
         } catch (IOException ignored) {
@@ -72,10 +74,17 @@ public final class LibUsb {
 
     public static int open(Device device, DeviceHandle handle) {
         if (device == null || device.host == null) return ERROR_NO_DEVICE;
+        NetLink link = null;
         try {
-            handle.link = new NetLink(device.host, device.port);
+            link = new NetLink(device.host, device.port);
+            if (!Pairing.authenticate(link, device.host, device.port)) {
+                link.close();
+                return ERROR_ACCESS;
+            }
+            handle.link = link;
             return SUCCESS;
         } catch (IOException e) {
+            if (link != null) link.close();
             return ERROR_NO_DEVICE;
         }
     }

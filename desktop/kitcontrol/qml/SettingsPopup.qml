@@ -147,6 +147,41 @@ Popup {
             // Kalibrierung
             CalibCard { Layout.fillWidth: true; ready: sp.ready; color: "transparent"; border.width: 0 }
 
+            // Laserkorrektur (Scan des Kalibriermusters) – eigenes Fenster
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 6
+                readonly property var lc: backend.laserComp || ({})
+                Caption { text: win.t("Laserkorrektur") }
+                Body {
+                    Layout.fillWidth: true; font.pixelSize: 12; color: win.cMut
+                    text: !backend.connected ? win.t("Winkligkeit, Verzerrung und Schräglauf aus einem Scan des Kalibriermusters – die Werte liegen am Kit.")
+                        : parent.lc.enabled === undefined ? win.t("Das Kit Control am Pi braucht dafür ein Update.")
+                        : parent.lc.active ? win.t("Am Kit aktiv – Winkligkeit ") + (parent.lc.skew_deg >= 0 ? "+" : "−") + win.fnum(Math.abs(parent.lc.skew_deg), 3) + "°"
+                                             + (parent.lc.grid_max_um ? win.t(", Verzerrung bis ") + win.fnum(parent.lc.grid_max_um, 0) + " µm" : "")
+                        : win.t("Am Kit steht alles auf 0 – Jobs gehen unverändert zum Kit.")
+                }
+                KButton { text: win.t("Laserkorrektur öffnen …"); Layout.fillWidth: true; onClicked: win.openLaser() }
+            }
+
+            // Kopplung
+            ColumnLayout {
+                Layout.fillWidth: true; spacing: 6
+                readonly property var pi: backend.pairInfo || ({})
+                Caption { text: win.t("Kopplung mit dem Kit") }
+                Body {
+                    Layout.fillWidth: true; font.pixelSize: 12; color: win.cMut
+                    text: parent.pi.paired
+                          ? win.t("Dieser PC (") + parent.pi.pc + win.t(") ist mit „") + parent.pi.kit + win.t("“ gekoppelt")
+                            + (parent.pi.since ? win.t(" seit ") + Qt.formatDateTime(new Date(parent.pi.since * 1000), "dd.MM.yyyy") : "") + "."
+                          : win.t("Nicht gekoppelt. Beim Verbinden zeigt der Kit einen Code, den man hier eingibt. Ohne Kopplung kommt kein Gerät aus dem Netz an den Kit.")
+                }
+                RowLayout {
+                    Layout.fillWidth: true; spacing: 8
+                    KButton { visible: !parent.parent.pi.paired; text: win.t("Jetzt koppeln"); kind: "pri"; enabled: !!backend.host; onClicked: { sp.close(); backend.pairStart() } }
+                    KButton { visible: !!parent.parent.pi.paired; text: win.t("Kopplung an diesem PC vergessen"); kind: "ghost"; onClicked: backend.forgetPairing() }
+                }
+            }
+
             // Druckzeit-Schätzung
             ColumnLayout {
                 Layout.fillWidth: true; spacing: 6

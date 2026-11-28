@@ -242,6 +242,29 @@ def _screenshots(app, engine, backend, out):
         stl.save_binary(t, pth)
         paths.append(pth)
     backend.addUrls(paths + paths)
+    # Laserkorrektur: künstlicher Scan des Kalibriermusters (mit Kissenverzerrung), ausgewertet wie ein echter
+    try:
+        import math
+        from PySide6.QtGui import QImage
+        from kitslice import lasercal as LC
+
+        def laser(p):
+            x, y = p[:, 0], p[:, 1]
+            return np.stack([1.002 * x - 0.0012 * y + 2.5e-6 * x * y * y, 0.999 * y + 2.5e-6 * y * x * x], 1)
+        g = LC.synth(600 / 25.4, laser, rot_deg=1.4)
+        qi = QImage(g.data, g.shape[1], g.shape[0], g.strides[0], QImage.Format.Format_Grayscale8).copy()
+        qi.setDotsPerMeterX(round(600 / 0.0254))
+        qi.setDotsPerMeterY(round(600 / 0.0254))
+        scan = os.path.join(out, "kalibriermuster-scan.png")
+        qi.save(scan)
+        backend.lcAddScans([scan])
+        backend.lcAnalyze()
+        backend._comp = {"enabled": True, "active": True, "scale_x_pct": 0.0, "scale_y_pct": 0.0, "skew_deg": 0.0688,
+                         "lean_x_mm_per_100": 0.05, "lean_y_mm_per_100": -0.02, "grid_max_um": 142.0,
+                         "info": {"measured": 1764300000, "rms_um": 3.1}}
+        backend.compChanged.emit()
+    except Exception as e:
+        print(f"Laserkorrektur-Beispiel: {e}", flush=True)
     backend.core.slice()
     backend._slice_state = "done"
     backend.sliceChanged.emit()
@@ -275,6 +298,8 @@ def _screenshots(app, engine, backend, out):
             checks.append((w, h, 0, "packPop", lang))       # Auto-Anordnen-Fenster
             checks.append((w, h, 0, "settingsPop", lang))   # Einstellungen
             checks.append((w, h, 0, "msgPop", lang))        # Meldungsverlauf
+            checks.append((w, h, 0, "laserPop", lang))      # Laserkorrektur
+            checks.append((w, h, 0, "pairPop", lang))       # Kopplung (Code eingeben)
     found = []
 
     def check():
@@ -309,6 +334,9 @@ def _screenshots(app, engine, backend, out):
         from PySide6.QtCore import QObject
         popup = root.findChild(QObject, pop) if pop else None
         if popup is not None and not popup.property("opened"):
+            if pop == "pairPop":
+                import time as _t
+                backend._set_pair("code", expires=_t.time() + 95)
             popup.setProperty("visible", True)
             QTimer.singleShot(600, check)
             return
@@ -323,6 +351,8 @@ def _screenshots(app, engine, backend, out):
             root.grabWindow().save(os.path.join(out, f"{lang}-{w}-{names[pg]}{'-' + pop if pop else ''}.png"))
         if popup is not None:
             popup.setProperty("visible", False)
+            if pop == "pairPop":
+                backend._set_pair("none")
         QTimer.singleShot(200, check)
 
     _shoot = shoot

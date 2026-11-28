@@ -259,11 +259,12 @@ ApplicationWindow {
                             spacing: 8
                             Rectangle {
                                 width: 9; height: 9; radius: 5
-                                color: !backend.connected ? win.cRed : (win.kit.connected ? win.cOk : win.cHeat)
+                                color: win.needsPairing ? win.cHeat : !backend.connected ? win.cRed : (win.kit.connected ? win.cOk : win.cHeat)
                             }
                             Text {
                                 Layout.fillWidth: true
                                 text: !backend.host ? win.t("Kein Kit gewählt")
+                                    : win.needsPairing ? win.t("Nicht gekoppelt")
                                     : !backend.connected ? win.t("Verbinde …")
                                     : (win.kit.connected ? (win.kit.state_name || win.t("Kit verbunden")) : win.t("Pi ohne Kit"))
                                 color: win.cInk; font.pixelSize: 13; font.weight: Font.DemiBold
@@ -271,6 +272,12 @@ ApplicationWindow {
                             }
                         }
                         Text { text: backend.host || win.t("Unter „Drucken“ verbinden"); color: win.cMut; font.pixelSize: 11 }
+                        KButton {
+                            visible: win.needsPairing && !pairPop.opened
+                            Layout.fillWidth: true; implicitHeight: 32
+                            text: win.t("Mit dem Kit koppeln"); kind: "pri"
+                            onClicked: backend.pairStart()
+                        }
                         RowLayout {
                             visible: backend.connected && win.kit.connected === true
                             spacing: 14
@@ -535,6 +542,11 @@ ApplicationWindow {
     }
 
     SettingsPopup { id: settingsPop }
+    PairDialog { id: pairPop }
+    LaserPopup { id: laserPop }
+    function openLaser() { settingsPop.close(); laserPop.open() }
+    readonly property string pairState: (backend.pairInfo || {}).state || "none"
+    readonly property bool needsPairing: !backend.connected && ["needed", "starting", "code", "confirming", "error", "dismissed"].indexOf(pairState) >= 0
 
     // Update beim Start anbieten (gefunden schon im Ladefenster)
     Popup {

@@ -151,6 +151,36 @@ Window {
     function ask(title, text, action) {
         dlg.title = title; dlg.text = text; dlg.action = action; dlg.visible = true
     }
+    // ---- Kopplung und Laserkorrektur ----
+    property var pairClients: []
+    property var comp: ({})
+    property real pairDoneTs: -1
+    function loadClients() { Api.get("/api/pair/clients", function (j) { if (j && j.clients) win.pairClients = j.clients }) }
+    function loadComp() { Api.get("/api/compensation", function (j) { if (j && j.enabled !== undefined) win.comp = j }) }
+    function dateDe(ts) { return ts ? Qt.formatDateTime(new Date(ts * 1000), "dd.MM.yyyy") : "—" }
+    function ago(ts) {
+        if (!ts) return "nie"
+        var s = Date.now() / 1000 - ts
+        if (s < 120) return "gerade eben"
+        if (s < 3600) return "vor " + Math.round(s / 60) + " min"
+        if (s < 86400) return "heute " + Qt.formatDateTime(new Date(ts * 1000), "HH:mm")
+        return Qt.formatDateTime(new Date(ts * 1000), "dd.MM.yyyy HH:mm")
+    }
+    function sgn(v, d) { return (v > 0 ? "+" : v < 0 ? "−" : "±") + Api.de(Math.abs(v || 0), d) }
+    // Korrektur wie am Pi (kitctl/compensate.py, ohne Schräglauf): Sollpunkt -> befohlener Punkt
+    function corr(c, x, y) {
+        var sx = 1 + (c.scale_x_pct || 0) / 100, sy = 1 + (c.scale_y_pct || 0) / 100, e = (c.skew_deg || 0) * Math.PI / 180
+        var a = sx, b = -sy * Math.sin(e), d = sy * Math.cos(e)
+        var g = c.grid
+        if (g && g.dx && g.dx.length > 1) {
+            var n = g.dx.length, st = g.step, h = g.half
+            var fx = Math.min(Math.max((x + h) / st, 0), n - 1), fy = Math.min(Math.max((y + h) / st, 0), n - 1)
+            var i = Math.min(Math.floor(fx), n - 2), j = Math.min(Math.floor(fy), n - 2), tx = fx - i, ty = fy - j
+            function bl(m) { return m[j][i] * (1 - tx) * (1 - ty) + m[j][i + 1] * tx * (1 - ty) + m[j + 1][i] * (1 - tx) * ty + m[j + 1][i + 1] * tx * ty }
+            x += bl(g.dx); y += bl(g.dy)
+        }
+        return [x / a - b * y / (a * d), y / d]
+    }
     function loadWifi(rescan) {
         Api.get("/api/wifi" + (rescan ? "?rescan=1" : ""), function (j) { if (j) win.wifi = j })
     }
@@ -171,6 +201,12 @@ Window {
             }
             win.st = j
             win.addTemp(j)
+            var pd = j.pair_done ? j.pair_done.ts : 0
+            if (win.pairDoneTs >= 0 && pd > win.pairDoneTs) {
+                toast.show("„" + j.pair_done.name + "“ ist jetzt gekoppelt")
+                win.loadClients()
+            }
+            win.pairDoneTs = pd
         })
     }
     // Temperaturverlauf für die Heizungsseite: alle 5 s ein Wert, 30 Minuten
@@ -186,6 +222,7 @@ Window {
         tHist = h
     }
     Timer { interval: 15000; running: true; repeat: true; triggeredOnStart: true; onTriggered: win.loadWifi(false) }
+    Timer { interval: 60000; running: true; repeat: true; triggeredOnStart: true; onTriggered: { win.loadClients(); win.loadComp() } }
 
     // Software-Update: Stand abfragen (schnell, solange ein Update läuft), alle 6 h im Repo nachsehen
     function loadUpd() {
@@ -284,7 +321,7 @@ Window {
         property string label
         property string icon
         property bool hot: false
-        readonly property bool active: key === "sys" ? ["sys", "cal", "params"].indexOf(win.page) >= 0 : win.page === key
+        readonly property bool active: key === "sys" ? ["sys", "cal", "params", "devices", "laser"].indexOf(win.page) >= 0 : win.page === key
         width: 56; height: 54; radius: 16
         color: nb.active ? "#24242a" : "transparent"
         Behavior on color { ColorAnimation { duration: 150 } }
@@ -414,7 +451,7 @@ Window {
                 // Unterseiten von System: Zurück-Pfeil
                 Rectangle {
                     id: backBtn
-                    visible: win.page === "cal" || win.page === "params"
+                    visible: ["cal", "params", "devices", "laser"].indexOf(win.page) >= 0
                     width: visible ? 34 : 0; height: 34; radius: 17; color: backMa.pressed ? "#2c2c31" : "#1d1d21"
                     Text { anchors.centerIn: parent; text: "‹"; color: win.cInk; font.family: win.fontName; font.pixelSize: 24; anchors.verticalCenterOffset: -2 }
                     MouseArea { id: backMa; anchors.fill: parent; onClicked: win.page = "sys" }
@@ -422,7 +459,8 @@ Window {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter; x: backBtn.width + (backBtn.visible ? 10 : 4)
                     width: Math.max(0, chips.x - x - 12); elide: Text.ElideRight
-                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "Kalibrieren", params: "Parameter", sys: "System" })[win.page]
+                    text: ({ print: "Druck", move: "Bewegung", heat: "Heizung", jobs: "Jobs", cal: "Kalibrieren", params: "Parameter", sys: "System",
+                             devices: "Gekoppelte Geräte", laser: "Laserkorrektur" })[win.page]
                     color: win.cInk; font.family: win.fontName; font.pixelSize: 22; font.weight: Font.Medium; font.letterSpacing: -0.6
                 }
                 Row {
@@ -1226,6 +1264,171 @@ Window {
                 }
             }
 
+            // ======= Gekoppelte Geräte =======
+            // Wer sich übers Netz verbinden darf (PC-App, Handy, Central). Neue Geräte fragen selbst an – dann erscheint
+            // hier ein Code (Overlay „Gerät koppeln“). Entfernen geht nur am Display.
+            Item {
+                id: devPage
+                opacity: win.page === "devices" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+                y: 42; width: parent.width; height: parent.height - 42
+                Timer { interval: 5000; running: devPage.visible; repeat: true; onTriggered: win.loadClients() }
+                Panel {
+                    id: devList
+                    width: parent.width; height: parent.height - 62
+                    ListView {
+                        id: dl
+                        anchors.fill: parent; anchors.margins: 8; clip: true; spacing: 4
+                        model: win.pairClients
+                        delegate: Rectangle {
+                            width: ListView.view.width; height: 62; radius: 14; color: "#0bffffff"
+                            Rectangle {
+                                x: 12; anchors.verticalCenter: parent.verticalCenter; width: 66; height: 30; radius: 15
+                                color: modelData.kind === "central" ? "#29ff8a5c" : modelData.kind === "phone" ? "#262fd38a" : "#262fa6cc"
+                                Text { anchors.centerIn: parent; text: modelData.kind === "central" ? "Central" : modelData.kind === "phone" ? "Handy" : "PC"
+                                    color: modelData.kind === "central" ? "#ffb08f" : modelData.kind === "phone" ? "#7fe6b6" : "#8fd3ea"
+                                    font.family: win.fontName; font.pixelSize: 12; font.weight: Font.DemiBold }
+                            }
+                            Column {
+                                x: 92; anchors.verticalCenter: parent.verticalCenter; width: parent.width - 92 - 140; spacing: 3
+                                Text { width: parent.width; elide: Text.ElideRight; text: modelData.name; color: win.cInk; font.family: win.fontName; font.pixelSize: 16; font.weight: Font.Medium }
+                                Lbl { width: parent.width; font.pixelSize: 11
+                                    text: "gekoppelt " + win.dateDe(modelData.created) + " · zuletzt " + win.ago(modelData.last_seen) + (modelData.peer ? " · " + modelData.peer : "") }
+                            }
+                            KButton {
+                                anchors.right: parent.right; anchors.rightMargin: 10; anchors.verticalCenter: parent.verticalCenter
+                                width: 120; height: 40; size: 13; kind: "red"; text: "Entfernen"
+                                onClicked: win.ask("„" + modelData.name + "“ entfernen?",
+                                    "Das Gerät kann den Kit danach nicht mehr erreichen. Zum erneuten Verbinden muss es neu gekoppelt werden.",
+                                    function () { win.send({ cmd: "pair_remove", id: modelData.id }, function (ok) { if (ok) toast.show("Gerät entfernt"); win.loadClients() }) })
+                            }
+                        }
+                    }
+                    Column {
+                        visible: dl.count === 0; anchors.centerIn: parent; width: parent.width - 80; spacing: 8
+                        Val { anchors.horizontalCenter: parent.horizontalCenter; font.pixelSize: 20; text: "Noch kein Gerät gekoppelt" }
+                        Lbl { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 13
+                            text: "Ohne Kopplung kommt niemand aus dem Netz an den Kit – weder lesend noch bedienend." }
+                    }
+                }
+                Rectangle {
+                    y: devList.height + 8; width: parent.width; height: 54; radius: 16; color: "#0f2fa6cc"; border.color: "#332fa6cc"
+                    Lbl { anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; verticalAlignment: Text.AlignVCenter
+                        wrapMode: Text.WordWrap; elide: Text.ElideNone; maximumLineCount: 2; font.pixelSize: 12; color: "#b9dbe8"
+                        text: "Neues Gerät koppeln: Kit Control am PC, die Handy-App oder Central einfach verbinden – der Code erscheint hier am Display. Während Druck, Vorheizen oder Pulvervorbereitung ist Koppeln gesperrt." }
+                }
+            }
+
+            // ======= Laserkorrektur =======
+            // Gemessene Abweichung des Lasers (aus der Scan-Auswertung in Kit Control). Der Pi rechnet jeden Job beim
+            // Übertragen danach um; alles auf 0 = Jobs gehen unverändert zum Kit.
+            Item {
+                id: laserPage
+                opacity: win.page === "laser" ? 1 : 0; visible: opacity > 0
+                Behavior on opacity { NumberAnimation { duration: 180 } }
+                y: 42; width: parent.width; height: parent.height - 42
+                Timer { interval: 5000; running: laserPage.visible; repeat: true; onTriggered: win.loadComp() }
+                readonly property var c: win.comp || ({})
+                readonly property bool on: c.enabled !== false
+                readonly property bool any: !!c.active || (Math.abs(c.scale_x_pct || 0) + Math.abs(c.scale_y_pct || 0) + Math.abs(c.skew_deg || 0)
+                                                   + Math.abs(c.lean_x_mm_per_100 || 0) + Math.abs(c.lean_y_mm_per_100 || 0) + (c.grid_max_um || 0)) > 0
+                readonly property bool locked: !!win.st.printing || !!win.st.transfer
+                onCChanged: dist.requestPaint()
+                Panel {
+                    id: lvals
+                    width: parent.width - 312; height: parent.height
+                    Column {
+                        anchors.fill: parent; anchors.margins: 14; spacing: 0
+                        Item {
+                            width: parent.width; height: 34
+                            Lbl { anchors.verticalCenter: parent.verticalCenter; text: "Gemessene Abweichung des Lasers" }
+                            Rectangle {
+                                anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                                width: stx.implicitWidth + 22; height: 26; radius: 13
+                                color: c.active ? "#262fd38a" : "#14ffffff"
+                                property var c: laserPage.c
+                                Text { id: stx; anchors.centerIn: parent; font.family: win.fontName; font.pixelSize: 12; font.weight: Font.DemiBold
+                                    color: laserPage.c.active ? win.cOk : win.cMut
+                                    text: laserPage.c.active ? "aktiv" : (!laserPage.on && laserPage.any ? "ausgeschaltet" : "alles 0 – keine Korrektur") }
+                            }
+                        }
+                        Repeater {
+                            model: [
+                                ["Maßstab X", win.sgn(laserPage.c.scale_x_pct, 3) + " %"],
+                                ["Maßstab Y", win.sgn(laserPage.c.scale_y_pct, 3) + " %"],
+                                ["Winkligkeit X/Y", win.sgn(laserPage.c.skew_deg, 3) + "°"],
+                                ["Schräglauf X", win.sgn(laserPage.c.lean_x_mm_per_100, 3) + " mm je 100 mm"],
+                                ["Schräglauf Y", win.sgn(laserPage.c.lean_y_mm_per_100, 3) + " mm je 100 mm"],
+                                ["Verzerrung", laserPage.c.grid_max_um ? "Tabelle, bis " + Math.round(laserPage.c.grid_max_um) + " µm" : "keine"],
+                                ["Gemessen", laserPage.c.info && laserPage.c.info.measured ? win.dateDe(laserPage.c.info.measured)
+                                              + (laserPage.c.info.rms_um ? " · Rest " + Api.de(laserPage.c.info.rms_um, 0) + " µm" : "") : "noch nie"]]
+                            Item {
+                                width: parent.width; height: 37
+                                Lbl { anchors.verticalCenter: parent.verticalCenter; text: modelData[0]; font.pixelSize: 13 }
+                                Text { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: modelData[1]
+                                    color: win.cInk; font.family: win.fontName; font.pixelSize: 15; font.weight: Font.Medium }
+                                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: win.cLine }
+                            }
+                        }
+                        Lbl { width: parent.width; topPadding: 8; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 11
+                            text: "Messen: Kalibriermuster auf Thermopapier brennen, scannen und in Kit Control → Einstellungen → Laserkorrektur auswerten. Gilt für Jobs von Kit Control und aus der Bibliothek, nicht für Drucke direkt aus Central." }
+                    }
+                }
+                Column {
+                    x: lvals.width + 8; width: 304; spacing: 8
+                    Panel {
+                        width: parent.width; height: parent.parent.height - 8 - 44 - 8 - 44 - 8 - 16
+                        // Feld 110 × 110 mm: Soll-Raster grau, so brennt der Kit ohne Korrektur (übertrieben) in Blau
+                        Canvas {
+                            id: dist
+                            anchors.fill: parent; anchors.margins: 12
+                            property real gain: 1
+                            onPaint: {
+                                var ctx = getContext("2d"); ctx.reset()
+                                var c = laserPage.c, S = Math.min(width, height - 18), ox = (width - S) / 2, oy = 18, k = S / 116
+                                function P(x, y) { return [ox + S / 2 + x * k, oy + S / 2 - y * k] }
+                                var lines = [], v
+                                for (v = -55; v <= 55.01; v += 11) { var a = [], b = []
+                                    for (var t = -55; t <= 55.01; t += 5.5) { a.push([t, v]); b.push([v, t]) }
+                                    lines.push(a); lines.push(b) }
+                                // Abweichung (ohne Korrektur) ≈ Sollpunkt − Korrekturpunkt; Verstärkung: größte Abweichung ≈ 9 px
+                                var mx = 0, dev = lines.map(function (L) { return L.map(function (p) {
+                                    var q = win.corr(c, p[0], p[1]); var d = [p[0] - q[0], p[1] - q[1]]
+                                    mx = Math.max(mx, Math.hypot(d[0], d[1])); return d }) })
+                                gain = mx > 1e-6 ? Math.min(2000, 9 / (mx * k)) : 1
+                                ctx.lineWidth = 1; ctx.strokeStyle = "#33ffffff"
+                                lines.forEach(function (L) { ctx.beginPath(); L.forEach(function (p, i) { var q = P(p[0], p[1]); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]) }); ctx.stroke() })
+                                if (mx > 1e-6) {
+                                    ctx.lineWidth = 1.6; ctx.strokeStyle = "#2fa6cc"
+                                    lines.forEach(function (L, li) { ctx.beginPath(); L.forEach(function (p, i) {
+                                        var q = P(p[0] + dev[li][i][0] * gain, p[1] + dev[li][i][1] * gain); if (i) ctx.lineTo(q[0], q[1]); else ctx.moveTo(q[0], q[1]) }); ctx.stroke() })
+                                }
+                                ctx.fillStyle = "#8b9099"; ctx.font = "11px '" + win.fontName + "'"
+                                ctx.fillText(mx > 1e-6 ? "Abweichung ×" + Math.round(gain) + " (ohne Korrektur)" : "Keine Abweichung gespeichert", ox, 11)
+                            }
+                        }
+                    }
+                    Seg {
+                        width: parent.width; height: 44
+                        items: [["Korrektur aus", false], ["Korrektur an", true]]
+                        value: laserPage.on
+                        opacity: laserPage.locked ? 0.4 : 1
+                        onPicked: function (v) {
+                            if (laserPage.locked || v === laserPage.on) return
+                            win.send({ cmd: "compensation_enable", on: v }, function (ok) {
+                                win.loadComp()
+                                if (ok) toast.show(v ? "Laserkorrektur an – gilt ab dem nächsten Druck" : "Laserkorrektur aus – Jobs gehen unverändert zum Kit")
+                            })
+                        }
+                    }
+                    KButton {
+                        width: parent.width; height: 44; size: 13; text: "Auf 0 zurücksetzen"; ok: laserPage.any && !laserPage.locked
+                        onClicked: win.ask("Laserkorrektur auf 0?", "Alle gemessenen Werte werden gelöscht. Jobs gehen danach wieder unverändert zum Kit.",
+                            function () { win.send({ cmd: "compensation_reset" }, function (ok) { win.loadComp(); if (ok) toast.show("Laserkorrektur auf 0 gesetzt") }) })
+                    }
+                }
+            }
+
             // ======= System =======
             Item {
                 opacity: win.page === "sys" ? 1 : 0; visible: opacity > 0
@@ -1233,7 +1436,7 @@ Window {
                 y: 42; width: parent.width; height: parent.height - 42
                 Panel {
                     id: msgPanel
-                    width: (parent.width - 166) / 2; height: parent.height - 60; clip: true
+                    width: (parent.width - 166) / 2; height: parent.height - 120; clip: true
                     Flickable {
                         anchors.fill: parent; anchors.margins: 12; contentHeight: msgCol.height; clip: true
                         Column {
@@ -1256,10 +1459,16 @@ Window {
                         }
                     }
                 }
-                Row {
-                    y: msgPanel.height + 8; spacing: 8
+                Grid {
+                    y: msgPanel.height + 8; spacing: 8; columns: 2
                     KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13; text: "Kalibrieren"; onClicked: win.page = "cal" }
                     KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13; text: "Parameter"; onClicked: win.page = "params" }
+                    KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13
+                        text: "Gekoppelte Geräte" + (win.pairClients.length ? " · " + win.pairClients.length : "")
+                        onClicked: { win.loadClients(); win.page = "devices" } }
+                    KButton { width: (msgPanel.width - 8) / 2; height: 52; size: 13
+                        text: "Laserkorrektur" + (win.st.compensation_active ? " · aktiv" : "")
+                        onClicked: { win.loadComp(); win.page = "laser" } }
                 }
                 Panel {
                     id: infoPanel
@@ -1484,6 +1693,62 @@ Window {
                         KButton { width: 184; height: 46; kind: "acc"; ok: !win.upd.running && !win.st.printing
                             text: win.upd.running ? "Läuft …" : "Jetzt aktualisieren"
                             onClicked: win.send({ cmd: "update_start" }, function (ok) { if (ok) { win.updWasRunning = true; win.loadUpd() } }) }
+                    }
+                }
+            }
+        }
+
+        // ---------- Gerät koppeln ----------
+        // Ein Gerät im Netz möchte sich koppeln: Code groß zeigen, den man dort eintippt. Kommt nur, wenn der Kit
+        // nicht druckt, vorheizt oder Pulver vorbereitet (der Pi lehnt die Anfrage sonst ab).
+        Rectangle {
+            id: pairOvl
+            readonly property var r: win.st.pair || null
+            anchors.fill: parent; z: 9; color: "#e6060709"
+            visible: !!r
+            onVisibleChanged: if (visible) { dlg.visible = false }
+            MouseArea { anchors.fill: parent }
+            Panel {
+                anchors.centerIn: parent; width: 600; height: 360
+                border.color: "#402fa6cc"; border.width: 1
+                Column {
+                    x: 28; y: 22; width: parent.width - 56; spacing: 6
+                    Lbl { text: "Gerät möchte sich koppeln"; color: "#8fd3ea"; font.pixelSize: 13; font.weight: Font.DemiBold }
+                    Text { width: parent.width; elide: Text.ElideRight; color: win.cInk; font.family: win.fontName; font.pixelSize: 24; font.weight: Font.Medium
+                        text: pairOvl.r ? pairOvl.r.name : "" }
+                    Lbl { font.pixelSize: 13; text: pairOvl.r ? pairOvl.r.kind_name + " · " + pairOvl.r.peer : "" }
+                    Item { width: 1; height: 10 }
+                    Row {
+                        anchors.horizontalCenter: parent.horizontalCenter; spacing: 10
+                        Repeater {
+                            model: pairOvl.r ? pairOvl.r.code.split("") : []
+                            Rectangle {
+                                width: 70; height: 92; radius: 16; color: "#1d1d21"; border.color: "#2a2a30"
+                                Text { anchors.centerIn: parent; text: modelData; color: "white"; font.family: win.fontName; font.pixelSize: 56; font.weight: Font.Light }
+                            }
+                        }
+                    }
+                    Item { width: 1; height: 8 }
+                    Rectangle {
+                        width: parent.width; height: 4; radius: 2; color: "#1fffffff"
+                        Rectangle { height: parent.height; radius: 2; color: win.cBlue
+                            width: parent.width * (pairOvl.r ? Math.max(0, pairOvl.r.expires_in) / 120 : 0)
+                            Behavior on width { NumberAnimation { duration: 900 } } }
+                    }
+                    Item {
+                        width: parent.width; height: 24
+                        Lbl { anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12
+                            text: "Code am Gerät eingeben" + (pairOvl.r && pairOvl.r.tries ? " · " + pairOvl.r.tries + "× falsch" : "") }
+                        Lbl { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; font.pixelSize: 12
+                            text: pairOvl.r ? "noch " + Math.floor(pairOvl.r.expires_in / 60) + ":" + ("0" + pairOvl.r.expires_in % 60).slice(-2) : "" }
+                    }
+                    Item { width: 1; height: 4 }
+                    Item {
+                        width: parent.width; height: 46
+                        Lbl { width: parent.width - 180; anchors.verticalCenter: parent.verticalCenter; wrapMode: Text.WordWrap; elide: Text.ElideNone; font.pixelSize: 11
+                            text: "Nur koppeln, wenn du das Gerät kennst. Ein gekoppeltes Gerät kann den Kit dauerhaft erreichen." }
+                        KButton { anchors.right: parent.right; width: 160; height: 46; size: 14; kind: "red"; text: "Ablehnen"
+                            onClicked: win.send({ cmd: "pair_cancel" }, function () { toast.show("Kopplung abgelehnt – das Gerät ist 10 Minuten gesperrt") }) }
                     }
                 }
             }

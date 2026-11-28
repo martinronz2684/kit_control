@@ -93,6 +93,24 @@ section{display:none}section.on{display:block;animation:fade .22s ease}
 .btn.hot{background:linear-gradient(180deg,#ff9b70,#e9662f);border-color:transparent;color:#fff;box-shadow:0 8px 20px rgba(233,102,47,.3)}
 .btn.red{background:rgba(229,72,77,.14);border-color:rgba(229,72,77,.35);color:#ff8a8e}
 .btn.ghost{background:transparent}
+
+/* Kopplung */
+.pairov{position:fixed;inset:0;z-index:50;display:flex;align-items:center;justify-content:center;padding:calc(var(--safe-t) + 20px) 18px calc(var(--safe-b) + 20px);
+  background:radial-gradient(520px 380px at 50% -80px,rgba(47,166,204,.22),transparent 70%),rgba(8,9,12,.97)}
+.pairov[hidden]{display:none}
+.pairbox{width:100%;max-width:400px;text-align:center}
+.pairbox .lock{width:58px;height:58px;margin:0 auto 14px;border-radius:18px;display:flex;align-items:center;justify-content:center;
+  background:rgba(47,166,204,.14);border:1px solid rgba(47,166,204,.35)}
+.pairbox h2{margin:0 0 6px;font-size:22px;letter-spacing:-.02em}
+.pairbox p{margin:0 0 18px;color:var(--mut);font-size:14px}
+.pairbox label{display:block;text-align:left;font-size:12px;color:var(--mut);margin:0 0 6px 4px}
+.pairbox input{width:100%;height:52px;border-radius:15px;border:1px solid var(--line);background:rgba(255,255,255,.04);color:var(--ink);
+  font:inherit;font-size:17px;padding:0 16px;margin-bottom:14px;outline:none}
+.pairbox input:focus{border-color:var(--acc)}
+.pairbox input.code{height:76px;text-align:center;font-size:40px;font-weight:300;letter-spacing:.42em;padding-left:.42em;font-variant-numeric:tabular-nums}
+.pairbox .note{text-align:left;margin-top:14px}
+.pairbox .bar{height:4px;border-radius:2px;background:rgba(255,255,255,.08);margin:-4px 0 16px;overflow:hidden}
+.pairbox .bar i{display:block;height:100%;background:var(--acc);transition:width .9s linear}
 .stack>*+*{margin-top:10px}
 
 /* Segmente */
@@ -142,6 +160,26 @@ nav button.on svg{stroke:#5cc3e3}
 </style>
 </head>
 <body>
+<!-- Kopplung: einmal pro Gerät, Code steht am Kit-Display -->
+<div class="pairov" id="pair" hidden>
+  <div class="pairbox">
+    <div class="lock"><svg width="26" height="28" viewBox="0 0 26 28"><rect x="6" y="1.5" width="14" height="16" rx="7" fill="none" stroke="#2fa6cc" stroke-width="2.6"/><rect x="2" y="11" width="22" height="16" rx="4.5" fill="#2fa6cc"/><rect x="11.5" y="16" width="3" height="6" rx="1.5" fill="#0c0e11"/></svg></div>
+    <h2>Mit dem Kit koppeln</h2>
+    <p id="pairTxt">Damit nicht jeder im WLAN den Kit bedienen kann, koppelt sich jedes Gerät einmal mit ihm.</p>
+    <div id="pairS1">
+      <label for="pairName">Name dieses Geräts</label>
+      <input id="pairName" maxlength="40" autocomplete="off">
+      <button class="btn pri" id="pairGo" onclick="pairStart()">Code am Kit anzeigen</button>
+    </div>
+    <div id="pairS2" hidden>
+      <input id="pairCode" class="code" inputmode="numeric" pattern="[0-9]*" maxlength="6" autocomplete="one-time-code" placeholder="······">
+      <div class="bar"><i id="pairBar" style="width:100%"></i></div>
+      <button class="btn pri" id="pairOk" onclick="pairConfirm()" disabled>Koppeln</button>
+      <button class="btn ghost" style="margin-top:8px" onclick="pairStart()">Neuen Code anzeigen</button>
+    </div>
+    <div class="note err" id="pairMsg" hidden></div>
+  </div>
+</div>
 <header>
   <img src="phone-icon.png" alt="">
   <div class="t"><b>Kit Control</b><small id="sub">by Rat3d</small></div>
@@ -267,6 +305,7 @@ nav button.on svg{stroke:#5cc3e3}
 </div>
 <div class="toast" id="toast"></div>
 
+<script src="kitauth.js"></script>
 <script>
 "use strict";
 const PLATE = 110;                  // Bauplatte in mm (wie die PC-App)
@@ -276,13 +315,81 @@ let JOBS = [], step = 1, page = "print", DEMO = false;
 const $ = id => document.getElementById(id);
 
 // ---------- Schnittstelle (oder Simulation für die Vorschau) ----------
+// Jede Anfrage trägt die Unterschrift der Kopplung (kitauth.js); antwortet der Pi 401, ist das Gerät nicht gekoppelt.
+async function signed(method, path, body){
+  const h = Object.assign(body !== undefined ? {"Content-Type":"application/json"} : {}, KitAuth.headers(method, path, body || ""));
+  const r = await fetch(path, {method, cache:"no-store", headers:h, body});
+  if (r.status === 401) { showPair(); throw new Error("Nicht gekoppelt"); }
+  return r.json();
+}
 const api = {
-  async get(p){ if (DEMO) return Sim.get(p); const r = await fetch(p, {cache:"no-store"}); return r.json(); },
-  async cmd(b){ if (DEMO) return Sim.cmd(b);
-    const r = await fetch("/api/cmd", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(b)}); return r.json(); },
-  async del(id){ if (DEMO) return Sim.del(id);
-    const r = await fetch("/api/jobs/" + encodeURIComponent(id), {method:"DELETE"}); return r.json(); },
+  async get(p){ if (DEMO) return Sim.get(p); return signed("GET", p); },
+  async cmd(b){ if (DEMO) return Sim.cmd(b); return signed("POST", "/api/cmd", JSON.stringify(b)); },
+  async del(id){ if (DEMO) return Sim.del(id); return signed("DELETE", "/api/jobs/" + encodeURIComponent(id)); },
 };
+
+// ---------- Kopplung ----------
+let pairTimer = null, pairEnd = 0;
+function pairMsg(t){ const m = $("pairMsg"); m.hidden = !t; m.textContent = t || ""; }
+function showPair(){
+  if (!$("pair").hidden) return;
+  if (es) { es.close(); es = null; }
+  const ua = navigator.userAgent;
+  $("pairName").value = /iPhone/.test(ua) ? "iPhone" : /iPad/.test(ua) ? "iPad" : /Android/.test(ua) ? "Android-Handy" : "Browser";
+  $("pairS1").hidden = false; $("pairS2").hidden = true; pairMsg("");
+  $("pairTxt").textContent = "Damit nicht jeder im WLAN den Kit bedienen kann, koppelt sich jedes Gerät einmal mit ihm.";
+  $("pair").hidden = false;
+}
+async function pairStart(){
+  pairMsg(""); $("pairGo").disabled = true;
+  try {
+    const r = await KitAuth.start($("pairName").value.trim() || "Handy");
+    $("pairS1").hidden = true; $("pairS2").hidden = false;
+    $("pairTxt").textContent = "Am Kit-Display steht jetzt ein 6-stelliger Code – hier eingeben.";
+    $("pairCode").value = ""; $("pairOk").disabled = true; $("pairCode").focus();
+    pairEnd = Date.now() + (r.expires_in || 120) * 1000;
+    clearInterval(pairTimer);
+    pairTimer = setInterval(() => {
+      const left = Math.max(0, pairEnd - Date.now());
+      $("pairBar").style.width = (left / 1200) + "%";
+      if (!left) { clearInterval(pairTimer); pairMsg("Code abgelaufen – bitte einen neuen anzeigen lassen."); $("pairOk").disabled = true; }
+    }, 500);
+  } catch (e) { pairMsg(e.message); }
+  $("pairGo").disabled = false;
+}
+async function pairConfirm(){
+  const code = $("pairCode").value.replace(/\D/g, "");
+  if (code.length !== 6) return;
+  $("pairOk").disabled = true; pairMsg("");
+  try {
+    await KitAuth.confirm(code);
+    clearInterval(pairTimer);
+    $("pair").hidden = true;
+    toast("Gekoppelt", "ok");
+    await poll(); openEvents(); loadJobs();
+  } catch (e) {
+    pairMsg(e.message);
+    if (e.status === 401) { $("pairCode").value = ""; $("pairCode").focus(); }
+    else { $("pairS1").hidden = false; $("pairS2").hidden = true; clearInterval(pairTimer); }
+  }
+}
+document.addEventListener("DOMContentLoaded", () => {
+  const c = $("pairCode");
+  c.addEventListener("input", () => { c.value = c.value.replace(/\D/g, "").slice(0, 6); $("pairOk").disabled = c.value.length !== 6 || Date.now() > pairEnd;
+    if (c.value.length === 6 && Date.now() < pairEnd) pairConfirm(); });
+});
+async function ensurePaired(){
+  try {
+    let h = await KitAuth.hello();
+    if (!h) return true;                                   // ältere Pi-Software ohne Kopplung
+    const had = KitAuth.load(h.device_id);
+    if (had) h = await KitAuth.hello();                    // jetzt unterschrieben: kennt der Kit uns noch?
+    if (h.paired) return true;
+    if (had) KitAuth.forget();                             // am Kit entfernt
+    showPair();
+    return false;
+  } catch (e) { return true; }                             // nicht erreichbar: Anzeige „nicht erreichbar“
+}
 
 // ---------- Anzeige ----------
 const fmtT = s => { s = Math.max(0, Math.round(s || 0)); const h = Math.floor(s/3600), m = Math.floor(s%3600/60);
@@ -443,15 +550,20 @@ markStep();
 let es = null, lastMsg = 0;
 function setState(st){ const prevJobs = S.printing; S = st; lastMsg = Date.now(); render(); if (page === "jobs" && prevJobs !== st.printing) renderJobs(); }
 async function poll(){ try { setState(await api.get("/api/state")); } catch (e) { S = {connected:false, message:"Nicht erreichbar"}; render(); } }
+function openEvents(){
+  if (es) es.close();
+  try {
+    // Unterschrift steckt in der Adresse und gilt nur einmal – bei Abbruch neu unterschreiben statt neu verbinden
+    es = new EventSource(KitAuth.url("/api/events"));
+    es.onmessage = e => { try { const st = JSON.parse(e.data); setState(Object.assign({}, S, st)); } catch (_) {} };
+    es.onerror = () => { if (es) { es.close(); es = null; } if ($("pair").hidden) setTimeout(() => { if (!es && $("pair").hidden) openEvents(); }, 3000); };
+  } catch (e) {}
+}
 function live(){
   if (DEMO) { setInterval(() => setState(Sim.tick()), 1000); return; }
-  try {
-    es = new EventSource("/api/events");
-    es.onmessage = e => { try { const st = JSON.parse(e.data); setState(Object.assign({}, S, st)); } catch (_) {} };
-    es.onerror = () => {};
-  } catch (e) {}
+  if ($("pair").hidden) openEvents();
   // Die Ereignisse enthalten nicht alles (z. B. Central) – zusätzlich ab und zu den vollen Zustand holen
-  setInterval(() => { if (Date.now() - lastMsg > 4000) poll(); }, 3000);
+  setInterval(() => { if ($("pair").hidden && Date.now() - lastMsg > 4000) poll(); }, 3000);
   document.addEventListener("visibilitychange", () => { if (!document.hidden) { poll(); if (page === "jobs") loadJobs(); } });
 }
 
@@ -514,7 +626,7 @@ const Sim = (() => {
 (async () => {
   // Simulation nur für die Vorschau (?demo); vom Pi aus nie – dort lieber „nicht erreichbar“ als falsche Werte
   DEMO = window.KIT_PREVIEW === true || /[?&]demo/.test(location.search) || location.protocol === "file:";
-  if (!DEMO) await poll();
+  if (!DEMO && await ensurePaired()) await poll();
   if (DEMO) { $("demo").style.display = "block"; setState(Sim.get("/api/state")); }
   live();
 })();

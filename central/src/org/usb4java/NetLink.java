@@ -46,9 +46,10 @@ final class NetLink {
         out.writeByte(op);
         out.writeByte(ep);
         out.writeInt((int) timeoutMs);
-        if (op == 'W') {
-            out.writeInt(data.length);
-            out.write(data);
+        if (op != 'R' && op != 'H') {
+            byte[] d = data == null ? new byte[0] : data;
+            out.writeInt(d.length);
+            out.write(d);
         } else {
             out.writeInt(len);
         }
@@ -58,6 +59,12 @@ final class NetLink {
         byte[] ans = new byte[n];
         in.readFully(ans);
         return new Object[] { Integer.valueOf(status), ans };
+    }
+
+    /** Kopplung/Anmeldung (kitd/bridge.py): JSON hin, JSON zurück. [0] = Status, [1] = Antwort. */
+    String[] json(char op, String body) throws IOException {
+        Object[] r = call(op, 0, 5000, body.getBytes(java.nio.charset.StandardCharsets.UTF_8), 0);
+        return new String[] { String.valueOf(r[0]), new String((byte[]) r[1], java.nio.charset.StandardCharsets.UTF_8) };
     }
 
     void close() {

@@ -1,6 +1,9 @@
 """kitd – Hintergrunddienst zwischen Kit (USB) und Touch-Oberfläche (Browser).
 
     GET  /                 Oberfläche (ui/index.html)
+    Kopplung: jedes Gerät im Netz (PC-App, Handy, Central über WLAN) muss einmal mit einem Code vom Display
+    gekoppelt werden und unterschreibt danach jede Anfrage (kitctl/auth.py, kitd/pairing.py). Ohne gültige
+    Unterschrift gibt es aus dem Netz nur /api/pair/hello, /api/pair/start, /api/pair/confirm und die Seiten.
     GET  /api/printlog     Schichtzeiten der letzten Drucke (für die Druckzeit-Schätzung in Kit Control)
     GET  /app              Handy-Oberfläche (ui/phone.html), auf dem iPhone „Zum Home-Bildschirm“
     GET  /api/state        aktueller Zustand als JSON
@@ -44,9 +47,12 @@ NET_START = os.environ.get("KIT_NET_START", "1") == "1"
 # Nur am Gerät: Netzwerk, Updates, Neustart und der Schalter selbst
 from kitd.printlog import PrintLog  # noqa: E402
 PRINTLOG = PrintLog(STATE_DIR)
+from kitd.pairing import Pairing, PairError  # noqa: E402
+PAIR = Pairing(STATE_DIR)
 
 LOCAL_ONLY = {"pc_link", "update_check", "update_start", "wifi_connect", "wifi_disconnect", "demo",
-              "remote_control", "job_autostart", "lamp_legacy"}
+              "remote_control", "job_autostart", "lamp_legacy", "pair_cancel", "pair_remove",
+              "compensation_reset", "compensation_enable"}
 # Was der PC auch während eines Drucks darf: nur anhalten
 STOP_CMDS = {"abort_print", "stop_sintering", "job_cancel"}
 
@@ -420,11 +426,21 @@ class KitWorker(threading.Thread):
             if meta.get("source") == "demo" and not self.demo:
                 raise ValueError("Der Beispieljob läuft nur im Demo-Modus")
             data = jobs.data(job_id)
+            # Laserkorrektur (Maßstab, Winkligkeit, Schräglauf, Verzerrung) – alles auf 0: Datei bleibt unverändert
+            from kitd import compensation
+            t0 = time.time()
+            try:
+                data, cstat = compensation.apply(data)
+            except ValueError as e:
+                raise ValueError(f"Laserkorrektur: Job nicht lesbar ({e})") from e
+            if cstat.get("applied"):
+                print(f"Laserkorrektur angewendet: {cstat} in {time.time() - t0:.1f} s", flush=True)
         except ValueError as e:
             reply.put({"ok": False, "error": str(e)})
             return
         reply.put({"ok": True})
-        tr = {"id": job_id, "name": meta["name"], "sent": 0, "total": len(data), "phase": "Vorheizen einschalten", "error": ""}
+        tr = {"id": job_id, "name": meta["name"], "sent": 0, "total": len(data), "phase": "Vorheizen einschalten", "error": "",
+              "compensated": bool(cstat.get("applied"))}
         self._set(transfer=dict(tr))
         try:
             with self.usb:
@@ -697,6 +713,29 @@ class KitWorker(threading.Thread):
 WORKER = KitWorker()
 
 
+def _comp_active() -> bool:
+    try:
+        from kitd import compensation
+        return compensation.active(compensation.load())
+    except Exception:
+        return False
+
+
+def pair_busy() -> str:
+    """Leer, wenn gekoppelt werden darf – nie während Druck, Vorheizen, Pulvervorbereitung oder Übertragung."""
+    s = WORKER.snapshot()
+    st = s.get("state")
+    if s.get("printing") or st in WORKER.PRINT_STATES:
+        return "Der Kit druckt gerade – Koppeln geht erst, wenn der Druck vorbei ist"
+    if st == P.STATE_WARMUP:
+        return "Der Kit heizt gerade vor – Koppeln geht erst, wenn das Vorheizen aus ist"
+    if st == P.STATE_POWDER_PREP:
+        return "Der Kit bereitet gerade Pulver vor – bitte zuerst beenden"
+    if s.get("transfer") or getattr(WORKER, "pending", None):
+        return "Gerade wird ein Druckauftrag übertragen oder wartet auf den Start – Koppeln geht erst danach"
+    return ""
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "kitd/0.2"
 
@@ -712,7 +751,69 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    # -- Kopplung -------------------------------------------------------------
+    def _local(self) -> bool:
+        # KIT_LOOPBACK_TRUSTED=0 nur für Tests: dann gilt auch der Pi selbst als Gerät im Netz
+        return self.client_address[0] in ("127.0.0.1", "::1") and os.environ.get("KIT_LOOPBACK_TRUSTED", "1") == "1"
+
+    def _client(self, body: bytes | None = None) -> str | None:
+        """„local“ am Pi selbst, sonst die Nummer des gekoppelten Geräts – oder None (nicht gekoppelt)."""
+        if self._local():
+            return "local"
+        peer = self.client_address[0]
+        try:
+            from kitd.bridge import _allowed
+            if not _allowed(peer):
+                return None
+        except ImportError:
+            pass
+        return PAIR.verify(self.command, self.path, self.headers, body, peer)
+
+    def _deny(self):
+        return self._json({"ok": False, "pair_required": True, "device_id": PAIR.device_id,
+                           "error": "Nicht gekoppelt – dieses Gerät zuerst mit dem Code vom Kit-Display koppeln"},
+                          HTTPStatus.UNAUTHORIZED)
+
+    def _pair_post(self, path: str, body: bytes):
+        peer = self.client_address[0]
+        try:
+            from kitd.bridge import _allowed
+            if not self._local() and not _allowed(peer):
+                return self._json({"ok": False, "error": "Gerät nicht erlaubt"}, HTTPStatus.FORBIDDEN)
+        except ImportError:
+            pass
+        try:
+            req = json.loads(body or b"{}")
+            if not isinstance(req, dict):
+                raise ValueError
+        except ValueError:
+            return self._json({"ok": False, "error": "ungültige Anfrage"}, HTTPStatus.BAD_REQUEST)
+        try:
+            if path == "/api/pair/start":
+                r = PAIR.start(req.get("name", ""), req.get("kind", "pc"), peer, req.get("A", ""), busy=pair_busy())
+            else:
+                why = pair_busy()
+                if why:
+                    PAIR.abort_if_busy()
+                    raise PairError(why, 409)
+                r = PAIR.confirm(str(req.get("request_id", "")), str(req.get("mac", "")), peer)
+            return self._json({"ok": True, **r})
+        except PairError as e:
+            return self._json({"ok": False, "error": str(e)}, e.status)
+
     def do_GET(self):
+        path0 = self.path.split("?")[0]
+        if path0 == "/api/pair/hello":
+            import socket as _s
+            return self._json({"device_id": PAIR.device_id, "name": _s.gethostname(), "time": time.time(),
+                               "pairing": 1, "paired": self._client() is not None})
+        if path0.startswith("/api/") and self._client() is None:
+            return self._deny()
+        if path0 == "/api/pair/clients":
+            return self._json({"clients": PAIR.clients(), "device_id": PAIR.device_id})
+        if path0 == "/api/compensation":
+            from kitd import compensation
+            return self._json(compensation.load())
         if self.path.startswith("/api/trace"):
             # USB-Mitschnitt als Text: /api/trace?min=10 (letzte 10 Minuten), &only=central|kitd
             from urllib.parse import parse_qs, urlparse
@@ -727,32 +828,38 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(body)
             return
-        if self.path == "/api/update":
+        if path0 == "/api/update":
             from kitd import update
             return self._json(update.status())
-        if self.path.startswith("/api/wifi"):
+        if path0.startswith("/api/wifi"):
             from kitd import wifi
             return self._json(wifi.status(rescan="rescan=1" in self.path))
-        if self.path == "/api/jobs":
+        if path0 == "/api/jobs":
             from kitd import jobs
             if WORKER.demo:
                 jobs.ensure_demo()
             # Der Beispieljob erscheint nur im Demo-Modus – nie versehentlich auf dem echten Kit drucken
             lst = [j for j in jobs.listing() if WORKER.demo or j.get("source") != "demo"]
             return self._json({"jobs": lst, **jobs.settings()})
-        if self.path.startswith("/api/jobs/"):
+        if path0.startswith("/api/jobs/"):
             from kitd import jobs
-            parts = self.path.split("/")   # /api/jobs/<id>/layer/<n>
+            parts = path0.split("/")   # /api/jobs/<id>/layer/<n>
             try:
                 if len(parts) == 6 and parts[4] == "layer":
                     return self._json(jobs.layer(parts[3], int(parts[5])))
             except (ValueError, KeyError) as e:
                 return self._json({"error": str(e)}, HTTPStatus.NOT_FOUND)
             return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
-        if self.path == "/api/printlog":
+        if path0 == "/api/printlog":
             return self._json({"prints": PRINTLOG.all()})
-        if self.path == "/api/state":
+        if path0 == "/api/state":
             st = WORKER.snapshot()
+            if self._local():                       # Code der laufenden Kopplung nur ans Display
+                if pair_busy() and PAIR.req:
+                    PAIR.abort_if_busy()
+                st["pair"] = PAIR.pending()
+                st["pair_done"] = PAIR.done
+            st["compensation_active"] = _comp_active()
             try:
                 from kitd.bridge import STATE as BR
                 st["central"] = BR["central"]; st["central_peer"] = BR["peer"]
@@ -761,7 +868,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception:
                 pass
             return self._json(st)
-        if self.path == "/api/events":
+        if path0 == "/api/events":
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/event-stream")
             self.send_header("Cache-Control", "no-store")
@@ -775,6 +882,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
         path = self.path.split("?")[0]
         # Handy-Oberfläche: http://<pi>:8080/app
+        if path in ("/", "/index.html") and not self._local():
+            path = "/app"                           # im Netz gibt es die Handy-Oberfläche, nicht die des Displays
         path = "index.html" if path in ("/", "/index.html") else "phone.html" if path in ("/app", "/app/") else path.lstrip("/")
         f = (UI_DIR / path).resolve()
         if not f.is_relative_to(UI_DIR.resolve()) or not f.is_file():
@@ -789,31 +898,16 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _upload_job(self):
+    def _upload_job(self, body: bytes):
         """Druckdatei von der PC-App annehmen; mit X-Job-Start: 1 gleich starten, wenn der Kit bereit ist."""
         import base64
         import urllib.parse
         from kitd import jobs
         if not NET_JOBS:
             return self._json({"ok": False, "error": "Jobs aus dem Netz sind am Pi abgeschaltet"}, HTTPStatus.FORBIDDEN)
-        try:
-            from kitd.bridge import _allowed
-            if not _allowed(self.client_address[0]):
-                return self._json({"ok": False, "error": "Gerät nicht erlaubt"}, HTTPStatus.FORBIDDEN)
-        except ImportError:
-            pass
-        try:
-            n = int(self.headers.get("Content-Length", "0"))
-        except ValueError:
-            n = 0
-        if n <= 0 or n > MAX_UPLOAD:
-            return self._json({"ok": False, "error": "Datei fehlt oder ist zu groß"}, HTTPStatus.BAD_REQUEST)
-        buf = bytearray()
-        while len(buf) < n:
-            chunk = self.rfile.read(min(1 << 20, n - len(buf)))
-            if not chunk:
-                return self._json({"ok": False, "error": "Übertragung abgebrochen"}, HTTPStatus.BAD_REQUEST)
-            buf += chunk
+        buf = body
+        if not buf:
+            return self._json({"ok": False, "error": "Datei fehlt"}, HTTPStatus.BAD_REQUEST)
         name = urllib.parse.unquote(self.headers.get("X-Job-Name", ""))[:80]
         profile = None
         if self.headers.get("X-Job-Profile"):
@@ -842,21 +936,30 @@ class Handler(BaseHTTPRequestHandler):
                     res["start_error"] = r.get("error", "Start fehlgeschlagen")
         return self._json(res)
 
+    def _post_compensation(self, body: bytes):
+        """Laserkorrektur von der PC-App (nach der Scan-Auswertung) – nicht während Druck oder Übertragung."""
+        from kitd import compensation
+        st = WORKER.snapshot()
+        if st.get("printing") or st.get("transfer") or getattr(WORKER, "pending", None):
+            return self._json({"ok": False, "error": "Während eines Drucks oder einer Übertragung nicht änderbar"})
+        try:
+            data = json.loads(body or b"{}")
+            saved = compensation.save(data)
+            return self._json({"ok": True, "compensation": saved})
+        except (ValueError, TypeError, OSError) as e:
+            return self._json({"ok": False, "error": str(e)})
+
     def do_DELETE(self):
         """Job aus der Bibliothek löschen – von der PC-App, gleiche Freigabe wie beim Senden."""
         import urllib.parse
         from kitd import jobs
-        parts = self.path.split("/")      # /api/jobs/<id>
+        parts = self.path.split("?")[0].split("/")      # /api/jobs/<id>
         if len(parts) != 4 or parts[1:3] != ["api", "jobs"]:
             return self._json({"ok": False, "error": "not found"}, HTTPStatus.NOT_FOUND)
         if not NET_JOBS:
             return self._json({"ok": False, "error": "Jobs aus dem Netz sind am Pi abgeschaltet"}, HTTPStatus.FORBIDDEN)
-        try:
-            from kitd.bridge import _allowed
-            if not _allowed(self.client_address[0]):
-                return self._json({"ok": False, "error": "Gerät nicht erlaubt"}, HTTPStatus.FORBIDDEN)
-        except ImportError:
-            pass
+        if self._client() is None:
+            return self._deny()
         job_id = urllib.parse.unquote(parts[3])
         try:
             if (WORKER.snapshot().get("transfer") or {}).get("id") == job_id:
@@ -890,15 +993,39 @@ class Handler(BaseHTTPRequestHandler):
             return "Referenzfahrt nur am Kit Control"
         return ""
 
-    def do_POST(self):
-        if self.path == "/api/jobs":
-            return self._upload_job()
-        if self.path != "/api/cmd":
-            return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
-        local = self.client_address[0] in ("127.0.0.1", "::1")
+    def _read_body(self, limit: int) -> bytes | None:
         try:
             n = int(self.headers.get("Content-Length", "0"))
-            cmd = json.loads(self.rfile.read(min(n, 4096)) or b"{}")
+        except ValueError:
+            return None
+        if n < 0 or n > limit:
+            return None
+        buf = bytearray()
+        while len(buf) < n:
+            chunk = self.rfile.read(min(1 << 20, n - len(buf)))
+            if not chunk:
+                return None
+            buf += chunk
+        return bytes(buf)
+
+    def do_POST(self):
+        path0 = self.path.split("?")[0]
+        body = self._read_body(MAX_UPLOAD if path0 == "/api/jobs" else 1 << 20)
+        if body is None:
+            return self._json({"ok": False, "error": "Anfrage zu groß oder abgebrochen"}, HTTPStatus.BAD_REQUEST)
+        if path0 in ("/api/pair/start", "/api/pair/confirm"):
+            return self._pair_post(path0, body)
+        if self._client(body) is None:
+            return self._deny()
+        if path0 == "/api/jobs":
+            return self._upload_job(body)
+        if path0 == "/api/compensation":
+            return self._post_compensation(body)
+        if path0 != "/api/cmd":
+            return self._json({"error": "not found"}, HTTPStatus.NOT_FOUND)
+        local = self._local()
+        try:
+            cmd = json.loads(body or b"{}")
             if not isinstance(cmd, dict):
                 raise ValueError
         except (ValueError, json.JSONDecodeError):
@@ -907,6 +1034,23 @@ class Handler(BaseHTTPRequestHandler):
             why = self._remote_denied(cmd)
             if why:
                 return self._json({"ok": False, "error": why}, HTTPStatus.FORBIDDEN)
+        if cmd.get("cmd") == "pair_cancel":
+            return self._json({"ok": PAIR.cancel()})
+        if cmd.get("cmd") == "pair_remove":
+            ok = PAIR.remove(str(cmd.get("id", "")))
+            return self._json({"ok": ok} if ok else {"ok": False, "error": "Gerät nicht gefunden"})
+        if cmd.get("cmd") in ("compensation_reset", "compensation_enable"):
+            from kitd import compensation
+            try:
+                if WORKER.snapshot().get("transfer"):
+                    raise ValueError("Während einer Übertragung nicht ändern")
+                if cmd["cmd"] == "compensation_reset":
+                    compensation.reset()
+                else:
+                    compensation.set_enabled(bool(cmd.get("on")))
+                return self._json({"ok": True})
+            except (ValueError, OSError) as e:
+                return self._json({"ok": False, "error": str(e)})
         if cmd.get("cmd") == "remote_control":
             try:
                 set_remote(bool(cmd.get("on")))
@@ -980,7 +1124,7 @@ def main():
     WORKER.start()
     if os.environ.get("KIT_BRIDGE", "1") == "1":
         from kitd.bridge import start_bridge
-        start_bridge(WORKER)
+        start_bridge(WORKER, PAIR, pair_busy)
     host = os.environ.get("KIT_HOST", "0.0.0.0")   # Lesen aus dem Netz für die PC-App; Bedienung bleibt lokal
     ThreadingHTTPServer((host, PORT), Handler).serve_forever()
 

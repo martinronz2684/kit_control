@@ -29,7 +29,7 @@ jobs:
           echo "VER=1.0.$GITHUB_RUN_NUMBER" >> $GITHUB_ENV
           echo "__version__ = \"1.0.$GITHUB_RUN_NUMBER\"" > desktop/kitcontrol/version.py
       - name: Tests (Slicer, Pi-Schnittstelle)
-        run: python -m unittest tests.test_slicer -v
+        run: python -m unittest tests.test_slicer tests.test_lasercal tests.test_compensation -v
       - name: Oberfläche prüfen (alle Seiten laden, ohne Bildschirm)
         shell: bash
         env:
@@ -70,6 +70,14 @@ jobs:
           timeout 150 python -c "import sys; from kitcontrol.main import main; sys.argv += ['--selftest-mouse', '../shots']; sys.exit(main())" > maus.log 2>&1 || true
           cat maus.log
           grep -v "^$" maus.log | tail -40 | while IFS= read -r l; do echo "::warning title=Maus::$l"; done
+      - name: Bildschirmfotos als Artefakt (auch für Zweige)
+        uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: |
+            shots/*.png
+            shots/*.txt
+          if-no-files-found: ignore
       - name: Bildschirmfotos ablegen (Branch screens)
         if: github.ref == 'refs/heads/main'
         shell: bash
@@ -90,7 +98,7 @@ jobs:
             --paths . --paths .. \
             --add-data "kitcontrol/qml;kitcontrol/qml" \
             --add-data "kitcontrol/assets;kitcontrol/assets" \
-            --hidden-import kitctl.pjob --hidden-import kitcontrol.geometry --hidden-import PySide6.QtQuick3D \
+            --hidden-import kitctl.pjob --hidden-import kitctl.auth --hidden-import kitctl.compensate --hidden-import kitslice.lasercal --hidden-import kitcontrol.geometry --hidden-import PySide6.QtQuick3D \
             --exclude-module tkinter \
             --exclude-module PySide6.Qt3DCore --exclude-module PySide6.QtWebEngineCore --exclude-module PySide6.QtMultimedia \
             --distpath ../dist --workpath ../build \

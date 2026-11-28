@@ -10,6 +10,15 @@ Protokoll (TCP, Big Endian):
   Antwort: status(4, signed; libusb-Codes) len(4) daten(len)
   op: 'H' Hallo/Kit da?  'W' schreiben  'R' lesen (len = maximale Länge)
 
+Kopplung (wie die PC-App, kitctl/auth.py) – Nutzdaten JSON, gleicher Rahmen wie 'W':
+  'I' {}                                    -> {"device_id", "name"}
+  'P' {"name", "A"}                          -> {"request_id", "B", "device_id"}   (Code erscheint am Display)
+  'C' {"request_id", "mac"}                  -> {"client_id", "mac", "device_id"}
+  'N' {}                                    -> {"nonce"}
+  'A' {"client_id", "mac": HMAC(K, "bridge|" + nonce)}  -> {}  danach sind H/W/R erlaubt
+  Fehler: Status ERR_ACCESS (-3), Antwort {"error": "..."}. Ohne 'A' beantwortet der Pi H mit ERR_ACCESS
+  (ältere Bibliothek: Central findet dann keinen Kit, bis das Central-Setup neu installiert ist).
+
 Daneben beantwortet ein UDP-Dienst die Suche "KITCONTROL?" mit "KITCONTROL <port> <name>".
 """
 from __future__ import annotations
@@ -74,6 +83,8 @@ def _recv(sock: socket.socket, n: int) -> bytes:
 
 class Session(socketserver.BaseRequestHandler):
     worker = None  # gesetzt in start_bridge
+    pairing = None
+    busy = staticmethod(lambda: "")
     pending = None
 
     def reply(self, status: int, data: bytes = b"") -> None:
@@ -84,16 +95,75 @@ class Session(socketserver.BaseRequestHandler):
         peer = self.client_address[0]
         if not _allowed(peer):
             return
-        # Eine reine Anfrage "Kit da?" (Gerätesuche von Central) braucht keine Sitzung.
-        self.request.settimeout(5.0)
-        try:
-            first = _recv(self.request, 10)
-        except (OSError, ConnectionError):
-            return
-        if first[:1] == b"H":
-            self.reply(OK if self.worker.kit is not None else ERR_NO_DEVICE)
-            return
-        self.pending = first
+        # Erst koppeln/anmelden (I, P, C, N, A), dann "Kit da?" (H, ohne Sitzung) oder Transfers (W/R, Sitzung).
+        self.request.settimeout(130.0)        # beim Koppeln tippt jemand den Code ab
+        authed = False
+        nonce = ""
+        while True:
+            try:
+                first = _recv(self.request, 10)
+                op = first[:1]
+                n = struct.unpack(">I", first[6:10])[0]
+                body = _recv(self.request, n) if op in (b"W", b"I", b"P", b"C", b"N", b"A") and n <= (1 << 20) else b""
+            except (OSError, ConnectionError, struct.error):
+                return
+            if op in (b"I", b"P", b"C", b"N", b"A"):
+                try:
+                    import json
+                    req = json.loads(body or b"{}")
+                    if not isinstance(req, dict):
+                        raise ValueError("ungültige Anfrage")
+                    pr = self.pairing
+                    if pr is None:
+                        raise ValueError("Kopplung nicht verfügbar")
+                    if op == b"I":
+                        ans = {"device_id": pr.device_id, "name": socket.gethostname()}
+                    elif op == b"P":
+                        ans = pr.start(req.get("name", ""), "central", peer, req.get("A", ""), busy=self.busy())
+                    elif op == b"C":
+                        why = self.busy()
+                        if why:
+                            pr.abort_if_busy()
+                            raise ValueError(why)
+                        ans = pr.confirm(str(req.get("request_id", "")), str(req.get("mac", "")), peer)
+                    elif op == b"N":
+                        import secrets
+                        nonce = secrets.token_hex(16)
+                        ans = {"nonce": nonce}
+                    else:
+                        from kitctl import auth as A
+                        key = pr.key(str(req.get("client_id", "")))
+                        if not nonce or key is None or not __import__("hmac").compare_digest(
+                                A.mac(key, "bridge", nonce), str(req.get("mac", ""))):
+                            nonce = ""
+                            raise ValueError("Nicht gekoppelt – Central bitte neu mit dem Kit koppeln")
+                        nonce = ""
+                        authed = True
+                        pr.seen(str(req["client_id"]), peer)
+                        ans = {}
+                    self.reply(OK, json.dumps(ans).encode())
+                except Exception as e:      # PairError, ValueError …
+                    try:
+                        import json
+                        self.reply(ERR_ACCESS, json.dumps({"error": str(e)}).encode())
+                    except OSError:
+                        return
+                continue
+            if not authed:
+                try:
+                    self.reply(ERR_ACCESS)
+                except OSError:
+                    pass
+                STATE["rejected"] = {"peer": peer, "ts": time.time()}
+                return
+            if op == b"H":
+                try:
+                    self.reply(OK if self.worker.kit is not None else ERR_NO_DEVICE)
+                except OSError:
+                    return
+                continue
+            break
+        self.pending = (first, body)
         if not _session_lock.acquire(blocking=False):
             # Es darf nur ein Central gleichzeitig verbunden sein.
             try:
@@ -115,8 +185,9 @@ class Session(socketserver.BaseRequestHandler):
         try:
             while True:
                 try:
+                    pre = None
                     if self.pending:
-                        head, self.pending = self.pending, None
+                        (head, pre), self.pending = self.pending, None
                     else:
                         head = _recv(sock, 10)
                 except socket.timeout:
@@ -124,9 +195,12 @@ class Session(socketserver.BaseRequestHandler):
                         usb.release(); held = False
                     continue
                 op, ep, timeout_ms, n = struct.unpack(">cBII", head)
-                sock.settimeout(10.0)
-                data = _recv(sock, n) if op == b"W" else b""
-                sock.settimeout(1.0)
+                if pre is not None:
+                    data = pre if op == b"W" else b""
+                else:
+                    sock.settimeout(10.0)
+                    data = _recv(sock, n) if op == b"W" else b""
+                    sock.settimeout(1.0)
                 kit = self.worker.kit
 
                 if op == b"H":
@@ -258,8 +332,11 @@ def _discovery():
             time.sleep(1)
 
 
-def start_bridge(worker) -> None:
+def start_bridge(worker, pairing=None, busy=None) -> None:
     Session.worker = worker
+    Session.pairing = pairing
+    if busy is not None:
+        Session.busy = staticmethod(busy)
     srv = _Server(("0.0.0.0", PORT), Session)
     threading.Thread(target=srv.serve_forever, daemon=True, name="central-bridge").start()
     threading.Thread(target=_discovery, daemon=True, name="central-discovery").start()
